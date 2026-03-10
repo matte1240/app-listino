@@ -9,6 +9,9 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - JWT_SECRET=change-me-to-a-strong-random-secret
+    volumes:
+      - ./data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
       interval: 30s
