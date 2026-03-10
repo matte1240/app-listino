@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function MaterialCard({ material }: Props) {
-  const { codice, descrizione, quantita, pzBancale } = material;
+  const { codice, descrizione, um, prezzoListino, raggr } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const toggleFlag = useOrderStore((s) => s.toggleFlag);
   const setQty = useOrderStore((s) => s.setQty);
@@ -52,19 +52,20 @@ export default function MaterialCard({ material }: Props) {
             htmlFor={`flag-${codice}`}
             className="flex-1 cursor-pointer min-w-0"
           >
-            {/* Codice + badge */}
+            {/* Codice + badges */}
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <span className="font-bold text-sm tracking-wide text-foreground font-mono leading-tight">
                 {codice}
               </span>
-              {pzBancale > 0 && (
+              {um && (
                 <Badge
-                  variant="secondary"
+                  variant="outline"
                   className="text-xs px-2 py-0 h-5 shrink-0 font-medium"
                 >
-                  {pzBancale} pz/conf
+                  {um}
                 </Badge>
               )}
+
             </div>
 
             {/* Descrizione */}
@@ -72,10 +73,16 @@ export default function MaterialCard({ material }: Props) {
               {descrizione}
             </p>
 
-            {/* Disponibilità chip */}
-            <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
-              <span className="text-xs text-muted-foreground">Disp.</span>
-              <span className="text-xs font-semibold text-foreground">{quantita}</span>
+            {/* Prezzi */}
+            <div className="mt-2 flex items-center gap-3 flex-wrap">
+              <div className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
+                <span className="text-xs text-muted-foreground">Listino</span>
+                <span className="text-xs font-semibold text-foreground">€{prezzoListino.toFixed(3)}</span>
+              </div>
+
+              {raggr && (
+                <span className="text-xs text-muted-foreground/60">{raggr}</span>
+              )}
             </div>
           </label>
         </div>

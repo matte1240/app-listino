@@ -1,9 +1,14 @@
 export interface Material {
   codice: string;
   descrizione: string;
-  quantita: number;
-  pzBancale: number;
   categoria: string;
+  raggr: string;
+  um: string;
+  prezzoListino: number;
+  prezzoRiservato: number;
+  prezzoPublico: number;
+  pzConfezione: number;
+  nota: string;
 }
 
 export interface OrderItem {

@@ -13,12 +13,11 @@ export default function MaterialList() {
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return materials;
-    return materials.filter(
-      (m) =>
-        m.codice.toLowerCase().includes(q) ||
-        m.descrizione.toLowerCase().includes(q) ||
-        m.categoria.toLowerCase().includes(q)
-    );
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return materials.filter((m) => {
+      const haystack = `${m.codice} ${m.descrizione} ${m.categoria} ${m.raggr} ${m.um}`.toLowerCase();
+      return tokens.every((t) => haystack.includes(t));
+    });
   }, [materials, searchQuery]);
 
   // Group by category (maintain original Excel order of categories)
