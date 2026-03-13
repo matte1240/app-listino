@@ -54,10 +54,26 @@ export default function AdminUsersPage() {
       router.push("/");
       return;
     }
-    if (!loading && user?.role === "admin") {
-      fetchUsers();
-    }
-  }, [user, loading, router, fetchUsers]);
+    if (loading || user?.role !== "admin") return;
+
+    let cancelled = false;
+    fetch("/api/users").then(async (res) => {
+      if (cancelled) return;
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data.users);
+      } else {
+        setError("Errore nel caricamento utenti");
+      }
+      setLoadingUsers(false);
+    }).catch(() => {
+      if (!cancelled) {
+        setError("Errore nel caricamento utenti");
+        setLoadingUsers(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [user, loading, router]);
 
   function openCreate() {
     setEditingId(null);

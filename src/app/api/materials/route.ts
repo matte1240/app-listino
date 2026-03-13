@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });

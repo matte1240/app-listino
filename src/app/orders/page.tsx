@@ -21,7 +21,6 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (!authLoading && user) loadOrders();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user]);
 
   async function loadOrders() {

@@ -62,7 +62,7 @@ interface EnrichResult {
 }
 
 export async function enrichMaterials(
-  materials: Material[]
+  materials: Pick<Material, "codice" | "descrizione">[]
 ): Promise<EnrichedData[]> {
   const input = materials.map((m) => ({
     codice: m.codice,
@@ -113,7 +113,7 @@ export async function enrichMaterials(
 
 /** Process materials in batches */
 export async function enrichMaterialsBatch(
-  materials: Material[],
+  materials: Pick<Material, "codice" | "descrizione">[],
   batchSize = 50,
   onProgress?: (done: number, total: number) => void
 ): Promise<EnrichedData[]> {
