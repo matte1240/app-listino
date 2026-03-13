@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X } from "lucide-react";
 
 interface UserRow {
   id: number;
@@ -140,23 +140,14 @@ export default function AdminUsersPage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => router.push("/")} className="h-8 w-8">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="font-bold text-base">Gestione Utenti</h1>
-          </div>
+      <main className="max-w-2xl mx-auto w-full px-4 pt-5 pb-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="font-bold text-base">Gestione Utenti</h1>
           <Button size="sm" onClick={openCreate} className="gap-1.5 h-9 rounded-xl">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Nuovo utente</span>
           </Button>
         </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto w-full px-4 py-5 space-y-4">
         {error && <p className="text-sm text-red-500">{error}</p>}
 
         {/* Form overlay */}

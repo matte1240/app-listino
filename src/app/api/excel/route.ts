@@ -3,6 +3,8 @@ import path from "path";
 import fs from "fs";
 import { verifyToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth";
+import { parseExcel } from "@/lib/excel";
+import { getDb } from "@/lib/db";
 
 const EXCEL_PATH = path.join(process.cwd(), "data", "listino.xlsx");
 
@@ -39,5 +41,31 @@ export async function POST(req: NextRequest) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(EXCEL_PATH, buffer);
 
-  return NextResponse.json({ ok: true });
+  // Parse and upsert materials into DB
+  const materials = parseExcel(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+  const db = getDb();
+  const upsert = db.prepare(`
+    INSERT INTO materials (codice, descrizione, categoria, raggr, um, prezzo_listino, prezzo_riservato, prezzo_pubblico, pz_confezione, nota, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(codice) DO UPDATE SET
+      descrizione = excluded.descrizione,
+      categoria = excluded.categoria,
+      raggr = excluded.raggr,
+      um = excluded.um,
+      prezzo_listino = excluded.prezzo_listino,
+      prezzo_riservato = excluded.prezzo_riservato,
+      prezzo_pubblico = excluded.prezzo_pubblico,
+      pz_confezione = excluded.pz_confezione,
+      nota = excluded.nota,
+      updated_at = excluded.updated_at
+  `);
+  const upsertAll = db.transaction((rows: typeof materials) => {
+    for (const m of rows) {
+      upsert.run(m.codice, m.descrizione, m.categoria, m.raggr, m.um,
+        m.prezzoListino, m.prezzoRiservato, m.prezzoPublico, m.pzConfezione, m.nota);
+    }
+  });
+  upsertAll(materials);
+
+  return NextResponse.json({ ok: true, count: materials.length });
 }

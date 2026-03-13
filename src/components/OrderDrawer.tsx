@@ -1,6 +1,6 @@
 "use client";
 
-import { ShoppingCart, Trash2, SendHorizonal, User, MapPin, Calendar, MessageSquare, Package, Warehouse } from "lucide-react";
+import { ShoppingCart, Trash2, SendHorizonal, User, MapPin, Calendar, MessageSquare, Package, Warehouse, CheckCircle2, Loader2 } from "lucide-react";
 import {
   Drawer,
   DrawerContent,
@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI } from "@/types";
+import { useState } from "react";
 
 interface Props {
   open: boolean;
@@ -29,6 +30,8 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   const toggleFlag = useOrderStore((s) => s.toggleFlag);
   const resetOrder = useOrderStore((s) => s.resetOrder);
   const setOrderInfo = useOrderStore((s) => s.setOrderInfo);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const flaggedItems = materials.filter((m) => orderItems[m.codice]?.flagged);
   const totalPz = flaggedItems.reduce(
@@ -37,6 +40,33 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   );
 
   const canSend = orderInfo.cliente.trim() !== "" && flaggedItems.length > 0 && orderInfo.magazzino !== "";
+
+  async function handleSave() {
+    if (!canSend || saving) return;
+    setSaving(true);
+    try {
+      const items = flaggedItems.map((m) => ({
+        codice: m.codice,
+        descrizione: m.descrizioneAI || m.descrizione,
+        qty: orderItems[m.codice]?.qty ?? 0,
+        um: m.um,
+        prezzoListino: m.prezzoListino,
+      }));
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...orderInfo, items }),
+      });
+      if (!res.ok) throw new Error("Errore salvataggio");
+      setSaved(true);
+      resetOrder();
+      setTimeout(() => { setSaved(false); onOpenChange(false); }, 1500);
+    } catch {
+      alert("Errore nel salvataggio dell'ordine");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Today's date as min for date picker
   const today = new Date().toISOString().split("T")[0];
@@ -242,16 +272,18 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
             </p>
           )}
           <Button
-            disabled
+            onClick={handleSave}
+            disabled={!canSend || saving || saved}
             className="w-full gap-2 h-12 text-base rounded-xl"
-            title="Funzionalità disponibile prossimamente"
           >
-            <SendHorizonal className="h-4 w-4" />
-            Invia Ordine via Email
+            {saved ? (
+              <><CheckCircle2 className="h-4 w-4" /> Ordine salvato!</>
+            ) : saving ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Salvataggio…</>
+            ) : (
+              <><SendHorizonal className="h-4 w-4" /> Salva Ordine</>
+            )}
           </Button>
-          <p className="text-center text-xs text-muted-foreground -mt-1">
-            Invio email disponibile prossimamente
-          </p>
           {(flaggedItems.length > 0 || orderInfo.cliente) && (
             <Button
               variant="ghost"

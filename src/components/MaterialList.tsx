@@ -15,7 +15,7 @@ export default function MaterialList() {
     if (!q) return materials;
     const tokens = q.split(/\s+/).filter(Boolean);
     return materials.filter((m) => {
-      const haystack = `${m.codice} ${m.descrizione} ${m.categoria} ${m.raggr} ${m.um}`.toLowerCase();
+      const haystack = `${m.codice} ${m.descrizione} ${m.descrizioneAI ?? ""} ${m.categoria} ${m.raggr} ${m.um}`.toLowerCase();
       return tokens.every((t) => haystack.includes(t));
     });
   }, [materials, searchQuery]);

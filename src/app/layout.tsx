@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
+import Navbar from "@/components/Navbar";
 import "./globals.css";
 
 const geist = Geist({
@@ -32,7 +33,10 @@ export default function RootLayout({
   return (
     <html lang="it">
       <body className={`${geist.variable} font-sans antialiased bg-background text-foreground`}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <Navbar />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

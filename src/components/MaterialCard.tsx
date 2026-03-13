@@ -13,7 +13,7 @@ interface Props {
 }
 
 export default function MaterialCard({ material }: Props) {
-  const { codice, descrizione, um, prezzoListino, prezzoRiservato, pzConfezione, raggr } = material;
+  const { codice, descrizione, descrizioneAI, um, prezzoListino, prezzoRiservato, raggr } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const toggleFlag = useOrderStore((s) => s.toggleFlag);
   const setQty = useOrderStore((s) => s.setQty);
@@ -72,22 +72,14 @@ export default function MaterialCard({ material }: Props) {
                   variant="outline"
                   className="text-xs px-2 py-0 h-5 shrink-0 font-medium"
                 >
-                  {um}
-                </Badge>
-              )}
-              {pzConfezione > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="text-xs px-2 py-0 h-5 shrink-0 font-medium"
-                >
-                  {pzConfezione} pz/conf
+                  U.M.: {um}
                 </Badge>
               )}
             </div>
 
             {/* Descrizione */}
             <p className="text-sm text-foreground/90 leading-snug break-words mt-0.5">
-              {descrizione}
+              {descrizioneAI || descrizione}
             </p>
 
             {/* Prezzi */}
@@ -137,6 +129,9 @@ export default function MaterialCard({ material }: Props) {
                 <Plus className="h-3.5 w-3.5" />
               </button>
             </div>
+            {um && (
+              <span className="text-xs font-semibold text-muted-foreground">{um}</span>
+            )}
           </div>
         )}
       </div>

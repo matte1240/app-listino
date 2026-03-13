@@ -7,6 +7,8 @@ interface OrderStore {
   orderItems: OrderMap;
   orderInfo: OrderInfo;
   searchQuery: string;
+  drawerOpen: boolean;
+  setDrawerOpen: (open: boolean) => void;
   setMaterials: (materials: Material[]) => void;
   toggleFlag: (codice: string) => void;
   setQty: (codice: string, qty: number) => void;
@@ -30,6 +32,8 @@ export const useOrderStore = create<OrderStore>()(
       orderItems: {},
       orderInfo: defaultOrderInfo,
       searchQuery: "",
+      drawerOpen: false,
+      setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
 
       setMaterials: (materials) => set({ materials }),
 

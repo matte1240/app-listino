@@ -1,6 +1,7 @@
 export interface Material {
   codice: string;
   descrizione: string;
+  descrizioneAI?: string;
   categoria: string;
   raggr: string;
   um: string;
@@ -9,6 +10,32 @@ export interface Material {
   prezzoPublico: number;
   pzConfezione: number;
   nota: string;
+}
+
+export interface EnrichedData {
+  codice: string;
+  descrizioneAI: string;
+  updatedAt: string;
+}
+
+export interface OrderHistoryItem {
+  codice: string;
+  descrizione: string;
+  qty: number;
+  um: string;
+  prezzoListino: number;
+}
+
+export interface Order {
+  id: number;
+  cliente: string;
+  magazzino: string;
+  luogoConsegna: string;
+  dataConsegna: string;
+  note: string;
+  agente: string;
+  items: OrderHistoryItem[];
+  createdAt: string;
 }
 
 export interface OrderItem {
