@@ -11,6 +11,10 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "Listino Materiali",
   description: "Consulta e ordina materiali dal listino aziendale",
+  icons: {
+    icon: "/IVICOLORS_marchio.png",
+    apple: "/IVICOLORS_marchio.png",
+  },
 };
 
 export const viewport: Viewport = {

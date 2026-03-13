@@ -81,15 +81,13 @@ export default function MaterialList() {
       {Array.from(grouped.entries()).map(([categoria, items]) => (
         <div key={categoria} className="mb-5">
           {/* Category header */}
-          <div className="flex items-center gap-2 mb-2.5 px-1">
-            <Tag className="h-3.5 w-3.5 text-primary shrink-0" />
-            <h2 className="text-xs font-bold uppercase tracking-widest text-primary">
-              {categoria}
-            </h2>
-            <span className="text-xs text-muted-foreground font-medium">
-              ({items.length})
-            </span>
-            <div className="flex-1 h-px bg-primary/15 ml-1" />
+          <div className="flex items-center gap-2.5 mb-3 px-0.5">
+            <div className="flex items-center gap-1.5 bg-primary/10 text-primary rounded-xl px-3 py-1">
+              <Tag className="h-3 w-3 shrink-0" />
+              <h2 className="text-xs font-bold tracking-tight">{categoria}</h2>
+            </div>
+            <span className="text-xs text-muted-foreground/70 font-medium tabular-nums">{items.length} art.</span>
+            <div className="flex-1 h-px bg-border" />
           </div>
           {/* Cards */}
           <div className="flex flex-col gap-2.5">

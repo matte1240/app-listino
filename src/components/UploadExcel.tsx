@@ -21,6 +21,14 @@ export default function UploadExcel() {
         setError("Nessun articolo trovato. Verifica le intestazioni del file.");
         return;
       }
+      // Save to server (overwrites existing)
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/excel", { method: "POST", body: formData });
+      if (!res.ok) {
+        setError("Errore nel salvataggio del file sul server.");
+        return;
+      }
       setMaterials(materials);
       setFileName(file.name);
     } catch {

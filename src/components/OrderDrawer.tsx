@@ -1,6 +1,6 @@
 "use client";
 
-import { ShoppingCart, Trash2, SendHorizonal, User, MapPin, Calendar, MessageSquare, Package } from "lucide-react";
+import { ShoppingCart, Trash2, SendHorizonal, User, MapPin, Calendar, MessageSquare, Package, Warehouse } from "lucide-react";
 import {
   Drawer,
   DrawerContent,
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrderStore } from "@/lib/useOrderStore";
+import { MAGAZZINI } from "@/types";
 
 interface Props {
   open: boolean;
@@ -35,7 +36,7 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
     0
   );
 
-  const canSend = orderInfo.cliente.trim() !== "" && flaggedItems.length > 0;
+  const canSend = orderInfo.cliente.trim() !== "" && flaggedItems.length > 0 && orderInfo.magazzino !== "";
 
   // Today's date as min for date picker
   const today = new Date().toISOString().split("T")[0];
@@ -80,6 +81,26 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
                   style={{ fontSize: "16px" }}
                   autoComplete="organization"
                 />
+              </div>
+
+              {/* Magazzino */}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="magazzino" className="text-sm font-medium flex items-center gap-1.5">
+                  <Warehouse className="h-3.5 w-3.5 text-muted-foreground" />
+                  Magazzino <span className="text-destructive">*</span>
+                </Label>
+                <select
+                  id="magazzino"
+                  value={orderInfo.magazzino}
+                  onChange={(e) => setOrderInfo({ magazzino: e.target.value as typeof orderInfo.magazzino })}
+                  className="h-11 rounded-xl border border-input bg-background px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
+                  style={{ fontSize: "16px" }}
+                >
+                  <option value="">Seleziona magazzino…</option>
+                  {MAGAZZINI.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Luogo di consegna */}
@@ -205,10 +226,18 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
         <DrawerFooter className="pt-3 border-t border-border shrink-0">
           {!canSend && (
             <p className="text-xs text-center text-muted-foreground mb-1">
-              {orderInfo.cliente.trim() === "" && flaggedItems.length === 0
+              {orderInfo.cliente.trim() === "" && flaggedItems.length === 0 && orderInfo.magazzino === ""
+                ? "Inserisci il cliente, il magazzino e seleziona almeno un articolo"
+                : orderInfo.cliente.trim() === "" && flaggedItems.length === 0
                 ? "Inserisci il cliente e seleziona almeno un articolo"
+                : orderInfo.magazzino === "" && flaggedItems.length === 0
+                ? "Seleziona il magazzino e almeno un articolo"
+                : orderInfo.cliente.trim() === "" && orderInfo.magazzino === ""
+                ? "Inserisci il cliente e seleziona il magazzino"
                 : orderInfo.cliente.trim() === ""
                 ? "Inserisci il nome del cliente per continuare"
+                : orderInfo.magazzino === ""
+                ? "Seleziona il magazzino di destinazione"
                 : "Seleziona almeno un articolo per continuare"}
             </p>
           )}

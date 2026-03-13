@@ -17,7 +17,7 @@ export default function SearchBar() {
         placeholder="Cerca codice o descrizione..."
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        className="pl-9 pr-9 text-base h-12 rounded-xl bg-card border-border shadow-sm placeholder:text-muted-foreground/60"
+        className="pl-9 pr-9 text-base h-12 rounded-2xl bg-card border-border shadow-sm placeholder:text-muted-foreground/55 focus-visible:ring-primary/50"
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"

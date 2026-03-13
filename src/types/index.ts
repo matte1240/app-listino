@@ -18,9 +18,13 @@ export interface OrderItem {
 
 export type OrderMap = Record<string, OrderItem>;
 
+export const MAGAZZINI = ["Pordenone", "Udine", "Fossalta di Portogruaro", "Trieste"] as const;
+export type Magazzino = typeof MAGAZZINI[number];
+
 export interface OrderInfo {
   cliente: string;
   luogoConsegna: string;
   dataConsegna: string;
   note: string;
+  magazzino: Magazzino | "";
 }

@@ -20,6 +20,7 @@ const defaultOrderInfo: OrderInfo = {
   luogoConsegna: "",
   dataConsegna: "",
   note: "",
+  magazzino: "",
 };
 
 export const useOrderStore = create<OrderStore>()(
@@ -47,12 +48,13 @@ export const useOrderStore = create<OrderStore>()(
       },
 
       setQty: (codice, qty) => {
+        const newQty = Math.max(0, qty);
         set((state) => ({
           orderItems: {
             ...state.orderItems,
             [codice]: {
-              flagged: state.orderItems[codice]?.flagged ?? true,
-              qty: Math.max(0, qty),
+              flagged: newQty > 0 ? (state.orderItems[codice]?.flagged ?? true) : false,
+              qty: newQty,
             },
           },
         }));
