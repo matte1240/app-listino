@@ -13,7 +13,7 @@ interface Props {
 }
 
 export default function MaterialCard({ material }: Props) {
-  const { codice, descrizione, descrizioneAI, um, prezzoListino, prezzoRiservato, raggr } = material;
+  const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const toggleFlag = useOrderStore((s) => s.toggleFlag);
   const setQty = useOrderStore((s) => s.setQty);

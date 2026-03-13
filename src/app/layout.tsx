@@ -1,13 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
 import Navbar from "@/components/Navbar";
 import "./globals.css";
-
-const geist = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Listino Materiali",
@@ -32,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it">
-      <body className={`${geist.variable} font-sans antialiased bg-background text-foreground`}>
+      <body className="font-sans antialiased bg-background text-foreground">
         <AuthProvider>
           <Navbar />
           {children}

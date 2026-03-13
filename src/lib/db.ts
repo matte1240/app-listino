@@ -1,11 +1,11 @@
 import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
 import { hashSync } from "bcryptjs";
 
 const DB_PATH = path.join(process.cwd(), "data", "listino.db");
 
 function createDb() {
-  const fs = require("fs");
   const dir = path.dirname(DB_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
