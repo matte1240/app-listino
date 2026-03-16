@@ -8,7 +8,7 @@ const secret = new TextEncoder().encode(
 
 const COOKIE_NAME = "listino-token";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
