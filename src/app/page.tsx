@@ -24,6 +24,13 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-open drawer when returning from edit flow
+  useEffect(() => {
+    if (sessionStorage.getItem("editingOrderId")) {
+      setDrawerOpen(true);
+    }
+  }, [setDrawerOpen]);
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">

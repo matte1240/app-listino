@@ -22,7 +22,7 @@ export async function GET() {
 
   const db = getDb();
   const users = db
-    .prepare("SELECT id, username, role, created_at FROM users ORDER BY id")
+    .prepare("SELECT id, username, role, email, created_at FROM users ORDER BY id")
     .all() as Omit<DbUser, "password">[];
 
   return NextResponse.json({ users });
@@ -35,10 +35,11 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { username, password, role } = body as {
+  const { username, password, role, email } = body as {
     username?: string;
     password?: string;
     role?: string;
+    email?: string;
   };
 
   if (!username || !password || !role) {
@@ -74,11 +75,11 @@ export async function POST(request: Request) {
 
   const hash = hashSync(password, 10);
   const result = db
-    .prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)")
-    .run(username, hash, role);
+    .prepare("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)")
+    .run(username, hash, role, email ?? "");
 
   return NextResponse.json(
-    { user: { id: result.lastInsertRowid, username, role } },
+    { user: { id: result.lastInsertRowid, username, role, email: email ?? "" } },
     { status: 201 }
   );
 }

@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Trash2, ChevronDown, ChevronUp, Package } from "lucide-react";
+import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
+import { useOrderStore } from "@/lib/useOrderStore";
 import type { Order } from "@/types";
 
 export default function OrdersPage() {
@@ -14,6 +15,11 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const setOrderInfo = useOrderStore((s) => s.setOrderInfo);
+  const resetOrder = useOrderStore((s) => s.resetOrder);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -36,10 +42,40 @@ export default function OrdersPage() {
     }
   }
 
+  function canEditOrder(order: Order) {
+    return user?.role === "admin" || order.agente === user?.username;
+  }
+
+  function handleEdit(order: Order) {
+    // Store the editing order id + info in sessionStorage and navigate to home
+    resetOrder();
+    setOrderInfo({
+      cliente: order.cliente,
+      magazzino: order.magazzino as Parameters<typeof setOrderInfo>[0]["magazzino"],
+      luogoConsegna: order.luogoConsegna,
+      dataConsegna: order.dataConsegna,
+      note: order.note,
+    });
+    // Save editing state so OrderDrawer knows we are editing
+    sessionStorage.setItem("editingOrderId", String(order.id));
+    sessionStorage.setItem("editingOrderItems", JSON.stringify(order.items));
+    router.push("/");
+  }
+
   async function handleDelete(id: number) {
-    if (!confirm("Eliminare questo ordine?")) return;
-    await fetch(`/api/orders/${id}`, { method: "DELETE" });
-    setOrders((prev) => prev.filter((o) => o.id !== id));
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setOrders((prev) => prev.filter((o) => o.id !== id));
+        setDeleteConfirm(null);
+        setExpanded(null);
+      } else {
+        alert("Errore nella cancellazione dell'ordine");
+      }
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function formatDate(iso: string) {
@@ -90,6 +126,7 @@ export default function OrdersPage() {
           orders.map((order) => {
             const isOpen = expanded === order.id;
             const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
+            const showDeleteConfirm = deleteConfirm === order.id;
             return (
               <div
                 key={order.id}
@@ -164,13 +201,63 @@ export default function OrdersPage() {
                       ))}
                     </div>
 
+                    {/* Delete confirmation dialog */}
+                    {showDeleteConfirm && (
+                      <div className="px-4 py-4 border-t border-destructive/30 bg-destructive/5">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-destructive/10 shrink-0">
+                            <AlertTriangle className="h-4.5 w-4.5 text-destructive" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-destructive">Conferma cancellazione</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              L&apos;ordine #{order.id} per <strong>{order.cliente}</strong> verrà eliminato e sarà inviata una email di cancellazione. Questa azione non è reversibile.
+                            </p>
+                            <div className="flex gap-2 mt-3">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDelete(order.id)}
+                                disabled={deleting}
+                                className="rounded-xl text-xs h-8"
+                              >
+                                {deleting ? (
+                                  <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Cancellazione…</>
+                                ) : (
+                                  <><Trash2 className="h-3 w-3 mr-1.5" /> Sì, cancella ordine</>
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDeleteConfirm(null)}
+                                disabled={deleting}
+                                className="rounded-xl text-xs h-8"
+                              >
+                                Annulla
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Actions */}
-                    {user?.role === "admin" && (
-                      <div className="px-4 py-3 border-t border-border flex justify-end">
+                    {canEditOrder(order) && !showDeleteConfirm && (
+                      <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(order.id)}
+                          onClick={() => handleEdit(order)}
+                          className="text-primary hover:bg-primary/10 hover:text-primary rounded-xl text-xs"
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                          Modifica ordine
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteConfirm(order.id)}
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive rounded-xl text-xs"
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1.5" />

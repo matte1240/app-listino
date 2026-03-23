@@ -1,6 +1,6 @@
 "use client";
 
-import { ShoppingCart, Trash2, SendHorizonal, User, MapPin, Calendar, MessageSquare, Package, Warehouse, CheckCircle2, Loader2 } from "lucide-react";
+import { ShoppingCart, Trash2, SendHorizonal, Pencil, User, MapPin, Calendar, MessageSquare, Package, Warehouse, CheckCircle2, Loader2 } from "lucide-react";
 import {
   Drawer,
   DrawerContent,
@@ -16,7 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI } from "@/types";
-import { useState } from "react";
+import type { OrderHistoryItem } from "@/types";
+import { useState, useEffect } from "react";
 
 interface Props {
   open: boolean;
@@ -28,44 +29,101 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   const orderItems = useOrderStore((s) => s.orderItems);
   const orderInfo = useOrderStore((s) => s.orderInfo);
   const toggleFlag = useOrderStore((s) => s.toggleFlag);
+  const setQty = useOrderStore((s) => s.setQty);
   const resetOrder = useOrderStore((s) => s.resetOrder);
   const setOrderInfo = useOrderStore((s) => s.setOrderInfo);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editOnlyItems, setEditOnlyItems] = useState<OrderHistoryItem[]>([]);
 
+  // On open, check if we are editing an existing order
+  useEffect(() => {
+    if (!open) return;
+    const storedId = sessionStorage.getItem("editingOrderId");
+    const storedItems = sessionStorage.getItem("editingOrderItems");
+    if (storedId && storedItems) {
+      setEditingId(parseInt(storedId, 10));
+      const items: OrderHistoryItem[] = JSON.parse(storedItems);
+      setEditOnlyItems(items);
+      // Flag + set qty for each item in the order
+      for (const item of items) {
+        // Toggle flag on (if not already flagged)
+        const currentItem = useOrderStore.getState().orderItems[item.codice];
+        if (!currentItem?.flagged) {
+          toggleFlag(item.codice);
+        }
+        setQty(item.codice, item.qty);
+      }
+      sessionStorage.removeItem("editingOrderId");
+      sessionStorage.removeItem("editingOrderItems");
+    } else {
+      setEditingId(null);
+      setEditOnlyItems([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const isEditing = editingId !== null;
+
+  // When editing and materials aren't loaded yet, show items from order directly
   const flaggedItems = materials.filter((m) => orderItems[m.codice]?.flagged);
+
+  // Items to display: prefer material-backed items, fall back to edit-only items
+  const displayItems = flaggedItems.length > 0 ? flaggedItems : [];
+  const editItemsNotInMaterials = isEditing
+    ? editOnlyItems.filter((ei) => !materials.some((m) => m.codice === ei.codice))
+    : [];
+
   const totalPz = flaggedItems.reduce(
     (sum, m) => sum + (orderItems[m.codice]?.qty ?? 0),
     0
-  );
+  ) + editItemsNotInMaterials.reduce((sum, i) => sum + i.qty, 0);
 
-  const canSend = orderInfo.cliente.trim() !== "" && flaggedItems.length > 0 && orderInfo.magazzino !== "";
+  const hasItems = flaggedItems.length > 0 || editItemsNotInMaterials.length > 0;
+  const canSend = orderInfo.cliente.trim() !== "" && hasItems && orderInfo.magazzino !== "";
 
   async function handleSave() {
     if (!canSend || saving) return;
     setSaving(true);
     try {
-      const items = flaggedItems.map((m) => ({
+      const materialItems = flaggedItems.map((m) => ({
         codice: m.codice,
         descrizione: m.descrizioneAI || m.descrizione,
         qty: orderItems[m.codice]?.qty ?? 0,
         um: m.um,
         prezzoListino: m.prezzoListino,
       }));
-      const res = await fetch("/api/orders", {
-        method: "POST",
+      const items = [...materialItems, ...editItemsNotInMaterials];
+
+      const url = isEditing ? `/api/orders/${editingId}` : "/api/orders";
+      const method = isEditing ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...orderInfo, items }),
       });
       if (!res.ok) throw new Error("Errore salvataggio");
       setSaved(true);
       resetOrder();
+      setEditingId(null);
+      setEditOnlyItems([]);
       setTimeout(() => { setSaved(false); onOpenChange(false); }, 1500);
     } catch {
       alert("Errore nel salvataggio dell'ordine");
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleCancel() {
+    if (isEditing) {
+      resetOrder();
+      setEditingId(null);
+      setEditOnlyItems([]);
+    }
+    onOpenChange(false);
   }
 
   // Today's date as min for date picker
@@ -76,12 +134,15 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
       <DrawerContent className="max-h-[92dvh] flex flex-col">
         <DrawerHeader className="pb-3 border-b border-border shrink-0">
           <DrawerTitle className="flex items-center gap-2.5 text-lg">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <ShoppingCart className="h-4 w-4" />
+            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${isEditing ? "bg-amber-500" : "bg-primary"} text-primary-foreground`}>
+              {isEditing ? <Pencil className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
             </div>
-            Nuovo Ordine
-            {flaggedItems.length > 0 && (
-              <Badge className="ml-auto rounded-full px-2.5">{flaggedItems.length} art.</Badge>
+            {isEditing ? "Modifica Ordine" : "Nuovo Ordine"}
+            {isEditing && (
+              <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 bg-amber-50">#{editingId}</Badge>
+            )}
+            {hasItems && (
+              <Badge className="ml-auto rounded-full px-2.5">{flaggedItems.length + editItemsNotInMaterials.length} art.</Badge>
             )}
           </DrawerTitle>
         </DrawerHeader>
@@ -190,14 +251,14 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
           <section>
             <h3 className="text-xs font-bold uppercase tracking-widest text-primary mb-3 flex items-center gap-1.5">
               <Package className="h-3.5 w-3.5" /> Articoli
-              {flaggedItems.length > 0 && (
+              {hasItems && (
                 <span className="text-muted-foreground font-normal normal-case tracking-normal">
-                  ({flaggedItems.length})
+                  ({flaggedItems.length + editItemsNotInMaterials.length})
                 </span>
               )}
             </h3>
 
-            {flaggedItems.length === 0 ? (
+            {!hasItems ? (
               <div className="py-8 text-center rounded-2xl border border-dashed border-border bg-muted/30">
                 <ShoppingCart className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
                 <p className="text-sm font-medium text-muted-foreground">Nessun articolo selezionato</p>
@@ -209,10 +270,11 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
               <div className="rounded-2xl border border-border bg-card overflow-hidden">
                 {flaggedItems.map((m, idx) => {
                   const qty = orderItems[m.codice]?.qty ?? 0;
+                  const isLast = idx === flaggedItems.length - 1 && editItemsNotInMaterials.length === 0;
                   return (
                     <div
                       key={m.codice}
-                      className={`flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors ${idx < flaggedItems.length - 1 ? "border-b border-border/60" : ""}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors ${!isLast ? "border-b border-border/60" : ""}`}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold font-mono text-foreground truncate">{m.codice}</p>
@@ -239,6 +301,23 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
                     </div>
                   );
                 })}
+                {/* Items from edited order not in current materials list */}
+                {editItemsNotInMaterials.map((item, idx) => (
+                  <div
+                    key={item.codice}
+                    className={`flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors ${idx < editItemsNotInMaterials.length - 1 ? "border-b border-border/60" : ""}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold font-mono text-foreground truncate">{item.codice}</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{item.descrizione}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-xs font-bold px-2.5 py-0.5 min-w-[48px] justify-center">
+                        {item.qty} pz
+                      </span>
+                    </div>
+                  </div>
+                ))}
 
                 {/* Total row */}
                 {totalPz > 0 && (
@@ -250,17 +329,26 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
               </div>
             )}
           </section>
+
+          {/* Editing banner */}
+          {isEditing && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+              <p className="text-xs text-amber-800 font-medium">
+                Stai modificando l&apos;ordine #{editingId}. Al salvataggio verrà inviata una email che annulla e sostituisce il precedente invio.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <DrawerFooter className="pt-3 border-t border-border shrink-0">
           {!canSend && (
             <p className="text-xs text-center text-muted-foreground mb-1">
-              {orderInfo.cliente.trim() === "" && flaggedItems.length === 0 && orderInfo.magazzino === ""
+              {orderInfo.cliente.trim() === "" && !hasItems && orderInfo.magazzino === ""
                 ? "Inserisci il cliente, il magazzino e seleziona almeno un articolo"
-                : orderInfo.cliente.trim() === "" && flaggedItems.length === 0
+                : orderInfo.cliente.trim() === "" && !hasItems
                 ? "Inserisci il cliente e seleziona almeno un articolo"
-                : orderInfo.magazzino === "" && flaggedItems.length === 0
+                : orderInfo.magazzino === "" && !hasItems
                 ? "Seleziona il magazzino e almeno un articolo"
                 : orderInfo.cliente.trim() === "" && orderInfo.magazzino === ""
                 ? "Inserisci il cliente e seleziona il magazzino"
@@ -274,17 +362,19 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
           <Button
             onClick={handleSave}
             disabled={!canSend || saving || saved}
-            className="w-full gap-2 h-12 text-base rounded-xl"
+            className={`w-full gap-2 h-12 text-base rounded-xl ${isEditing ? "bg-amber-500 hover:bg-amber-600" : ""}`}
           >
             {saved ? (
-              <><CheckCircle2 className="h-4 w-4" /> Ordine salvato!</>
+              <><CheckCircle2 className="h-4 w-4" /> {isEditing ? "Ordine aggiornato!" : "Ordine salvato!"}</>
             ) : saving ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Salvataggio…</>
+            ) : isEditing ? (
+              <><Pencil className="h-4 w-4" /> Salva Modifiche</>
             ) : (
               <><SendHorizonal className="h-4 w-4" /> Salva Ordine</>
             )}
           </Button>
-          {(flaggedItems.length > 0 || orderInfo.cliente) && (
+          {!isEditing && (flaggedItems.length > 0 || orderInfo.cliente) && (
             <Button
               variant="ghost"
               size="sm"
@@ -296,7 +386,7 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
             </Button>
           )}
           <DrawerClose asChild>
-            <Button variant="outline" className="h-11 rounded-xl">
+            <Button variant="outline" className="h-11 rounded-xl" onClick={handleCancel}>
               Chiudi
             </Button>
           </DrawerClose>

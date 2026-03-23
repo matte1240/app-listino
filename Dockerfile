@@ -39,11 +39,14 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static   ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public          ./public
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+# Install su-exec for entrypoint and create data directory
+RUN apk add --no-cache su-exec && \
+    mkdir -p /app/data && chown nextjs:nodejs /app/data
 
-USER nextjs
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+# Start as root so entrypoint can fix volume permissions, then drop to nextjs
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

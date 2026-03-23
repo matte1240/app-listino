@@ -18,9 +18,16 @@ function createDb() {
       username TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('admin', 'agente')),
+      email TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // Migration: add email column if missing (existing DBs)
+  const cols = db.pragma("table_info(users)") as { name: string }[];
+  if (!cols.some((c) => c.name === "email")) {
+    db.exec("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS enriched_materials (
@@ -94,5 +101,6 @@ export interface DbUser {
   username: string;
   password: string;
   role: "admin" | "agente";
+  email: string;
   created_at: string;
 }

@@ -30,10 +30,11 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { username, password, role } = body as {
+  const { username, password, role, email } = body as {
     username?: string;
     password?: string;
     role?: string;
+    email?: string;
   };
 
   if (role && role !== "admin" && role !== "agente") {
@@ -58,15 +59,17 @@ export async function PUT(
   const newUsername = username || existing.username;
   const newRole = role || existing.role;
   const newPassword = password ? hashSync(password, 10) : existing.password;
+  const newEmail = email ?? existing.email;
 
-  db.prepare("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?").run(
+  db.prepare("UPDATE users SET username = ?, password = ?, role = ?, email = ? WHERE id = ?").run(
     newUsername,
     newPassword,
     newRole,
+    newEmail,
     userId
   );
 
-  return NextResponse.json({ user: { id: userId, username: newUsername, role: newRole } });
+  return NextResponse.json({ user: { id: userId, username: newUsername, role: newRole, email: newEmail } });
 }
 
 export async function DELETE(

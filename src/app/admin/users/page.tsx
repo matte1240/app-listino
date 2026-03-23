@@ -13,6 +13,7 @@ interface UserRow {
   id: number;
   username: string;
   role: "admin" | "agente";
+  email: string;
   created_at: string;
 }
 
@@ -20,9 +21,10 @@ interface FormData {
   username: string;
   password: string;
   role: "admin" | "agente";
+  email: string;
 }
 
-const emptyForm: FormData = { username: "", password: "", role: "agente" };
+const emptyForm: FormData = { username: "", password: "", role: "agente", email: "" };
 
 export default function AdminUsersPage() {
   const { user, loading } = useAuth();
@@ -84,7 +86,7 @@ export default function AdminUsersPage() {
 
   function openEdit(u: UserRow) {
     setEditingId(u.id);
-    setForm({ username: u.username, password: "", role: u.role });
+    setForm({ username: u.username, password: "", role: u.role, email: u.email });
     setFormError("");
     setShowForm(true);
   }
@@ -107,6 +109,7 @@ export default function AdminUsersPage() {
     const body: Record<string, string> = {
       username: form.username,
       role: form.role,
+      email: form.email,
     };
     if (form.password) body.password = form.password;
     // For create, password is required
@@ -219,6 +222,17 @@ export default function AdminUsersPage() {
                 </select>
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="form-email" className="text-xs">Email</Label>
+                <Input
+                  id="form-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="email@esempio.com"
+                />
+              </div>
+
               {formError && <p className="text-sm text-red-500">{formError}</p>}
 
               <div className="flex gap-2 pt-1">
@@ -248,6 +262,7 @@ export default function AdminUsersPage() {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
+                  {u.email && <>{u.email} · </>}
                   Creato: {new Date(u.created_at + "Z").toLocaleDateString("it-IT")}
                 </p>
               </div>

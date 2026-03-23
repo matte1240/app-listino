@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { sendOrderEmail } from "@/lib/mail";
 import type { Order, OrderHistoryItem } from "@/types";
 
 /** GET /api/orders — list orders (admin sees all, agente sees own) */
@@ -61,7 +62,23 @@ export async function POST(req: NextRequest) {
       JSON.stringify(items)
     );
 
-  return NextResponse.json({ id: result.lastInsertRowid }, { status: 201 });
+  const orderId = result.lastInsertRowid as number;
+
+  // Send email notification (fire-and-forget, don't block the response)
+  const order: Order = {
+    id: orderId,
+    cliente: cliente.trim(),
+    magazzino,
+    luogoConsegna: luogoConsegna ?? "",
+    dataConsegna: dataConsegna ?? "",
+    note: note ?? "",
+    agente: payload.username,
+    items,
+    createdAt: new Date().toISOString(),
+  };
+  sendOrderEmail(order, payload.email).catch((err) => console.error("[mail] Errore invio email ordine:", err));
+
+  return NextResponse.json({ id: orderId }, { status: 201 });
 }
 
 interface DbOrder {

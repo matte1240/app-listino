@@ -10,10 +10,14 @@ services:
     environment:
       - NODE_ENV=production
       - JWT_SECRET=change-me-to-a-strong-random-secret
+      - GMAIL_USER=matte1240@gmail.com
+      - GMAIL_APP_PASSWORD=gszu arfc ixrn zwqb
+      - ORDER_EMAIL_TO=matte1240@gmail.com
+      - COOKIE_SECURE=false
     volumes:
       - ./data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
