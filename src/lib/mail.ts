@@ -1,15 +1,25 @@
 import nodemailer from "nodemailer";
 import type { Order } from "@/types";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+let _transporter: nodemailer.Transporter | null = null;
+
+function getTransporter(): nodemailer.Transporter {
+  if (!_transporter) {
+    _transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
+    });
+  }
+  return _transporter;
+}
 
 function formatDate(iso: string): string {
   if (!iso) return "—";
@@ -130,7 +140,7 @@ export async function sendOrderEmail(order: Order, agenteEmail?: string): Promis
     return;
   }
 
-  await transporter.sendMail({
+  await getTransporter().sendMail({
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to,
@@ -146,7 +156,7 @@ export async function sendOrderUpdatedEmail(order: Order, agenteEmail?: string):
     return;
   }
 
-  await transporter.sendMail({
+  await getTransporter().sendMail({
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to,
@@ -162,7 +172,7 @@ export async function sendOrderCancelledEmail(order: Order, agenteEmail?: string
     return;
   }
 
-  await transporter.sendMail({
+  await getTransporter().sendMail({
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to,
