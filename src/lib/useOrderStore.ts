@@ -10,6 +10,7 @@ interface OrderStore {
   drawerOpen: boolean;
   editingId: number | null;
   editingItems: OrderHistoryItem[];
+  showOriginalDesc: boolean;
   setDrawerOpen: (open: boolean) => void;
   setMaterials: (materials: Material[]) => void;
   toggleFlag: (codice: string) => void;
@@ -18,6 +19,7 @@ interface OrderStore {
   setSearchQuery: (q: string) => void;
   setOrderInfo: (info: Partial<OrderInfo>) => void;
   setEditing: (id: number | null, items?: OrderHistoryItem[]) => void;
+  toggleShowOriginalDesc: () => void;
 }
 
 const defaultOrderInfo: OrderInfo = {
@@ -38,6 +40,7 @@ export const useOrderStore = create<OrderStore>()(
       drawerOpen: false,
       editingId: null,
       editingItems: [],
+      showOriginalDesc: false,
       setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
 
       setEditing: (id, items = []) => set({ editingId: id, editingItems: items }),
@@ -77,6 +80,9 @@ export const useOrderStore = create<OrderStore>()(
 
       setOrderInfo: (info) =>
         set((state) => ({ orderInfo: { ...state.orderInfo, ...info } })),
+
+      toggleShowOriginalDesc: () =>
+        set((state) => ({ showOriginalDesc: !state.showOriginalDesc })),
     }),
     {
       name: "listino-order-store",

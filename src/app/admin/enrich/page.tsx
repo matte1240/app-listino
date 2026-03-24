@@ -1,23 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { Sparkles, Loader2, CheckCircle2, AlertCircle, RotateCw, Package } from "lucide-react";
-
-interface ProgressState {
-  status: "idle" | "running" | "done" | "error";
-  totalItems: number;
-  totalBatches: number;
-  currentBatch: number;
-  enrichedTotal: number;
-  errorCount: number;
-  progress: number;
-  currentCodice: string;
-  message: string;
-  logs: LogEntry[];
-}
 
 interface LogEntry {
   time: string;
@@ -25,7 +12,20 @@ interface LogEntry {
   text: string;
 }
 
-const initialProgress: ProgressState = {
+interface EnrichState {
+  status: "idle" | "running" | "done" | "error";
+  totalItems: number;
+  totalBatches: number;
+  currentBatch: number;
+  enrichedTotal: number;
+  errorCount: number;
+  progress: number;
+  message: string;
+  logs: LogEntry[];
+  startedAt: string | null;
+}
+
+const initialState: EnrichState = {
   status: "idle",
   totalItems: 0,
   totalBatches: 0,
@@ -33,9 +33,9 @@ const initialProgress: ProgressState = {
   enrichedTotal: 0,
   errorCount: 0,
   progress: 0,
-  currentCodice: "",
   message: "",
   logs: [],
+  startedAt: null,
 };
 
 export default function EnrichPage() {
@@ -44,8 +44,9 @@ export default function EnrichPage() {
   const [enrichedCount, setEnrichedCount] = useState(0);
   const [totalMaterials, setTotalMaterials] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [progress, setProgress] = useState<ProgressState>(initialProgress);
+  const [progress, setProgress] = useState<EnrichState>(initialState);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== "admin")) {
@@ -53,44 +54,48 @@ export default function EnrichPage() {
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
   // Auto-scroll log to bottom
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [progress.logs.length]);
 
-  async function loadStats() {
-    setLoading(true);
+  const pollStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/ai/enrich");
-      if (res.ok) {
-        const data = await res.json();
-        setEnrichedCount(data.count ?? 0);
-        setTotalMaterials(data.total ?? 0);
+      if (!res.ok) return;
+      const data = await res.json();
+      setEnrichedCount(data.count ?? 0);
+      setTotalMaterials(data.total ?? 0);
+      if (data.enrichState) {
+        setProgress(data.enrichState);
+        // Stop polling when done/error/idle
+        if (data.enrichState.status !== "running" && pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
       }
     } catch {
       // ignore
-    } finally {
-      setLoading(false);
     }
-  }
+  }, []);
 
-  function addLog(type: LogEntry["type"], text: string) {
-    const time = new Date().toLocaleTimeString("it-IT");
-    setProgress((p) => ({
-      ...p,
-      logs: [...p.logs, { time, type, text }],
-    }));
-  }
+  // Initial load + start polling if already running
+  useEffect(() => {
+    setLoading(true);
+    pollStatus().finally(() => setLoading(false));
+
+    // Start polling immediately — it will self-stop if not running
+    pollRef.current = setInterval(pollStatus, 2000);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [pollStatus]);
 
   async function handleEnrich(onlyMissing: boolean) {
-    setProgress({ ...initialProgress, status: "running", logs: [] });
-
-    addLog("info", onlyMissing ? "Avvio arricchimento (solo nuovi)..." : "Avvio arricchimento (rigenera tutto)...");
-
     try {
       const res = await fetch("/api/ai/enrich", {
         method: "POST",
@@ -98,105 +103,42 @@ export default function EnrichPage() {
         body: JSON.stringify({ onlyMissing }),
       });
 
-      const contentType = res.headers.get("content-type") || "";
+      const data = await res.json();
 
-      // Non-streaming response (e.g. "already enriched" or error)
-      if (!contentType.includes("text/event-stream")) {
-        const data = await res.json();
-        if (res.ok) {
-          setProgress((p) => ({ ...p, status: "done", message: data.message, progress: 100 }));
-          addLog("success", data.message);
-        } else {
-          setProgress((p) => ({ ...p, status: "error", message: data.error }));
-          addLog("error", data.error || "Errore sconosciuto");
-        }
-        loadStats();
-        return;
-      }
-
-      // SSE streaming
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("Stream non disponibile");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        let eventType = "";
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith("data: ") && eventType) {
-            const data = JSON.parse(line.slice(6));
-            handleSSE(eventType, data);
-            eventType = "";
-          }
-        }
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Errore sconosciuto";
-      setProgress((p) => ({ ...p, status: "error", message: msg }));
-      addLog("error", msg);
-    }
-
-    loadStats();
-  }
-
-  function handleSSE(event: string, data: Record<string, unknown>) {
-    switch (event) {
-      case "start":
-        setProgress((p) => ({
-          ...p,
-          totalItems: data.totalItems as number,
-          totalBatches: data.totalBatches as number,
-        }));
-        addLog("info", `${data.totalItems} articoli da elaborare in ${data.totalBatches} batch (${data.batchSize} per batch)`);
-        break;
-
-      case "batch_start":
-        setProgress((p) => ({
-          ...p,
-          currentBatch: data.batch as number,
-          currentCodice: (data.firstCodice as string) || "",
-        }));
-        addLog("info", `Batch ${data.batch}/${data.totalBatches} — ${data.itemsInBatch} articoli (${data.firstCodice}...)`);
-        break;
-
-      case "batch_done":
-        setProgress((p) => ({
-          ...p,
-          enrichedTotal: data.enrichedTotal as number,
-          progress: data.progress as number,
-        }));
-        addLog("success", `Batch ${data.batch}/${data.totalBatches} completato — ${data.enrichedInBatch} arricchiti (${data.progress}%)`);
-        break;
-
-      case "batch_error":
-        setProgress((p) => ({
-          ...p,
-          errorCount: data.errorCount as number,
-        }));
-        addLog("error", `Batch ${data.batch}/${data.totalBatches} errore: ${data.error}`);
-        break;
-
-      case "done":
+      if (res.status === 409) {
+        // Already running — just ensure polling
+        if (data.enrichState) setProgress(data.enrichState);
+      } else if (res.status === 202) {
+        // Started — set initial state and start polling
+        if (data.enrichState) setProgress(data.enrichState);
+      } else if (res.ok) {
+        // Immediate response (e.g. "all already enriched")
         setProgress((p) => ({
           ...p,
           status: "done",
           progress: 100,
-          enrichedTotal: data.enrichedCount as number,
-          errorCount: data.errorCount as number,
-          message: data.message as string,
+          message: data.message,
+          logs: [...p.logs, { time: new Date().toLocaleTimeString("it-IT"), type: "success" as const, text: data.message }],
         }));
-        addLog("success", data.message as string);
-        break;
+        pollStatus();
+        return;
+      } else {
+        setProgress((p) => ({
+          ...p,
+          status: "error",
+          message: data.error,
+          logs: [...p.logs, { time: new Date().toLocaleTimeString("it-IT"), type: "error" as const, text: data.error }],
+        }));
+        return;
+      }
+
+      // Start polling
+      if (!pollRef.current) {
+        pollRef.current = setInterval(pollStatus, 2000);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Errore sconosciuto";
+      setProgress((p) => ({ ...p, status: "error", message: msg }));
     }
   }
 
@@ -242,7 +184,7 @@ export default function EnrichPage() {
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={loadStats} disabled={isRunning}>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => pollStatus()} disabled={isRunning}>
             <RotateCw className="h-4 w-4" />
           </Button>
         </div>
@@ -325,11 +267,6 @@ export default function EnrichPage() {
               {progress.errorCount > 0 && (
                 <span className="text-red-500 font-medium">
                   {progress.errorCount} errori
-                </span>
-              )}
-              {isRunning && progress.currentCodice && (
-                <span className="truncate ml-auto font-mono">
-                  {progress.currentCodice}...
                 </span>
               )}
             </div>

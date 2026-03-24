@@ -1,5 +1,22 @@
 import nodemailer from "nodemailer";
 import type { Order, OrderHistoryItem } from "@/types";
+import { getDb } from "@/lib/db";
+
+interface BranchEmail {
+  magazzino: string;
+  email_to: string;
+  email_cc: string;
+}
+
+function getBranchEmail(magazzino: string): { to: string; cc: string } {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM branch_emails WHERE magazzino = ?").get(magazzino) as BranchEmail | undefined;
+  const fallback = process.env.ORDER_EMAIL_TO ?? "";
+  return {
+    to: row?.email_to || fallback,
+    cc: row?.email_cc || "",
+  };
+}
 
 let _transporter: nodemailer.Transporter | null = null;
 
@@ -225,48 +242,51 @@ function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "n
 }
 
 export async function sendOrderEmail(order: Order, agenteEmail?: string): Promise<void> {
-  const to = process.env.ORDER_EMAIL_TO;
-  if (!to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    console.warn("[mail] Invio email disabilitato: variabili GMAIL_USER, GMAIL_APP_PASSWORD o ORDER_EMAIL_TO mancanti");
+  const branch = getBranchEmail(order.magazzino);
+  if (!branch.to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn("[mail] Invio email disabilitato: credenziali GMAIL mancanti o nessuna email configurata per", order.magazzino);
     return;
   }
 
   await getTransporter().sendMail({
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
-    to,
+    to: branch.to,
+    cc: branch.cc || undefined,
     subject: `Nuovo Ordine #${order.id} — ${order.cliente} (${order.magazzino})`,
     html: buildOrderHtml(order, "new"),
   });
 }
 
 export async function sendOrderUpdatedEmail(order: Order, oldItems: OrderHistoryItem[], agenteEmail?: string): Promise<void> {
-  const to = process.env.ORDER_EMAIL_TO;
-  if (!to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    console.warn("[mail] Invio email disabilitato: variabili GMAIL_USER, GMAIL_APP_PASSWORD o ORDER_EMAIL_TO mancanti");
+  const branch = getBranchEmail(order.magazzino);
+  if (!branch.to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn("[mail] Invio email disabilitato: credenziali GMAIL mancanti o nessuna email configurata per", order.magazzino);
     return;
   }
 
   await getTransporter().sendMail({
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
-    to,
+    to: branch.to,
+    cc: branch.cc || undefined,
     subject: `Ordine Modificato #${order.id} — Annulla e sostituisce — ${order.cliente} (${order.magazzino})`,
     html: buildOrderHtml(order, "updated", oldItems),
   });
 }
 
 export async function sendOrderCancelledEmail(order: Order, agenteEmail?: string): Promise<void> {
-  const to = process.env.ORDER_EMAIL_TO;
-  if (!to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    console.warn("[mail] Invio email disabilitato: variabili GMAIL_USER, GMAIL_APP_PASSWORD o ORDER_EMAIL_TO mancanti");
+  const branch = getBranchEmail(order.magazzino);
+  if (!branch.to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn("[mail] Invio email disabilitato: credenziali GMAIL mancanti o nessuna email configurata per", order.magazzino);
     return;
   }
 
   await getTransporter().sendMail({
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
-    to,
+    to: branch.to,
+    cc: branch.cc || undefined,
     subject: `Ordine Cancellato #${order.id} — ${order.cliente} (${order.magazzino})`,
     html: buildOrderHtml(order, "cancelled"),
   });

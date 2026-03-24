@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Minus, Plus } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
+import { useAuth } from "@/lib/auth-context";
 import type { Material } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,9 @@ export default function MaterialCard({ material }: Props) {
   const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const setQty = useOrderStore((s) => s.setQty);
+  const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const isFlagged = orderItem?.flagged ?? false;
   const qty = orderItem?.qty ?? 0;
@@ -88,8 +92,13 @@ export default function MaterialCard({ material }: Props) {
 
             {/* Descrizione */}
             <p className="text-sm text-foreground/90 leading-snug break-words mt-0.5">
-              {descrizioneAI || descrizione}
+              {isAdmin && showOriginalDesc ? descrizione : (descrizioneAI || descrizione)}
             </p>
+            {isAdmin && showOriginalDesc && descrizioneAI && (
+              <p className="text-xs text-muted-foreground/60 leading-snug break-words mt-0.5 italic">
+                AI: {descrizioneAI}
+              </p>
+            )}
 
             {/* Prezzi */}
             <div className="mt-2.5 flex items-center gap-2 flex-wrap">

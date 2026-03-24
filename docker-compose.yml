@@ -13,10 +13,11 @@ services:
     environment:
       - NODE_ENV=production
       - JWT_SECRET=change-me-to-a-strong-random-secret
-      - GMAIL_USER=matte1240@gmail.com
-      - GMAIL_APP_PASSWORD=gszu arfc ixrn zwqb
-      - ORDER_EMAIL_TO=matte1240@gmail.com
+      - GMAIL_USER=
+      - GMAIL_APP_PASSWORD=
+      - ORDER_EMAIL_TO=
       - COOKIE_SECURE=false
+      - AI_MODEL=gpt-4o-mini
     volumes:
       - ./data:/app/data
     healthcheck:

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutList, ClipboardList, Users, Sparkles, Menu, X, LogOut, Shield, ShoppingCart } from "lucide-react";
+import { LayoutList, ClipboardList, Users, Sparkles, Menu, X, LogOut, Shield, ShoppingCart, FileText, Bot, Mail } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -16,6 +16,7 @@ const navItems = [
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
   { href: "/admin/users", label: "Utenti", icon: Users, adminOnly: true },
   { href: "/admin/enrich", label: "AI", icon: Sparkles, adminOnly: true },
+  { href: "/admin/emails", label: "Email", icon: Mail, adminOnly: true },
 ];
 
 export default function Navbar() {
@@ -24,6 +25,8 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const orderItems = useOrderStore((s) => s.orderItems);
   const setDrawerOpen = useOrderStore((s) => s.setDrawerOpen);
+  const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
+  const toggleShowOriginalDesc = useOrderStore((s) => s.toggleShowOriginalDesc);
   const flaggedCount = Object.values(orderItems).filter((o) => o.flagged).length;
   const isHome = pathname === "/";
   const isAdmin = user?.role === "admin";
@@ -95,6 +98,17 @@ export default function Navbar() {
           {/* Cart + upload (only on listino page) */}
           {isHome && (
             <div className="flex items-center gap-1.5">
+              {isAdmin && (
+                <Button
+                  variant={showOriginalDesc ? "default" : "outline"}
+                  size="sm"
+                  onClick={toggleShowOriginalDesc}
+                  className="gap-1.5 h-8 rounded-xl font-semibold text-xs"
+                  title={showOriginalDesc ? "Mostra descrizione AI" : "Mostra descrizione originale"}
+                >
+                  {showOriginalDesc ? <FileText className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                </Button>
+              )}
               {isAdmin && <UploadExcel />}
               <Button
                 variant={flaggedCount > 0 ? "default" : "outline"}

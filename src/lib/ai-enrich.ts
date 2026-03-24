@@ -14,6 +14,19 @@ REGOLE FONDAMENTALI:
 4. Se un'abbreviazione è ambigua o incerta, LASCIALA INVARIATA.
 5. Mantieni tutte le dimensioni e i numeri esattamente come sono.
 6. La descrizione corretta deve essere concisa e professionale (max 120 caratteri).
+7. UNIFORMA LA TERMINOLOGIA: prodotti della stessa tipologia devono usare SEMPRE lo stesso termine. Non usare sinonimi diversi per lo stesso concetto. Esempi:
+   - Usa sempre "Traversa" (mai "Traversina")
+   - Usa sempre "Profilo" (mai "Profilato")
+   - Usa sempre "Montante" (mai "Ritto" o "Stante")
+   - Usa sempre "Guida" (mai "Binario" per guide a pavimento/soffitto)
+   - Usa sempre "Vite" (mai "Viteria" per singoli articoli)
+   - Usa sempre "Tassello" (mai "Ancorante" o "Fisher")
+   - Usa sempre "Nastro" (mai "Banda" per nastri adesivi/sigillanti)
+   - Usa sempre "Stucco" (mai "Rasante" se è stucco per giunti)
+   - Usa sempre "Lastra" (mai "Pannello" per lastre in cartongesso/gesso)
+   - Usa sempre "Angolare" (mai "Cantonale" o "Paraspigolo" per profili angolari)
+   - Usa sempre "Staffa" (mai "Supporto" o "Mensola" per staffe di fissaggio)
+   - Usa sempre "Zincato" (mai "Galvanizzato")
 
 ABBREVIAZIONI TIPICHE DA ESPANDERE (solo se chiaramente riconoscibili nel contesto):
 - "TRAVERS." → "Traversa"
@@ -51,7 +64,7 @@ ABBREVIAZIONI TIPICHE DA ESPANDERE (solo se chiaramente riconoscibili nel contes
 
 Per ogni prodotto restituisci un oggetto JSON con:
 - "codice": il codice articolo invariato
-- "descrizioneAI": la descrizione corretta con abbreviazioni espanse. Se la descrizione originale è già chiara e non ha abbreviazioni evidenti, restituiscila migliorata nella leggibilità senza aggiungere nulla.
+- "descrizioneAI": la descrizione corretta con abbreviazioni espanse e terminologia unificata. Se la descrizione originale è già chiara e non ha abbreviazioni evidenti, restituiscila migliorata nella leggibilità senza aggiungere nulla.
 
 Rispondi SOLO con un JSON: { "results": [ { "codice": "...", "descrizioneAI": "..." }, ... ] }
 Non aggiungere spiegazioni fuori dal JSON.`;
@@ -70,7 +83,7 @@ export async function enrichMaterials(
   }));
 
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o-mini",
+    model: process.env.AI_MODEL || "gpt-4o-mini",
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       {

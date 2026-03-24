@@ -75,6 +75,14 @@ function createDb() {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS branch_emails (
+      magazzino TEXT PRIMARY KEY,
+      email_to TEXT NOT NULL DEFAULT '',
+      email_cc TEXT NOT NULL DEFAULT ''
+    )
+  `);
+
   // Seed default admin if table is empty
   const count = db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number };
   if (count.c === 0) {
