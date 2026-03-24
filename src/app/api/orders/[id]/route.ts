@@ -102,10 +102,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     orderId
   );
 
+  const oldItems = JSON.parse(existing.items) as OrderHistoryItem[];
+
   const updated = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder;
   const order = dbToOrder(updated);
 
-  sendOrderUpdatedEmail(order, payload.email).catch((err) =>
+  sendOrderUpdatedEmail(order, oldItems, payload.email).catch((err) =>
     console.error("[mail] Errore invio email modifica ordine:", err)
   );
 

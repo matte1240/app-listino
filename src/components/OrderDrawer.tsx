@@ -57,10 +57,8 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
       }
       sessionStorage.removeItem("editingOrderId");
       sessionStorage.removeItem("editingOrderItems");
-    } else {
-      setEditingId(null);
-      setEditOnlyItems([]);
     }
+    // If no sessionStorage data and not already editing, keep state as-is
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -315,6 +313,13 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
                       <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-xs font-bold px-2.5 py-0.5 min-w-[48px] justify-center">
                         {item.qty} pz
                       </span>
+                      <button
+                        onClick={() => setEditOnlyItems((prev) => prev.filter((i) => i.codice !== item.codice))}
+                        className="text-muted-foreground hover:text-destructive transition-colors p-1.5 rounded-lg hover:bg-destructive/10"
+                        aria-label="Rimuovi articolo"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 ))}

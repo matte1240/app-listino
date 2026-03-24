@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import type { Order } from "@/types";
+import type { Order, OrderHistoryItem } from "@/types";
 
 let _transporter: nodemailer.Transporter | null = null;
 
@@ -27,16 +27,112 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "new"): string {
+function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "new", oldItems?: OrderHistoryItem[]): string {
   const headerConfig = {
     new:       { bg: "#1d4ed8", emoji: "📦", label: "Nuovo Ordine" },
     updated:   { bg: "#d97706", emoji: "✏️", label: "Ordine Modificato — Annulla e sostituisce il precedente invio" },
     cancelled: { bg: "#dc2626", emoji: "❌", label: "Ordine Cancellato" },
   }[mode];
 
-  const itemsRows = mode === "cancelled" ? "" : order.items
-    .map(
-      (item) => `
+  let itemsSection: string;
+
+  if (mode === "cancelled") {
+    itemsSection = `
+      <div style="text-align:center;padding:32px 0">
+        <p style="font-size:16px;color:#dc2626;font-weight:600">Questo ordine è stato cancellato.</p>
+        <p style="font-size:13px;color:#71717a;margin-top:8px">L'ordine #${order.id} per ${order.cliente} non è più valido.</p>
+      </div>
+    `;
+  } else if (mode === "updated" && oldItems) {
+    // Build diff-highlighted table
+    const oldMap = new Map(oldItems.map((i) => [i.codice, i]));
+    const newMap = new Map(order.items.map((i) => [i.codice, i]));
+
+    type DiffRow = { item: OrderHistoryItem; status: "added" | "removed" | "changed" | "unchanged"; oldQty?: number };
+    const rows: DiffRow[] = [];
+
+    // New/changed items (in new order)
+    for (const item of order.items) {
+      const old = oldMap.get(item.codice);
+      if (!old) {
+        rows.push({ item, status: "added" });
+      } else if (old.qty !== item.qty) {
+        rows.push({ item, status: "changed", oldQty: old.qty });
+      } else {
+        rows.push({ item, status: "unchanged" });
+      }
+    }
+
+    // Removed items (in old but not in new)
+    for (const old of oldItems) {
+      if (!newMap.has(old.codice)) {
+        rows.push({ item: old, status: "removed" });
+      }
+    }
+
+    const styleMap = {
+      added:     { bg: "#f0fdf4", color: "#166534", badge: "🟢 Aggiunto",  badgeBg: "#dcfce7", badgeColor: "#166534" },
+      removed:   { bg: "#fef2f2", color: "#991b1b", badge: "🔴 Rimosso",   badgeBg: "#fee2e2", badgeColor: "#991b1b" },
+      changed:   { bg: "#fffbeb", color: "#92400e", badge: "🟡 Modificato", badgeBg: "#fef3c7", badgeColor: "#92400e" },
+      unchanged: { bg: "#ffffff", color: "#18181b", badge: "",              badgeBg: "",         badgeColor: "" },
+    };
+
+    const diffRows = rows.map((r) => {
+      const s = styleMap[r.status];
+      const textDeco = r.status === "removed" ? "text-decoration:line-through;" : "";
+      const qtyCell = r.status === "changed"
+        ? `<span style="text-decoration:line-through;color:#a1a1aa;margin-right:4px">${r.oldQty}</span><strong>${r.item.qty}</strong>`
+        : `${r.item.qty}`;
+      const badgeHtml = s.badge
+        ? `<span style="display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:9999px;background:${s.badgeBg};color:${s.badgeColor};white-space:nowrap">${s.badge}</span>`
+        : "";
+
+      return `
+      <tr style="background:${s.bg}">
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-family:monospace;font-weight:bold;${textDeco}color:${s.color}">${r.item.codice}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;${textDeco}color:${s.color}">${r.item.descrizione}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center;color:${s.color}">${qtyCell}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center;${textDeco}color:${s.color}">${r.item.um}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;${textDeco}color:${s.color}">&euro; ${r.item.prezzoListino.toFixed(2)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">${badgeHtml}</td>
+      </tr>`;
+    }).join("");
+
+    const totalePz = order.items.reduce((s, i) => s + i.qty, 0);
+    const hasChanges = rows.some((r) => r.status !== "unchanged");
+
+    itemsSection = `
+      ${hasChanges ? `<div style="margin-bottom:12px;padding:10px 16px;background:#fffbeb;border-left:4px solid #d97706;border-radius:4px;font-size:13px;color:#92400e">
+        <strong>Legenda:</strong> 🟢 Aggiunto &nbsp; 🔴 Rimosso &nbsp; 🟡 Qtà modificata
+      </div>` : ""}
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f4f4f5">
+            <th style="padding:10px 12px;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Codice</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Descrizione</th>
+            <th style="padding:10px 12px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Qtà</th>
+            <th style="padding:10px 12px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">UM</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Prezzo</th>
+            <th style="padding:10px 12px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Modifica</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${diffRows}
+        </tbody>
+        <tfoot>
+          <tr style="background:#f0f9ff">
+            <td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px">Totale</td>
+            <td style="padding:10px 12px;text-align:center;font-weight:700;font-size:14px">${totalePz} pz</td>
+            <td colspan="3"></td>
+          </tr>
+        </tfoot>
+      </table>
+    `;
+  } else {
+    // mode === "new" (or updated without oldItems fallback)
+    const itemsRows = order.items
+      .map(
+        (item) => `
       <tr>
         <td style="padding:8px 12px;border-bottom:1px solid #eee;font-family:monospace;font-weight:bold">${item.codice}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #eee">${item.descrizione}</td>
@@ -44,18 +140,12 @@ function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "n
         <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">${item.um}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">&euro; ${item.prezzoListino.toFixed(2)}</td>
       </tr>`
-    )
-    .join("");
+      )
+      .join("");
 
-  const totalePz = order.items.reduce((s, i) => s + i.qty, 0);
+    const totalePz = order.items.reduce((s, i) => s + i.qty, 0);
 
-  const itemsSection = mode === "cancelled" ? `
-      <div style="text-align:center;padding:32px 0">
-        <p style="font-size:16px;color:#dc2626;font-weight:600">Questo ordine è stato cancellato.</p>
-        <p style="font-size:13px;color:#71717a;margin-top:8px">L'ordine #${order.id} per ${order.cliente} non è più valido.</p>
-      </div>
-  ` : `
-      <!-- Items table -->
+    itemsSection = `
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
           <tr style="background:#f4f4f5">
@@ -77,7 +167,8 @@ function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "n
           </tr>
         </tfoot>
       </table>
-  `;
+    `;
+  }
 
   return `
 <!DOCTYPE html>
@@ -149,7 +240,7 @@ export async function sendOrderEmail(order: Order, agenteEmail?: string): Promis
   });
 }
 
-export async function sendOrderUpdatedEmail(order: Order, agenteEmail?: string): Promise<void> {
+export async function sendOrderUpdatedEmail(order: Order, oldItems: OrderHistoryItem[], agenteEmail?: string): Promise<void> {
   const to = process.env.ORDER_EMAIL_TO;
   if (!to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
     console.warn("[mail] Invio email disabilitato: variabili GMAIL_USER, GMAIL_APP_PASSWORD o ORDER_EMAIL_TO mancanti");
@@ -161,7 +252,7 @@ export async function sendOrderUpdatedEmail(order: Order, agenteEmail?: string):
     replyTo: agenteEmail || undefined,
     to,
     subject: `Ordine Modificato #${order.id} — Annulla e sostituisce — ${order.cliente} (${order.magazzino})`,
-    html: buildOrderHtml(order, "updated"),
+    html: buildOrderHtml(order, "updated", oldItems),
   });
 }
 
