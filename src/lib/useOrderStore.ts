@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Material, OrderMap, OrderInfo } from "@/types";
+import type { Material, OrderMap, OrderInfo, OrderHistoryItem } from "@/types";
 
 interface OrderStore {
   materials: Material[];
@@ -8,6 +8,8 @@ interface OrderStore {
   orderInfo: OrderInfo;
   searchQuery: string;
   drawerOpen: boolean;
+  editingId: number | null;
+  editingItems: OrderHistoryItem[];
   setDrawerOpen: (open: boolean) => void;
   setMaterials: (materials: Material[]) => void;
   toggleFlag: (codice: string) => void;
@@ -15,6 +17,7 @@ interface OrderStore {
   resetOrder: () => void;
   setSearchQuery: (q: string) => void;
   setOrderInfo: (info: Partial<OrderInfo>) => void;
+  setEditing: (id: number | null, items?: OrderHistoryItem[]) => void;
 }
 
 const defaultOrderInfo: OrderInfo = {
@@ -33,7 +36,11 @@ export const useOrderStore = create<OrderStore>()(
       orderInfo: defaultOrderInfo,
       searchQuery: "",
       drawerOpen: false,
+      editingId: null,
+      editingItems: [],
       setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
+
+      setEditing: (id, items = []) => set({ editingId: id, editingItems: items }),
 
       setMaterials: (materials) => set({ materials }),
 
@@ -57,14 +64,14 @@ export const useOrderStore = create<OrderStore>()(
           orderItems: {
             ...state.orderItems,
             [codice]: {
-              flagged: newQty > 0 ? (state.orderItems[codice]?.flagged ?? true) : false,
+              flagged: newQty > 0,
               qty: newQty,
             },
           },
         }));
       },
 
-      resetOrder: () => set({ orderItems: {}, orderInfo: defaultOrderInfo }),
+      resetOrder: () => set({ orderItems: {}, orderInfo: defaultOrderInfo, editingId: null, editingItems: [] }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
 
@@ -76,6 +83,8 @@ export const useOrderStore = create<OrderStore>()(
       partialize: (state) => ({
         orderItems: state.orderItems,
         orderInfo: state.orderInfo,
+        editingId: state.editingId,
+        editingItems: state.editingItems,
       }),
     }
   )

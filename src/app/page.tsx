@@ -24,12 +24,14 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const editingId = useOrderStore((s) => s.editingId);
+
   // Auto-open drawer when returning from edit flow
   useEffect(() => {
-    if (sessionStorage.getItem("editingOrderId")) {
+    if (editingId !== null) {
       setDrawerOpen(true);
     }
-  }, [setDrawerOpen]);
+  }, [editingId, setDrawerOpen]);
 
   if (loading) {
     return (

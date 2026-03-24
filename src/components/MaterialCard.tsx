@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Minus, Plus } from "lucide-react";
@@ -15,19 +15,21 @@ interface Props {
 export default function MaterialCard({ material }: Props) {
   const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
-  const toggleFlag = useOrderStore((s) => s.toggleFlag);
   const setQty = useOrderStore((s) => s.setQty);
 
   const isFlagged = orderItem?.flagged ?? false;
   const qty = orderItem?.qty ?? 0;
+  const [expanded, setExpanded] = useState(false);
   const qtyInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus quantity input when article is selected
+  const showQtyRow = expanded || isFlagged;
+
+  // Auto-focus quantity input when row expands
   useEffect(() => {
-    if (isFlagged) {
+    if (showQtyRow) {
       setTimeout(() => qtyInputRef.current?.focus(), 50);
     }
-  }, [isFlagged]);
+  }, [showQtyRow]);
 
   const handleQtyChange = (value: string) => {
     const parsed = parseInt(value, 10);
@@ -55,7 +57,14 @@ export default function MaterialCard({ material }: Props) {
           <Checkbox
             id={`flag-${codice}`}
             checked={isFlagged}
-            onCheckedChange={() => toggleFlag(codice)}
+            onCheckedChange={() => {
+              if (isFlagged) {
+                setQty(codice, 0);
+                setExpanded(false);
+              } else {
+                setExpanded((v) => !v);
+              }
+            }}
             className="mt-1 h-5 w-5 shrink-0"
           />
           <label
@@ -95,8 +104,8 @@ export default function MaterialCard({ material }: Props) {
           </label>
         </div>
 
-        {/* Quantity row — shown only when flagged */}
-        {isFlagged && (
+        {/* Quantity row — shown when expanded or flagged */}
+        {showQtyRow && (
           <div className="mt-4 flex items-center gap-3 pl-8">
             <span className="text-sm font-medium text-muted-foreground shrink-0">Qtà ordine:</span>
             <div className="flex items-center rounded-xl border border-primary/30 bg-background overflow-hidden shadow-sm">
@@ -114,7 +123,12 @@ export default function MaterialCard({ material }: Props) {
                 min={0}
                 value={qty === 0 ? "" : qty}
                 onChange={(e) => handleQtyChange(e.target.value)}
-                onBlur={(e) => { if (e.target.value === "" || e.target.value === "0") setQty(codice, 0); }}
+                onBlur={(e) => {
+                  if (e.target.value === "" || e.target.value === "0") {
+                    setQty(codice, 0);
+                    setExpanded(false);
+                  }
+                }}
                 placeholder="0"
                 inputMode="numeric"
                 className="w-14 h-10 text-center font-bold bg-background border-x border-primary/30 focus:outline-none focus:bg-primary/5"

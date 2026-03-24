@@ -16,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI } from "@/types";
-import type { OrderHistoryItem } from "@/types";
 import { useState, useEffect } from "react";
 
 interface Props {
@@ -32,33 +31,27 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   const setQty = useOrderStore((s) => s.setQty);
   const resetOrder = useOrderStore((s) => s.resetOrder);
   const setOrderInfo = useOrderStore((s) => s.setOrderInfo);
+  const editingId = useOrderStore((s) => s.editingId);
+  const editingItems = useOrderStore((s) => s.editingItems);
+  const setEditing = useOrderStore((s) => s.setEditing);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editOnlyItems, setEditOnlyItems] = useState<OrderHistoryItem[]>([]);
 
-  // On open, check if we are editing an existing order
+  // On open, check if we need to load editing items into the order
   useEffect(() => {
     if (!open) return;
-    const storedId = sessionStorage.getItem("editingOrderId");
-    const storedItems = sessionStorage.getItem("editingOrderItems");
-    if (storedId && storedItems) {
-      setEditingId(parseInt(storedId, 10));
-      const items: OrderHistoryItem[] = JSON.parse(storedItems);
-      setEditOnlyItems(items);
-      // Flag + set qty for each item in the order
-      for (const item of items) {
-        // Toggle flag on (if not already flagged)
+    if (editingId !== null && editingItems.length > 0) {
+      // Flag + set qty for each item (only if not already loaded)
+      for (const item of editingItems) {
         const currentItem = useOrderStore.getState().orderItems[item.codice];
         if (!currentItem?.flagged) {
           toggleFlag(item.codice);
         }
-        setQty(item.codice, item.qty);
+        if ((currentItem?.qty ?? 0) === 0) {
+          setQty(item.codice, item.qty);
+        }
       }
-      sessionStorage.removeItem("editingOrderId");
-      sessionStorage.removeItem("editingOrderItems");
     }
-    // If no sessionStorage data and not already editing, keep state as-is
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -70,7 +63,7 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   // Items to display: prefer material-backed items, fall back to edit-only items
   const displayItems = flaggedItems.length > 0 ? flaggedItems : [];
   const editItemsNotInMaterials = isEditing
-    ? editOnlyItems.filter((ei) => !materials.some((m) => m.codice === ei.codice))
+    ? editingItems.filter((ei) => !materials.some((m) => m.codice === ei.codice))
     : [];
 
   const totalPz = flaggedItems.reduce(
@@ -105,8 +98,6 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
       if (!res.ok) throw new Error("Errore salvataggio");
       setSaved(true);
       resetOrder();
-      setEditingId(null);
-      setEditOnlyItems([]);
       setTimeout(() => { setSaved(false); onOpenChange(false); }, 1500);
     } catch {
       alert("Errore nel salvataggio dell'ordine");
@@ -118,8 +109,6 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   function handleCancel() {
     if (isEditing) {
       resetOrder();
-      setEditingId(null);
-      setEditOnlyItems([]);
     }
     onOpenChange(false);
   }
@@ -314,7 +303,7 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
                         {item.qty} pz
                       </span>
                       <button
-                        onClick={() => setEditOnlyItems((prev) => prev.filter((i) => i.codice !== item.codice))}
+                        onClick={() => setEditing(editingId, editingItems.filter((i) => i.codice !== item.codice))}
                         className="text-muted-foreground hover:text-destructive transition-colors p-1.5 rounded-lg hover:bg-destructive/10"
                         aria-label="Rimuovi articolo"
                       >

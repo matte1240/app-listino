@@ -20,6 +20,7 @@ export default function OrdersPage() {
 
   const setOrderInfo = useOrderStore((s) => s.setOrderInfo);
   const resetOrder = useOrderStore((s) => s.resetOrder);
+  const setEditing = useOrderStore((s) => s.setEditing);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -47,7 +48,6 @@ export default function OrdersPage() {
   }
 
   function handleEdit(order: Order) {
-    // Store the editing order id + info in sessionStorage and navigate to home
     resetOrder();
     setOrderInfo({
       cliente: order.cliente,
@@ -56,9 +56,7 @@ export default function OrdersPage() {
       dataConsegna: order.dataConsegna,
       note: order.note,
     });
-    // Save editing state so OrderDrawer knows we are editing
-    sessionStorage.setItem("editingOrderId", String(order.id));
-    sessionStorage.setItem("editingOrderItems", JSON.stringify(order.items));
+    setEditing(order.id, order.items);
     router.push("/");
   }
 
