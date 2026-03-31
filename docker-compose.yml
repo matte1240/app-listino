@@ -1,23 +1,12 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/matte1240/app-listino:latest
     container_name: app-listino
     restart: unless-stopped
     ports:
       - "3000:3000"
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
-    environment:
-      - NODE_ENV=production
-      - JWT_SECRET=change-me-to-a-strong-random-secret
-      - GMAIL_USER=
-      - GMAIL_APP_PASSWORD=
-      - ORDER_EMAIL_TO=
-      - COOKIE_SECURE=false
-      - AI_MODEL=gpt-4o-mini
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
     healthcheck:

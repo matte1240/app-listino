@@ -44,201 +44,123 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "new", oldItems?: OrderHistoryItem[]): string {
-  const headerConfig = {
-    new:       { bg: "#1d4ed8", emoji: "📦", label: "Nuovo Ordine" },
-    updated:   { bg: "#d97706", emoji: "✏️", label: "Ordine Modificato — Annulla e sostituisce il precedente invio" },
-    cancelled: { bg: "#dc2626", emoji: "❌", label: "Ordine Cancellato" },
-  }[mode];
+function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "new", _oldItems?: OrderHistoryItem[]): string {
+  const title =
+    mode === "updated"
+      ? `Ordine Modificato #${order.id}`
+      : mode === "cancelled"
+        ? `Ordine Cancellato #${order.id}`
+        : `Nuovo Ordine #${order.id}`;
 
-  let itemsSection: string;
-
-  if (mode === "cancelled") {
-    itemsSection = `
-      <div style="text-align:center;padding:32px 0">
-        <p style="font-size:16px;color:#dc2626;font-weight:600">Questo ordine è stato cancellato.</p>
-        <p style="font-size:13px;color:#71717a;margin-top:8px">L'ordine #${order.id} per ${order.cliente} non è più valido.</p>
-      </div>
-    `;
-  } else if (mode === "updated" && oldItems) {
-    // Build diff-highlighted table
-    const oldMap = new Map(oldItems.map((i) => [i.codice, i]));
-    const newMap = new Map(order.items.map((i) => [i.codice, i]));
-
-    type DiffRow = { item: OrderHistoryItem; status: "added" | "removed" | "changed" | "unchanged"; oldQty?: number };
-    const rows: DiffRow[] = [];
-
-    // New/changed items (in new order)
-    for (const item of order.items) {
-      const old = oldMap.get(item.codice);
-      if (!old) {
-        rows.push({ item, status: "added" });
-      } else if (old.qty !== item.qty) {
-        rows.push({ item, status: "changed", oldQty: old.qty });
-      } else {
-        rows.push({ item, status: "unchanged" });
-      }
-    }
-
-    // Removed items (in old but not in new)
-    for (const old of oldItems) {
-      if (!newMap.has(old.codice)) {
-        rows.push({ item: old, status: "removed" });
-      }
-    }
-
-    const styleMap = {
-      added:     { bg: "#f0fdf4", color: "#166534", badge: "🟢 Aggiunto",  badgeBg: "#dcfce7", badgeColor: "#166534" },
-      removed:   { bg: "#fef2f2", color: "#991b1b", badge: "🔴 Rimosso",   badgeBg: "#fee2e2", badgeColor: "#991b1b" },
-      changed:   { bg: "#fffbeb", color: "#92400e", badge: "🟡 Modificato", badgeBg: "#fef3c7", badgeColor: "#92400e" },
-      unchanged: { bg: "#ffffff", color: "#18181b", badge: "",              badgeBg: "",         badgeColor: "" },
-    };
-
-    const diffRows = rows.map((r) => {
-      const s = styleMap[r.status];
-      const textDeco = r.status === "removed" ? "text-decoration:line-through;" : "";
-      const qtyCell = r.status === "changed"
-        ? `<span style="text-decoration:line-through;color:#a1a1aa;margin-right:4px">${r.oldQty}</span><strong>${r.item.qty}</strong>`
-        : `${r.item.qty}`;
-      const badgeHtml = s.badge
-        ? `<span style="display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:9999px;background:${s.badgeBg};color:${s.badgeColor};white-space:nowrap">${s.badge}</span>`
-        : "";
-
-      return `
-      <tr style="background:${s.bg}">
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-family:monospace;font-weight:bold;${textDeco}color:${s.color}">${r.item.codice}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;${textDeco}color:${s.color}">${r.item.descrizione}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center;color:${s.color}">${qtyCell}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center;${textDeco}color:${s.color}">${r.item.um}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;${textDeco}color:${s.color}">&euro; ${r.item.prezzoListino.toFixed(2)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">${badgeHtml}</td>
-      </tr>`;
-    }).join("");
-
-    const totalePz = order.items.reduce((s, i) => s + i.qty, 0);
-    const hasChanges = rows.some((r) => r.status !== "unchanged");
-
-    itemsSection = `
-      ${hasChanges ? `<div style="margin-bottom:12px;padding:10px 16px;background:#fffbeb;border-left:4px solid #d97706;border-radius:4px;font-size:13px;color:#92400e">
-        <strong>Legenda:</strong> 🟢 Aggiunto &nbsp; 🔴 Rimosso &nbsp; 🟡 Qtà modificata
-      </div>` : ""}
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="background:#f4f4f5">
-            <th style="padding:10px 12px;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Codice</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Descrizione</th>
-            <th style="padding:10px 12px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Qtà</th>
-            <th style="padding:10px 12px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">UM</th>
-            <th style="padding:10px 12px;text-align:right;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Prezzo</th>
-            <th style="padding:10px 12px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Modifica</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${diffRows}
-        </tbody>
-        <tfoot>
-          <tr style="background:#f0f9ff">
-            <td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px">Totale</td>
-            <td style="padding:10px 12px;text-align:center;font-weight:700;font-size:14px">${totalePz} pz</td>
-            <td colspan="3"></td>
-          </tr>
-        </tfoot>
-      </table>
-    `;
-  } else {
-    // mode === "new" (or updated without oldItems fallback)
-    const itemsRows = order.items
-      .map(
-        (item) => `
+  const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0);
+  const rows = order.items
+    .map(
+      (item) => `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-family:monospace;font-weight:bold">${item.codice}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee">${item.descrizione}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">${item.qty}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">${item.um}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">&euro; ${item.prezzoListino.toFixed(2)}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:left">${item.codice}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:left">${item.descrizione}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:center">${item.qty}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:center">${item.um}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:right">EUR ${item.prezzoListino.toFixed(2)}</td>
       </tr>`
-      )
-      .join("");
-
-    const totalePz = order.items.reduce((s, i) => s + i.qty, 0);
-
-    itemsSection = `
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="background:#f4f4f5">
-            <th style="padding:10px 12px;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Codice</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Descrizione</th>
-            <th style="padding:10px 12px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Qtà</th>
-            <th style="padding:10px 12px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">UM</th>
-            <th style="padding:10px 12px;text-align:right;font-weight:600;font-size:12px;text-transform:uppercase;color:#71717a">Prezzo</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsRows}
-        </tbody>
-        <tfoot>
-          <tr style="background:#f0f9ff">
-            <td colspan="2" style="padding:10px 12px;font-weight:700;font-size:14px">Totale</td>
-            <td style="padding:10px 12px;text-align:center;font-weight:700;font-size:14px">${totalePz} pz</td>
-            <td colspan="2"></td>
-          </tr>
-        </tfoot>
-      </table>
-    `;
-  }
+    )
+    .join("");
 
   return `
 <!DOCTYPE html>
 <html lang="it">
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-  <div style="max-width:640px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)">
-
-    <!-- Header -->
-    <div style="background:${headerConfig.bg};color:#fff;padding:24px 32px">
-      <h1 style="margin:0;font-size:20px">${headerConfig.emoji} ${headerConfig.label} #${order.id}</h1>
-      <p style="margin:6px 0 0;opacity:.85;font-size:14px">${formatDate(order.createdAt)}</p>
-    </div>
-
-    <!-- Info -->
-    <div style="padding:24px 32px">
-      <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-        <tr>
-          <td style="padding:6px 0;color:#71717a;width:140px;font-size:14px">Cliente</td>
-          <td style="padding:6px 0;font-weight:600;font-size:14px">${order.cliente}</td>
-        </tr>
-        <tr>
-          <td style="padding:6px 0;color:#71717a;font-size:14px">Magazzino</td>
-          <td style="padding:6px 0;font-weight:600;font-size:14px">${order.magazzino}</td>
-        </tr>
-        <tr>
-          <td style="padding:6px 0;color:#71717a;font-size:14px">Agente</td>
-          <td style="padding:6px 0;font-weight:600;font-size:14px">${order.agente}</td>
-        </tr>
-        ${order.luogoConsegna ? `<tr>
-          <td style="padding:6px 0;color:#71717a;font-size:14px">Luogo consegna</td>
-          <td style="padding:6px 0;font-size:14px">${order.luogoConsegna}</td>
-        </tr>` : ""}
-        ${order.dataConsegna ? `<tr>
-          <td style="padding:6px 0;color:#71717a;font-size:14px">Data consegna</td>
-          <td style="padding:6px 0;font-size:14px">${formatDate(order.dataConsegna)}</td>
-        </tr>` : ""}
-        ${order.note ? `<tr>
-          <td style="padding:6px 0;color:#71717a;font-size:14px;vertical-align:top">Note</td>
-          <td style="padding:6px 0;font-size:14px">${order.note}</td>
-        </tr>` : ""}
-      </table>
-
-      ${itemsSection}
-    </div>
-
-    <!-- Footer -->
-    <div style="background:#f4f4f5;padding:16px 32px;text-align:center;font-size:12px;color:#a1a1aa">
-      Email generata automaticamente da App Listino
-    </div>
-  </div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:12px;background:#ffffff;color:#000000;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.4;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:700px;margin:0 auto;border-collapse:collapse;">
+    <tr>
+      <td style="padding:8px 0 12px 0;font-size:20px;font-weight:bold;">${title}</td>
+    </tr>
+    <tr>
+      <td style="padding:0 0 10px 0;">Data ordine: ${formatDate(order.createdAt)}</td>
+    </tr>
+    <tr>
+      <td style="padding:0 0 14px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+          <tr><td style="padding:3px 0;"><strong>Cliente:</strong> ${order.cliente}</td></tr>
+          <tr><td style="padding:3px 0;"><strong>Magazzino:</strong> ${order.magazzino}</td></tr>
+          <tr><td style="padding:3px 0;"><strong>Agente:</strong> ${order.agente}</td></tr>
+          ${order.luogoConsegna ? `<tr><td style="padding:3px 0;"><strong>Luogo consegna:</strong> ${order.luogoConsegna}</td></tr>` : ""}
+          ${order.dataConsegna ? `<tr><td style="padding:3px 0;"><strong>Data consegna:</strong> ${formatDate(order.dataConsegna)}</td></tr>` : ""}
+          ${order.note ? `<tr><td style="padding:3px 0;"><strong>Note:</strong> ${order.note}</td></tr>` : ""}
+        </table>
+      </td>
+    </tr>
+    ${
+      mode === "cancelled"
+        ? `<tr><td style="padding:8px 0 16px 0;"><strong>Questo ordine e stato cancellato.</strong></td></tr>`
+        : `<tr>
+      <td style="padding:0 0 8px 0;">
+        <table role="table" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Codice</th>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Descrizione</th>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">Qta</th>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">UM</th>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:right;background:#f2f2f2;">Prezzo</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            <tr>
+              <td colspan="2" style="border:1px solid #cccccc;padding:6px;"><strong>Totale pezzi</strong></td>
+              <td style="border:1px solid #cccccc;padding:6px;text-align:center;"><strong>${totalQty}</strong></td>
+              <td colspan="2" style="border:1px solid #cccccc;padding:6px;"></td>
+            </tr>
+          </tbody>
+        </table>
+      </td>
+    </tr>`
+    }
+    <tr>
+      <td style="padding-top:12px;font-size:12px;color:#444444;">Email generata automaticamente da App Listino.</td>
+    </tr>
+  </table>
 </body>
 </html>`;
+}
+
+function buildOrderText(order: Order, mode: "new" | "updated" | "cancelled" = "new"): string {
+  const title =
+    mode === "updated"
+      ? `Ordine Modificato #${order.id}`
+      : mode === "cancelled"
+        ? `Ordine Cancellato #${order.id}`
+        : `Nuovo Ordine #${order.id}`;
+
+  const lines: string[] = [
+    title,
+    `Data ordine: ${formatDate(order.createdAt)}`,
+    `Cliente: ${order.cliente}`,
+    `Magazzino: ${order.magazzino}`,
+    `Agente: ${order.agente}`,
+  ];
+
+  if (order.luogoConsegna) lines.push(`Luogo consegna: ${order.luogoConsegna}`);
+  if (order.dataConsegna) lines.push(`Data consegna: ${formatDate(order.dataConsegna)}`);
+  if (order.note) lines.push(`Note: ${order.note}`);
+
+  if (mode === "cancelled") {
+    lines.push("", "Questo ordine e stato cancellato.");
+    return lines.join("\n");
+  }
+
+  lines.push("", "Righe ordine:");
+  for (const item of order.items) {
+    lines.push(`- ${item.codice} | ${item.descrizione} | Qta: ${item.qty} ${item.um} | EUR ${item.prezzoListino.toFixed(2)}`);
+  }
+  lines.push(`Totale pezzi: ${order.items.reduce((sum, item) => sum + item.qty, 0)}`);
+
+  return lines.join("\n");
 }
 
 export async function sendOrderEmail(order: Order, agenteEmail?: string): Promise<void> {
@@ -254,6 +176,7 @@ export async function sendOrderEmail(order: Order, agenteEmail?: string): Promis
     to: branch.to,
     cc: branch.cc || undefined,
     subject: `Nuovo Ordine #${order.id} — ${order.cliente} (${order.magazzino})`,
+    text: buildOrderText(order, "new"),
     html: buildOrderHtml(order, "new"),
   });
 }
@@ -271,6 +194,7 @@ export async function sendOrderUpdatedEmail(order: Order, oldItems: OrderHistory
     to: branch.to,
     cc: branch.cc || undefined,
     subject: `Ordine Modificato #${order.id} — Annulla e sostituisce — ${order.cliente} (${order.magazzino})`,
+    text: buildOrderText(order, "updated"),
     html: buildOrderHtml(order, "updated", oldItems),
   });
 }
@@ -288,6 +212,7 @@ export async function sendOrderCancelledEmail(order: Order, agenteEmail?: string
     to: branch.to,
     cc: branch.cc || undefined,
     subject: `Ordine Cancellato #${order.id} — ${order.cliente} (${order.magazzino})`,
+    text: buildOrderText(order, "cancelled"),
     html: buildOrderHtml(order, "cancelled"),
   });
 }
