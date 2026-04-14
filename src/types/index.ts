@@ -2,6 +2,7 @@ export interface Material {
   codice: string;
   descrizione: string;
   descrizioneAI?: string;
+  obsoleto?: boolean;
   categoria: string;
   raggr: string;
   um: string;

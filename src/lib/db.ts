@@ -24,8 +24,8 @@ function createDb() {
   `);
 
   // Migration: add email column if missing (existing DBs)
-  const cols = db.pragma("table_info(users)") as { name: string }[];
-  if (!cols.some((c) => c.name === "email")) {
+  const userCols = db.pragma("table_info(users)") as { name: string }[];
+  if (!userCols.some((c) => c.name === "email")) {
     db.exec("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''");
   }
 
@@ -57,9 +57,16 @@ function createDb() {
       prezzo_pubblico REAL NOT NULL DEFAULT 0,
       pz_confezione REAL NOT NULL DEFAULT 0,
       nota TEXT NOT NULL DEFAULT '',
+      obsoleto INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // Migration: add obsoleto column if missing (existing DBs)
+  const materialCols = db.pragma("table_info(materials)") as { name: string }[];
+  if (!materialCols.some((c) => c.name === "obsoleto")) {
+    db.exec("ALTER TABLE materials ADD COLUMN obsoleto INTEGER NOT NULL DEFAULT 0");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS orders (

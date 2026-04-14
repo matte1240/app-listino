@@ -17,7 +17,7 @@ export async function GET() {
     SELECT
       m.codice, m.descrizione, m.categoria, m.raggr, m.um,
       m.prezzo_listino, m.prezzo_riservato, m.prezzo_pubblico,
-      m.pz_confezione, m.nota,
+      m.pz_confezione, m.nota, m.obsoleto,
       e.descrizione_ai
     FROM materials m
     LEFT JOIN enriched_materials e ON e.codice = m.codice
@@ -25,7 +25,7 @@ export async function GET() {
   `).all() as {
     codice: string; descrizione: string; categoria: string; raggr: string; um: string;
     prezzo_listino: number; prezzo_riservato: number; prezzo_pubblico: number;
-    pz_confezione: number; nota: string; descrizione_ai: string | null;
+    pz_confezione: number; nota: string; obsoleto: number; descrizione_ai: string | null;
   }[];
 
   const materials = rows.map((r) => ({
@@ -40,6 +40,7 @@ export async function GET() {
     prezzoPublico: r.prezzo_pubblico,
     pzConfezione: r.pz_confezione,
     nota: r.nota,
+    obsoleto: Boolean(r.obsoleto),
   }));
 
   return NextResponse.json({ materials });
