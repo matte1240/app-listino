@@ -60,8 +60,6 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   // When editing and materials aren't loaded yet, show items from order directly
   const flaggedItems = materials.filter((m) => orderItems[m.codice]?.flagged);
 
-  // Items to display: prefer material-backed items, fall back to edit-only items
-  const displayItems = flaggedItems.length > 0 ? flaggedItems : [];
   const editItemsNotInMaterials = isEditing
     ? editingItems.filter((ei) => !materials.some((m) => m.codice === ei.codice))
     : [];
@@ -70,6 +68,7 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
     (sum, m) => sum + (orderItems[m.codice]?.qty ?? 0),
     0
   ) + editItemsNotInMaterials.reduce((sum, i) => sum + i.qty, 0);
+  const obsoleteFlaggedCount = flaggedItems.filter((m) => m.obsoleto).length;
 
   const hasItems = flaggedItems.length > 0 || editItemsNotInMaterials.length > 0;
   const canSend = orderInfo.cliente.trim() !== "" && hasItems && orderInfo.magazzino !== "";
@@ -245,6 +244,14 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
               )}
             </h3>
 
+            {obsoleteFlaggedCount > 0 && (
+              <div className="mb-3 rounded-xl border border-border bg-muted/40 px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  Attenzione: {obsoleteFlaggedCount} articolo/i selezionato/i e segnato/i come obsoleto.
+                </p>
+              </div>
+            )}
+
             {!hasItems ? (
               <div className="py-8 text-center rounded-2xl border border-dashed border-border bg-muted/30">
                 <ShoppingCart className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
@@ -264,8 +271,19 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
                       className={`flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors ${!isLast ? "border-b border-border/60" : ""}`}
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold font-mono text-foreground truncate">{m.codice}</p>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">{m.descrizione}</p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className={`text-sm font-bold font-mono truncate ${m.obsoleto ? "text-muted-foreground" : "text-foreground"}`}>
+                            {m.codice}
+                          </p>
+                          {m.obsoleto && (
+                            <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 uppercase tracking-wide border-muted-foreground/30 text-muted-foreground">
+                              Obsoleto
+                            </Badge>
+                          )}
+                        </div>
+                        <p className={`text-xs truncate mt-0.5 ${m.obsoleto ? "text-muted-foreground/90" : "text-muted-foreground"}`}>
+                          {m.descrizione}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {qty > 0 ? (

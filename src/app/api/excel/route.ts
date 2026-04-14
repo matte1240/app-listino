@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { verifyToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth";
-import { parseExcel } from "@/lib/excel";
+import { parseExcel, ExcelColumnMappingError } from "@/lib/excel";
 import { getDb } from "@/lib/db";
 
 const EXCEL_PATH = path.join(process.cwd(), "data", "listino.xlsx");
@@ -42,11 +42,29 @@ export async function POST(req: NextRequest) {
   fs.writeFileSync(EXCEL_PATH, buffer);
 
   // Parse and upsert materials into DB
-  const materials = parseExcel(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+  let materials: ReturnType<typeof parseExcel>;
+  try {
+    materials = parseExcel(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+  } catch (error) {
+    if (error instanceof ExcelColumnMappingError) {
+      return NextResponse.json(
+        {
+          error: "Colonne obbligatorie mancanti nel file Excel.",
+          missingColumns: error.details.missingColumns,
+          foundHeaders: error.details.foundHeaders,
+        },
+        { status: 400 }
+      );
+    }
+
+    console.error("[excel] Errore parsing file:", error);
+    return NextResponse.json({ error: "Formato file non valido" }, { status: 400 });
+  }
+
   const db = getDb();
   const upsert = db.prepare(`
-    INSERT INTO materials (codice, descrizione, categoria, raggr, um, prezzo_listino, prezzo_riservato, prezzo_pubblico, pz_confezione, nota, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO materials (codice, descrizione, categoria, raggr, um, prezzo_listino, prezzo_riservato, prezzo_pubblico, pz_confezione, nota, obsoleto, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(codice) DO UPDATE SET
       descrizione = excluded.descrizione,
       categoria = excluded.categoria,
@@ -57,12 +75,13 @@ export async function POST(req: NextRequest) {
       prezzo_pubblico = excluded.prezzo_pubblico,
       pz_confezione = excluded.pz_confezione,
       nota = excluded.nota,
+      obsoleto = excluded.obsoleto,
       updated_at = excluded.updated_at
   `);
   const upsertAll = db.transaction((rows: typeof materials) => {
     for (const m of rows) {
       upsert.run(m.codice, m.descrizione, m.categoria, m.raggr, m.um,
-        m.prezzoListino, m.prezzoRiservato, m.prezzoPublico, m.pzConfezione, m.nota);
+        m.prezzoListino, m.prezzoRiservato, m.prezzoPublico, m.pzConfezione, m.nota, m.obsoleto ? 1 : 0);
     }
   });
   upsertAll(materials);

@@ -6,19 +6,39 @@ import { useOrderStore } from "@/lib/useOrderStore";
 import MaterialCard from "@/components/MaterialCard";
 import type { Material } from "@/types";
 
+function materialSearchText(m: Material): string {
+  return `${m.codice} ${m.descrizione} ${m.descrizioneAI ?? ""} ${m.categoria} ${m.raggr} ${m.um}`.toLowerCase();
+}
+
 export default function MaterialList() {
   const materials = useOrderStore((s) => s.materials);
   const searchQuery = useOrderStore((s) => s.searchQuery);
+  const showObsolete = useOrderStore((s) => s.showObsolete);
 
   const filtered = useMemo(() => {
+    const source = showObsolete ? materials : materials.filter((m) => !m.obsoleto);
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return materials;
+    if (!q) return source;
     const tokens = q.split(/\s+/).filter(Boolean);
-    return materials.filter((m) => {
-      const haystack = `${m.codice} ${m.descrizione} ${m.descrizioneAI ?? ""} ${m.categoria} ${m.raggr} ${m.um}`.toLowerCase();
+    return source.filter((m) => {
+      const haystack = materialSearchText(m);
       return tokens.every((t) => haystack.includes(t));
     });
-  }, [materials, searchQuery]);
+  }, [materials, searchQuery, showObsolete]);
+
+  const hiddenObsoleteCount = useMemo(() => {
+    if (showObsolete) return 0;
+
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return materials.filter((m) => m.obsoleto).length;
+
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return materials.filter((m) => {
+      if (!m.obsoleto) return false;
+      const haystack = materialSearchText(m);
+      return tokens.every((t) => haystack.includes(t));
+    }).length;
+  }, [materials, searchQuery, showObsolete]);
 
   // Group by category (maintain original Excel order of categories)
   const grouped = useMemo(() => {
@@ -63,9 +83,13 @@ export default function MaterialList() {
     );
   }
 
-  const totalLabel = searchQuery
+  let totalLabel = searchQuery
     ? `${filtered.length} articoli trovati per "${searchQuery}"`
     : `${filtered.length} articoli nel listino`;
+
+  if (!showObsolete && hiddenObsoleteCount > 0) {
+    totalLabel = `${totalLabel} (${hiddenObsoleteCount} obsoleti nascosti)`;
+  }
 
   return (
     <div className="flex flex-col gap-1">

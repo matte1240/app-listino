@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function MaterialCard({ material }: Props) {
-  const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr } = material;
+  const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const setQty = useOrderStore((s) => s.setQty);
   const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
@@ -46,7 +46,8 @@ export default function MaterialCard({ material }: Props) {
         "rounded-2xl border transition-all duration-200 select-none overflow-hidden flex",
         isFlagged
           ? "border-primary/35 bg-card shadow-md shadow-primary/10"
-          : "border-border bg-card shadow-sm hover:shadow-md hover:border-border/80"
+          : "border-border bg-card shadow-sm hover:shadow-md hover:border-border/80",
+        obsoleto && (isFlagged ? "bg-muted/35" : "bg-muted/40 border-border/70")
       )}
     >
       {/* Colored left accent strip when flagged */}
@@ -77,13 +78,27 @@ export default function MaterialCard({ material }: Props) {
           >
             {/* Codice + badges */}
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="font-bold text-sm tracking-wide text-foreground font-mono leading-tight">
+              <span className={cn(
+                "font-bold text-sm tracking-wide font-mono leading-tight",
+                obsoleto ? "text-muted-foreground" : "text-foreground"
+              )}>
                 {codice}
               </span>
+              {obsoleto && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-2 py-0 h-5 shrink-0 uppercase tracking-wide border-muted-foreground/30 text-muted-foreground bg-background/70"
+                >
+                  Obsoleto
+                </Badge>
+              )}
               {um && (
                 <Badge
                   variant="outline"
-                  className="text-xs px-2 py-0 h-5 shrink-0 font-medium"
+                  className={cn(
+                    "text-xs px-2 py-0 h-5 shrink-0 font-medium",
+                    obsoleto && "border-muted-foreground/30 text-muted-foreground"
+                  )}
                 >
                   U.M.: {um}
                 </Badge>
@@ -91,7 +106,10 @@ export default function MaterialCard({ material }: Props) {
             </div>
 
             {/* Descrizione */}
-            <p className="text-sm text-foreground/90 leading-snug break-words mt-0.5">
+            <p className={cn(
+              "text-sm leading-snug break-words mt-0.5",
+              obsoleto ? "text-muted-foreground" : "text-foreground/90"
+            )}>
               {isAdmin && showOriginalDesc ? descrizione : (descrizioneAI || descrizione)}
             </p>
             {isAdmin && showOriginalDesc && descrizioneAI && (
@@ -102,12 +120,21 @@ export default function MaterialCard({ material }: Props) {
 
             {/* Prezzi */}
             <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1">
+              <div className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1",
+                obsoleto ? "bg-background/70" : "bg-muted"
+              )}>
                 <span className="text-xs text-muted-foreground font-medium">Listino</span>
-                <span className="text-xs font-bold text-foreground">€{prezzoListino.toFixed(3)}</span>
+                <span className={cn(
+                  "text-xs font-bold",
+                  obsoleto ? "text-muted-foreground" : "text-foreground"
+                )}>€{prezzoListino.toFixed(3)}</span>
               </div>
               {raggr && (
-                <span className="text-xs text-muted-foreground/70 font-medium">{raggr}</span>
+                <span className={cn(
+                  "text-xs font-medium",
+                  obsoleto ? "text-muted-foreground/85" : "text-muted-foreground/70"
+                )}>{raggr}</span>
               )}
             </div>
           </label>

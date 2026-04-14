@@ -7,6 +7,7 @@ interface OrderStore {
   orderItems: OrderMap;
   orderInfo: OrderInfo;
   searchQuery: string;
+  showObsolete: boolean;
   drawerOpen: boolean;
   editingId: number | null;
   editingItems: OrderHistoryItem[];
@@ -17,6 +18,7 @@ interface OrderStore {
   setQty: (codice: string, qty: number) => void;
   resetOrder: () => void;
   setSearchQuery: (q: string) => void;
+  setShowObsolete: (value: boolean) => void;
   setOrderInfo: (info: Partial<OrderInfo>) => void;
   setEditing: (id: number | null, items?: OrderHistoryItem[]) => void;
   toggleShowOriginalDesc: () => void;
@@ -37,6 +39,7 @@ export const useOrderStore = create<OrderStore>()(
       orderItems: {},
       orderInfo: defaultOrderInfo,
       searchQuery: "",
+      showObsolete: true,
       drawerOpen: false,
       editingId: null,
       editingItems: [],
@@ -77,6 +80,8 @@ export const useOrderStore = create<OrderStore>()(
       resetOrder: () => set({ orderItems: {}, orderInfo: defaultOrderInfo, editingId: null, editingItems: [] }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
+
+      setShowObsolete: (showObsolete) => set({ showObsolete }),
 
       setOrderInfo: (info) =>
         set((state) => ({ orderInfo: { ...state.orderInfo, ...info } })),
