@@ -54,7 +54,7 @@ const COLUMN_ALIASES: Record<MaterialField, string[]> = {
   prezzoPublico: ["Prezzo Pubblico 52", "Prezzo Pubblico", "Pubblico"],
   pzConfezione: ["PZ x confezione", "PZ confezione", "Pezzi confezione", "Pz x conf"],
   nota: ["Note", "Nota"],
-  obsoleto: ["OBSOLETO", "Obsoleto", "Stato", "Status", "Disponibilita"],
+  obsoleto: ["OBSOLETO", "Obsoleto", "Stato", "Status", "Disponibilita", "Cartongesso"],
 };
 
 const REQUIRED_FIELDS: MaterialField[] = ["codice", "descrizione", "prezzoListino"];
