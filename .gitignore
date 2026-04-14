@@ -42,3 +42,6 @@ yarn-error.log*
 # SQLite data
 /data
 next-env.d.ts
+
+# Uploaded Excel files
+/public/PER MATTEO.xlsx

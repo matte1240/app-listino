@@ -32,7 +32,7 @@ export async function GET() {
     FROM materials m
     LEFT JOIN enriched_materials e ON e.codice = m.codice
     ORDER BY m.codice
-  }).all() as {
+  `).all() as {
     codice: string; descrizione: string; categoria: string; raggr: string; um: string;
     prezzo_listino: number; prezzo_riservato: number; prezzo_pubblico: number;
     pz_confezione: number; nota: string; obsoleto: number | string; descrizione_ai: string | null;
