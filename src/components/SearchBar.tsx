@@ -38,15 +38,21 @@ export default function SearchBar() {
         )}
       </div>
 
-      <label htmlFor="show-obsolete" className="inline-flex items-center gap-2 pl-1 text-xs text-muted-foreground select-none">
+      <div className="inline-flex items-center gap-2 pl-1 text-xs text-muted-foreground select-none">
         <Checkbox
           id="show-obsolete"
           checked={showObsolete}
           onCheckedChange={(checked) => setShowObsolete(checked === true)}
           className="h-4 w-4"
         />
-        <span>Mostra obsoleti</span>
-      </label>
+        <button
+          type="button"
+          onClick={() => setShowObsolete(!showObsolete)}
+          className="hover:text-foreground transition-colors"
+        >
+          Mostra obsoleti
+        </button>
+      </div>
     </div>
   );
 }

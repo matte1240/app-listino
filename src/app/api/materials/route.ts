@@ -4,6 +4,16 @@ import { getDb } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth";
 
+function toObsoleteFlag(value: unknown): boolean {
+  if (typeof value === "number") return value === 1;
+
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+  return ["1", "true", "si", "yes", "x", "obsoleto", "obsolete"].includes(normalized);
+}
+
 export async function GET() {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
@@ -22,10 +32,10 @@ export async function GET() {
     FROM materials m
     LEFT JOIN enriched_materials e ON e.codice = m.codice
     ORDER BY m.codice
-  `).all() as {
+  }).all() as {
     codice: string; descrizione: string; categoria: string; raggr: string; um: string;
     prezzo_listino: number; prezzo_riservato: number; prezzo_pubblico: number;
-    pz_confezione: number; nota: string; obsoleto: number; descrizione_ai: string | null;
+    pz_confezione: number; nota: string; obsoleto: number | string; descrizione_ai: string | null;
   }[];
 
   const materials = rows.map((r) => ({
@@ -40,7 +50,7 @@ export async function GET() {
     prezzoPublico: r.prezzo_pubblico,
     pzConfezione: r.pz_confezione,
     nota: r.nota,
-    obsoleto: Boolean(r.obsoleto),
+    obsoleto: toObsoleteFlag(r.obsoleto),
   }));
 
   return NextResponse.json({ materials });

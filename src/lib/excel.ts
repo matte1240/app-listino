@@ -98,11 +98,16 @@ function parseObsolete(value: unknown): boolean {
   const normalized = normalizeHeader(String(value ?? ""));
   if (!normalized) return false;
 
-  return ["obsoleto", "obsolete", "si", "yes", "true", "1", "x", "discontinued"].includes(normalized);
+  if (normalized.includes("obsoleto") || normalized.includes("obsolete") || normalized.includes("discontinued")) {
+    return true;
+  }
+
+  return ["si", "yes", "true", "1", "x"].includes(normalized);
 }
 
 function resolveColumnIndexes(headers: string[]): Partial<Record<MaterialField, number>> {
   const indexByNormalized = new Map<string, number>();
+  const normalizedHeaders = headers.map((header) => normalizeHeader(header));
 
   headers.forEach((header, index) => {
     const normalized = normalizeHeader(header);
@@ -119,6 +124,16 @@ function resolveColumnIndexes(headers: string[]): Partial<Record<MaterialField, 
         indexes[field] = idx;
         break;
       }
+    }
+  }
+
+  // Fallback for custom headings like "Stato articolo obsoleto"
+  if (indexes.obsoleto === undefined) {
+    const fallbackIdx = normalizedHeaders.findIndex(
+      (header) => header.includes("obsoleto") || header.includes("obsolete")
+    );
+    if (fallbackIdx !== -1) {
+      indexes.obsoleto = fallbackIdx;
     }
   }
 
