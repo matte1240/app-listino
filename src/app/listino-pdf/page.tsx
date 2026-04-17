@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import type { Material } from "@/types";
 
+const DISCOUNT_8_MULTIPLIER = 0.92;
+const DISCOUNT_15_MULTIPLIER = 0.85;
+
 function formatPrice(value: number): string {
   return value.toLocaleString("it-IT", {
     minimumFractionDigits: 2,
@@ -133,8 +136,8 @@ export default function ListinoPdfPage() {
                     <tbody>
                       {items.map((item) => {
                         const prezzo = item.prezzoListino || 0;
-                        const sconto8 = prezzo * 0.92;
-                        const sconto15 = prezzo * 0.85;
+                        const sconto8 = prezzo * DISCOUNT_8_MULTIPLIER;
+                        const sconto15 = prezzo * DISCOUNT_15_MULTIPLIER;
                         return (
                           <tr key={item.codice}>
                             <td className={`${bodyCellClass} font-semibold`}>{item.codice}</td>
