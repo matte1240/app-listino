@@ -124,3 +124,22 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  .listino-sheet {
+    margin: 0 !important;
+    max-width: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+}

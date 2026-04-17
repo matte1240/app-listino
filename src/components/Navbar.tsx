@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutList, ClipboardList, Users, Sparkles, Menu, X, LogOut, Shield, ShoppingCart, FileText, Bot, Mail } from "lucide-react";
+import { LayoutList, ClipboardList, Users, Sparkles, Menu, X, LogOut, Shield, ShoppingCart, FileText, Bot, Mail, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -13,6 +13,7 @@ import UploadExcel from "@/components/UploadExcel";
 
 const navItems = [
   { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
+  { href: "/listino-pdf", label: "Listino PDF", icon: FileSpreadsheet, adminOnly: false },
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
   { href: "/admin/users", label: "Utenti", icon: Users, adminOnly: true },
   { href: "/admin/enrich", label: "AI", icon: Sparkles, adminOnly: true },
