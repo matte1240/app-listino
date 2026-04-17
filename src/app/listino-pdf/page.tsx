@@ -73,25 +73,6 @@ export default function ListinoPdfPage() {
 
   return (
     <div className="listino-pdf-page min-h-dvh bg-background">
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 landscape;
-            margin: 8mm;
-          }
-          nav,
-          .no-print {
-            display: none !important;
-          }
-          .listino-sheet {
-            margin: 0 !important;
-            max-width: none !important;
-            box-shadow: none !important;
-            border: 0 !important;
-          }
-        }
-      `}</style>
-
       <main className="max-w-6xl mx-auto px-4 py-5 md:py-8">
         <div className="no-print mb-4 flex items-center justify-between gap-3">
           <div>
@@ -141,7 +122,9 @@ export default function ListinoPdfPage() {
                         return (
                           <tr key={item.codice}>
                             <td className={`${bodyCellClass} font-semibold`}>{item.codice}</td>
-                            <td className={bodyCellClass}>{item.descrizioneAI || item.descrizione}</td>
+                            <td className={bodyCellClass} title={item.descrizioneAI || item.descrizione}>
+                              {item.descrizioneAI || item.descrizione}
+                            </td>
                             <td className={`${bodyCellClass} text-right font-semibold`}>{formatPrice(prezzo)}</td>
                             <td className={`${bodyCellClass} text-right text-red-700 font-semibold`}>{formatPrice(sconto8)}</td>
                             <td className={`${bodyCellClass} text-right text-red-700 font-semibold`}>{formatPrice(sconto15)}</td>
