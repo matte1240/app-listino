@@ -43,6 +43,9 @@ export default function ListinoPdfPage() {
     return Array.from(map.entries());
   }, [materials]);
 
+  const headerCellClass = "border border-black px-2 py-1";
+  const bodyCellClass = "border border-black px-2 py-1";
+
   if (authLoading || loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
@@ -120,11 +123,11 @@ export default function ListinoPdfPage() {
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-100">
-                        <th className="border border-black px-2 py-1 text-left w-[14%]">codice articolo</th>
-                        <th className="border border-black px-2 py-1 text-left">descrizione articolo</th>
-                        <th className="border border-black px-2 py-1 text-right w-[12%]">prezzo listino</th>
-                        <th className="border border-black px-2 py-1 text-right w-[10%] text-red-700">sconto 8%</th>
-                        <th className="border border-black px-2 py-1 text-right w-[10%] text-red-700">sconto 15%</th>
+                        <th className={`${headerCellClass} text-left w-[14%]`}>codice articolo</th>
+                        <th className={`${headerCellClass} text-left`}>descrizione articolo</th>
+                        <th className={`${headerCellClass} text-right w-[12%]`}>prezzo listino</th>
+                        <th className={`${headerCellClass} text-right w-[10%] text-red-700`}>sconto 8%</th>
+                        <th className={`${headerCellClass} text-right w-[10%] text-red-700`}>sconto 15%</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -134,11 +137,11 @@ export default function ListinoPdfPage() {
                         const sconto15 = prezzo * 0.85;
                         return (
                           <tr key={item.codice}>
-                            <td className="border border-black px-2 py-1 font-semibold">{item.codice}</td>
-                            <td className="border border-black px-2 py-1">{item.descrizioneAI || item.descrizione}</td>
-                            <td className="border border-black px-2 py-1 text-right font-semibold">{formatPrice(prezzo)}</td>
-                            <td className="border border-black px-2 py-1 text-right text-red-700 font-semibold">{formatPrice(sconto8)}</td>
-                            <td className="border border-black px-2 py-1 text-right text-red-700 font-semibold">{formatPrice(sconto15)}</td>
+                            <td className={`${bodyCellClass} font-semibold`}>{item.codice}</td>
+                            <td className={bodyCellClass}>{item.descrizioneAI || item.descrizione}</td>
+                            <td className={`${bodyCellClass} text-right font-semibold`}>{formatPrice(prezzo)}</td>
+                            <td className={`${bodyCellClass} text-right text-red-700 font-semibold`}>{formatPrice(sconto8)}</td>
+                            <td className={`${bodyCellClass} text-right text-red-700 font-semibold`}>{formatPrice(sconto15)}</td>
                           </tr>
                         );
                       })}

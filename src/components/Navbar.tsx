@@ -13,7 +13,7 @@ import UploadExcel from "@/components/UploadExcel";
 
 const navItems = [
   { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
-  { href: "/listino-pdf", label: "PDF", icon: FileSpreadsheet, adminOnly: false },
+  { href: "/listino-pdf", label: "Listino PDF", icon: FileSpreadsheet, adminOnly: false },
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
   { href: "/admin/users", label: "Utenti", icon: Users, adminOnly: true },
   { href: "/admin/enrich", label: "AI", icon: Sparkles, adminOnly: true },
