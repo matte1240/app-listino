@@ -126,11 +126,11 @@ export default function ListinoPdfPage() {
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-100">
-                        <th className={`${headerCellClass} text-left w-[14%]`}>codice articolo</th>
-                        <th className={`${headerCellClass} text-left`}>descrizione articolo</th>
-                        <th className={`${headerCellClass} text-right w-[12%]`}>prezzo listino</th>
-                        <th className={`${headerCellClass} text-right w-[10%] text-red-700`}>sconto 8%</th>
-                        <th className={`${headerCellClass} text-right w-[10%] text-red-700`}>sconto 15%</th>
+                        <th className={`${headerCellClass} text-left w-[14%]`}>Codice articolo</th>
+                        <th className={`${headerCellClass} text-left`}>Descrizione articolo</th>
+                        <th className={`${headerCellClass} text-right w-[12%]`}>Prezzo listino</th>
+                        <th className={`${headerCellClass} text-right w-[10%] text-red-700`}>Sconto 8%</th>
+                        <th className={`${headerCellClass} text-right w-[10%] text-red-700`}>Sconto 15%</th>
                       </tr>
                     </thead>
                     <tbody>
