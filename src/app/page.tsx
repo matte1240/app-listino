@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useAuth } from "@/lib/auth-context";
-import { MAGAZZINI, type Anagrafica, type Order } from "@/types";
+import { MAGAZZINI, type Anagrafica, type Order, type Material } from "@/types";
 import {
   Search,
   Home as HomeIcon,
@@ -266,6 +266,87 @@ function ClientPickerScreen({
 }
 
 // ─────────────────────────────────────────────────
+// PRODUCT ROW
+// ─────────────────────────────────────────────────
+function ProductRow({
+  product,
+  qty,
+  setQty,
+  showOriginalDesc,
+}: {
+  product: Material;
+  qty: number;
+  setQty: (code: string, qty: number) => void;
+  showOriginalDesc: boolean;
+}) {
+  const [focused, setFocused] = useState(false);
+  const showStepper = qty > 0 || focused;
+
+  return (
+    <div
+      className={`flex items-center gap-2.5 px-4 py-3 border-b border-ivi-border transition-colors ${
+        qty > 0 ? "bg-[#EEF3FB]" : "bg-white"
+      }`}
+    >
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="text-[10px] font-bold text-ivi-muted tracking-[0.05em]">
+            {product.codice}
+          </span>
+          {qty > 0 && (
+            <span className="w-1.5 h-1.5 rounded-full bg-ivi-navy inline-block" />
+          )}
+        </div>
+        <div className="text-[13px] font-semibold text-ivi-text truncate">
+          {showOriginalDesc ? product.descrizione : (product.descrizioneAI || product.descrizione)}
+        </div>
+        <div className="text-[11px] text-ivi-muted mt-0.5">
+          €{product.prezzoListino.toFixed(3)} / {product.um}
+        </div>
+      </div>
+
+      {/* Qty stepper */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {showStepper ? (
+          <>
+            <button
+              onClick={() => setQty(product.codice, qty - 1)}
+              className="w-7 h-7 rounded-lg border border-ivi-border bg-ivi-bg flex items-center justify-center cursor-pointer"
+            >
+              <Minus className="h-3 w-3 text-ivi-navy" />
+            </button>
+            <input
+              type="number"
+              value={qty || ""}
+              onChange={(e) => setQty(product.codice, parseInt(e.target.value) || 0)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              className="w-11 text-center font-bold text-ivi-navy border-[1.5px] border-ivi-navy rounded-lg py-1 bg-white outline-none"
+              style={{ fontSize: 15, WebkitAppearance: "none", MozAppearance: "textfield" }}
+            />
+            <button
+              onClick={() => setQty(product.codice, qty + 1)}
+              className="w-7 h-7 rounded-lg border border-ivi-navy bg-ivi-navy flex items-center justify-center cursor-pointer"
+            >
+              <Plus className="h-3 w-3 text-white" />
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => { setFocused(true); setQty(product.codice, 1); }}
+            className="h-8 px-3 rounded-lg border border-ivi-border bg-ivi-bg text-xs font-semibold text-ivi-muted cursor-pointer flex items-center gap-1"
+          >
+            <Plus className="h-3 w-3" />
+            Aggiungi
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
 // CATALOG SCREEN
 // ─────────────────────────────────────────────────
 function CatalogScreen({
@@ -391,77 +472,15 @@ function CatalogScreen({
             Nessun prodotto trovato
           </div>
         ) : (
-          filtered.map((product) => {
-            const item = orderItems[product.codice];
-            const qty = item?.qty ?? 0;
-            return (
-              <div
-                key={product.codice}
-                className={`flex items-center gap-2.5 px-4 py-3 border-b border-ivi-border transition-colors ${
-                  qty > 0 ? "bg-[#EEF3FB]" : "bg-white"
-                }`}
-              >
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="text-[10px] font-bold text-ivi-muted tracking-[0.05em]">
-                      {product.codice}
-                    </span>
-                    {qty > 0 && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-ivi-navy inline-block" />
-                    )}
-                  </div>
-                  <div className="text-[13px] font-semibold text-ivi-text truncate">
-                    {showOriginalDesc ? product.descrizione : (product.descrizioneAI || product.descrizione)}
-                  </div>
-                  <div className="text-[11px] text-ivi-muted mt-0.5">
-                    €{product.prezzoListino.toFixed(3)} / {product.um}
-                  </div>
-                </div>
-
-                {/* Qty stepper */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {qty > 0 ? (
-                    <>
-                      <button
-                        onClick={() => setQty(product.codice, qty - 1)}
-                        className="w-7 h-7 rounded-lg border border-ivi-border bg-ivi-bg flex items-center justify-center cursor-pointer"
-                      >
-                        <Minus className="h-3 w-3 text-ivi-navy" />
-                      </button>
-                      <input
-                        type="number"
-                        value={qty}
-                        onChange={(e) =>
-                          setQty(product.codice, parseInt(e.target.value) || 0)
-                        }
-                        className="w-11 text-center font-bold text-ivi-navy border-[1.5px] border-ivi-navy rounded-lg py-1 bg-white outline-none"
-                        style={{
-                          fontSize: 15,
-                          WebkitAppearance: "none",
-                          MozAppearance: "textfield",
-                        }}
-                      />
-                      <button
-                        onClick={() => setQty(product.codice, qty + 1)}
-                        className="w-7 h-7 rounded-lg border border-ivi-navy bg-ivi-navy flex items-center justify-center cursor-pointer"
-                      >
-                        <Plus className="h-3 w-3 text-white" />
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => setQty(product.codice, 1)}
-                      className="h-8 px-3 rounded-lg border border-ivi-border bg-ivi-bg text-xs font-semibold text-ivi-muted cursor-pointer flex items-center gap-1"
-                    >
-                      <Plus className="h-3 w-3" />
-                      Aggiungi
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })
+          filtered.map((product) => (
+            <ProductRow
+              key={product.codice}
+              product={product}
+              qty={orderItems[product.codice]?.qty ?? 0}
+              setQty={setQty}
+              showOriginalDesc={showOriginalDesc}
+            />
+          ))
         )}
       </div>
     </div>
@@ -1163,8 +1182,7 @@ export default function Home() {
   const effectiveScreen: Screen =
     !hasClient && screen !== "history" && screen !== "admin" ? "clientPicker" : screen;
 
-  const showBottomNav =
-    effectiveScreen !== "clientPicker" && effectiveScreen !== "confirm";
+  const showBottomNav = effectiveScreen !== "confirm";
 
   const renderScreen = () => {
     switch (effectiveScreen) {
