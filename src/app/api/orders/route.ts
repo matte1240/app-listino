@@ -47,7 +47,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 
-  if (!Number.isInteger(clienteId) || clienteId <= 0) {
+  const normalizedClienteId = Number(clienteId);
+  if (!Number.isInteger(normalizedClienteId) || normalizedClienteId <= 0) {
     return NextResponse.json({ error: "Seleziona un cliente dalle anagrafiche" }, { status: 400 });
   }
 
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   const selectedCustomer = db
     .prepare("SELECT id, ragione_sociale FROM anagrafiche WHERE id = ?")
-    .get(clienteId) as { id: number; ragione_sociale: string } | undefined;
+    .get(normalizedClienteId) as { id: number; ragione_sociale: string } | undefined;
 
   if (!selectedCustomer) {
     return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
