@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo } from "react";
+import Link from "next/link";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useAuth } from "@/lib/auth-context";
 import { MAGAZZINI, type Anagrafica, type Order } from "@/types";
@@ -20,11 +21,16 @@ import {
   ChevronDown,
   PackageSearch,
   Loader2,
+  Shield,
+  Sparkles,
+  Mail,
+  FileSpreadsheet,
+  Bot,
 } from "lucide-react";
 import UploadExcel from "@/components/UploadExcel";
 import UploadAnagrafiche from "@/components/UploadAnagrafiche";
 
-type Screen = "clientPicker" | "catalog" | "order" | "confirm" | "history";
+type Screen = "clientPicker" | "catalog" | "order" | "confirm" | "history" | "admin";
 
 // ─────────────────────────────────────────────────
 // CLIENT BANNER
@@ -56,17 +62,20 @@ function ClientBanner({ onChangeClient }: { onChangeClient: () => void }) {
 function BottomNav({
   screen,
   setScreen,
+  isAdmin,
 }: {
   screen: Screen;
   setScreen: (s: Screen) => void;
+  isAdmin: boolean;
 }) {
   const orderItems = useOrderStore((s) => s.orderItems);
   const lineCount = Object.values(orderItems).filter((i) => i.flagged && i.qty > 0).length;
 
-  const tabs: { id: Screen; label: string; icon: React.FC<{ className?: string }> ; badge?: number }[] = [
+  const tabs: { id: Screen; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: "catalog", label: "Listino", icon: HomeIcon },
     { id: "order", label: "Ordine", icon: FileText, badge: lineCount },
     { id: "history", label: "Storico", icon: Clock },
+    ...(isAdmin ? [{ id: "admin" as Screen, label: "Admin", icon: Shield }] : []),
   ];
 
   return (
@@ -268,6 +277,7 @@ function CatalogScreen({
   const orderItems = useOrderStore((s) => s.orderItems);
   const setQty = useOrderStore((s) => s.setQty);
   const setMaterials = useOrderStore((s) => s.setMaterials);
+  const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
@@ -402,7 +412,7 @@ function CatalogScreen({
                     )}
                   </div>
                   <div className="text-[13px] font-semibold text-ivi-text truncate">
-                    {product.descrizioneAI || product.descrizione}
+                    {showOriginalDesc ? product.descrizione : (product.descrizioneAI || product.descrizione)}
                   </div>
                   <div className="text-[11px] text-ivi-muted mt-0.5">
                     €{product.prezzoListino.toFixed(3)} / {product.um}
@@ -971,6 +981,108 @@ function HistoryScreen() {
 }
 
 // ─────────────────────────────────────────────────
+// ADMIN SCREEN
+// ─────────────────────────────────────────────────
+function AdminScreen() {
+  const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
+  const toggleShowOriginalDesc = useOrderStore((s) => s.toggleShowOriginalDesc);
+
+  const adminLinks = [
+    { href: "/admin/users", label: "Utenti", sub: "Gestione accessi e ruoli", icon: Users },
+    { href: "/admin/enrich", label: "Arricchimento AI", sub: "Descrizioni prodotti AI", icon: Sparkles },
+    { href: "/admin/emails", label: "Email", sub: "Impostazioni notifiche", icon: Mail },
+    { href: "/listino-pdf", label: "Listino PDF", sub: "Visualizza PDF listino", icon: FileSpreadsheet },
+  ];
+
+  return (
+    <div className="h-full flex flex-col bg-ivi-bg">
+      <div className="bg-ivi-navy px-4 pt-5 pb-4 shrink-0">
+        <div className="text-lg font-bold text-white">Pannello Admin</div>
+        <div className="text-xs text-white/50 mt-0.5">Gestione e configurazione</div>
+      </div>
+
+      <div className="flex-1 overflow-auto p-4 pb-24 flex flex-col gap-4">
+        {/* Upload section */}
+        <div>
+          <div className="text-[11px] font-bold text-ivi-muted uppercase tracking-wider mb-2 px-1">
+            Importazione dati
+          </div>
+          <div className="bg-white rounded-xl border border-ivi-border overflow-hidden divide-y divide-ivi-border">
+            <div className="p-4 flex flex-col gap-1.5">
+              <div className="text-xs text-ivi-muted font-medium">Listino prezzi Excel</div>
+              <UploadExcel />
+            </div>
+            <div className="p-4 flex flex-col gap-1.5">
+              <div className="text-xs text-ivi-muted font-medium">Anagrafiche clienti</div>
+              <UploadAnagrafiche />
+            </div>
+          </div>
+        </div>
+
+        {/* Admin navigation */}
+        <div>
+          <div className="text-[11px] font-bold text-ivi-muted uppercase tracking-wider mb-2 px-1">
+            Navigazione
+          </div>
+          <div className="bg-white rounded-xl border border-ivi-border overflow-hidden divide-y divide-ivi-border">
+            {adminLinks.map(({ href, label, sub, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-ivi-bg transition-colors"
+              >
+                <div className="w-9 h-9 rounded-[9px] bg-ivi-navy/8 flex items-center justify-center shrink-0">
+                  <Icon className="h-4 w-4 text-ivi-navy" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-ivi-text">{label}</div>
+                  <div className="text-xs text-ivi-muted">{sub}</div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-ivi-muted shrink-0" />
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Preferences */}
+        <div>
+          <div className="text-[11px] font-bold text-ivi-muted uppercase tracking-wider mb-2 px-1">
+            Preferenze
+          </div>
+          <div className="bg-white rounded-xl border border-ivi-border overflow-hidden">
+            <button
+              onClick={toggleShowOriginalDesc}
+              className="w-full flex items-center gap-3 px-4 py-3.5 cursor-pointer text-left"
+            >
+              <div className="w-9 h-9 rounded-[9px] bg-ivi-navy/8 flex items-center justify-center shrink-0">
+                <Bot className="h-4 w-4 text-ivi-navy" />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-ivi-text">Descrizioni prodotti</div>
+                <div className="text-xs text-ivi-muted">
+                  {showOriginalDesc ? "Mostrando descrizioni originali" : "Mostrando descrizioni AI"}
+                </div>
+              </div>
+              <div
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  !showOriginalDesc ? "bg-ivi-navy" : "bg-ivi-border"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    !showOriginalDesc ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
 // ROOT APP
 // ─────────────────────────────────────────────────
 export default function Home() {
@@ -1049,7 +1161,7 @@ export default function Home() {
   }
 
   const effectiveScreen: Screen =
-    !hasClient && screen !== "history" ? "clientPicker" : screen;
+    !hasClient && screen !== "history" && screen !== "admin" ? "clientPicker" : screen;
 
   const showBottomNav =
     effectiveScreen !== "clientPicker" && effectiveScreen !== "confirm";
@@ -1073,21 +1185,16 @@ export default function Home() {
         return <ConfirmScreen onNewOrder={handleNewOrder} onChangeClient={handleSwitchClient} />;
       case "history":
         return <HistoryScreen />;
+      case "admin":
+        return <AdminScreen />;
     }
   };
 
   return (
-    <div className="h-[calc(100dvh-56px)] flex flex-col overflow-hidden">
-      {/* Admin toolbar — only visible on catalog screen for admins */}
-      {isAdmin && effectiveScreen === "catalog" && (
-        <div className="shrink-0 bg-ivi-bg border-b border-ivi-border px-4 py-1.5 flex items-center gap-2 justify-end">
-          <UploadAnagrafiche />
-          <UploadExcel />
-        </div>
-      )}
+    <div className="h-dvh flex flex-col overflow-hidden">
       <div className="flex-1 overflow-hidden">{renderScreen()}</div>
       {showBottomNav && (
-        <BottomNav screen={effectiveScreen} setScreen={setScreen} />
+        <BottomNav screen={effectiveScreen} setScreen={setScreen} isAdmin={isAdmin} />
       )}
     </div>
   );
