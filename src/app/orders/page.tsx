@@ -50,6 +50,7 @@ export default function OrdersPage() {
   function handleEdit(order: Order) {
     resetOrder();
     setOrderInfo({
+      clienteId: order.clienteId ?? null,
       cliente: order.cliente,
       magazzino: order.magazzino as Parameters<typeof setOrderInfo>[0]["magazzino"],
       luogoConsegna: order.luogoConsegna,
@@ -57,6 +58,9 @@ export default function OrdersPage() {
       note: order.note,
     });
     setEditing(order.id, order.items);
+    if (!order.clienteId) {
+      alert("Ordine storico: seleziona il cliente dalle anagrafiche prima di salvare le modifiche.");
+    }
     router.push("/");
   }
 
@@ -139,6 +143,11 @@ export default function OrdersPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-foreground">{order.cliente}</span>
                       <Badge variant="outline" className="text-xs px-2 py-0 h-5">{order.magazzino}</Badge>
+                      {!order.clienteId && (
+                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 border-amber-300 text-amber-700 bg-amber-50">
+                          Da allineare
+                        </Badge>
+                      )}
                       {user?.role === "admin" && (
                         <span className="text-xs text-muted-foreground/70">{order.agente}</span>
                       )}

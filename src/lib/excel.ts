@@ -198,3 +198,145 @@ export function parseExcel(buffer: ArrayBuffer): Material[] {
 
   return materials;
 }
+
+type AnagraficaField = "codice" | "ragioneSociale" | "indirizzo" | "capCitta" | "partitaIva";
+
+interface AnagraficheColumnMappingErrorDetails {
+  missingColumns: string[];
+  foundHeaders: string[];
+}
+
+export class AnagraficheColumnMappingError extends Error {
+  details: AnagraficheColumnMappingErrorDetails;
+
+  constructor(details: AnagraficheColumnMappingErrorDetails) {
+    super("Colonne obbligatorie mancanti nel file anagrafiche.");
+    this.name = "AnagraficheColumnMappingError";
+    this.details = details;
+  }
+}
+
+const ANAGRAFICA_FIELD_LABELS: Record<AnagraficaField, string> = {
+  codice: "Codice cliente",
+  ragioneSociale: "Ragione Sociale",
+  indirizzo: "Indirizzo",
+  capCitta: "CAP / Citta",
+  partitaIva: "P.IVA",
+};
+
+const ANAGRAFICA_COLUMN_ALIASES: Record<AnagraficaField, string[]> = {
+  codice: ["N.Cli.", "N Cli", "Codice Cliente", "Codice", "Cod.Cliente", "ID Cliente"],
+  ragioneSociale: ["Ragione Sociale", "RagioneSociale", "Cliente", "Azienda", "Nome"],
+  indirizzo: ["Indirizzo", "Via", "Sede Legale", "Sede", "Indirizzo sede"],
+  capCitta: ["CAP / Citta'", "CAP/Citta", "CAP Citta", "CAP Citta'", "Comune", "CAP"],
+  partitaIva: ["P.IVA", "P IVA", "Partita IVA", "PartitaIVA", "Piva", "Codice Fiscale"],
+};
+
+const REQUIRED_ANAGRAFICA_FIELDS: AnagraficaField[] = ["codice", "ragioneSociale"];
+
+function normalizeForSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveAnagraficheColumnIndexes(headers: string[]): Partial<Record<AnagraficaField, number>> {
+  const indexByNormalized = new Map<string, number>();
+
+  headers.forEach((header, index) => {
+    const normalized = normalizeHeader(header);
+    if (normalized && !indexByNormalized.has(normalized)) {
+      indexByNormalized.set(normalized, index);
+    }
+  });
+
+  const indexes: Partial<Record<AnagraficaField, number>> = {};
+  for (const field of Object.keys(ANAGRAFICA_COLUMN_ALIASES) as AnagraficaField[]) {
+    for (const alias of ANAGRAFICA_COLUMN_ALIASES[field]) {
+      const idx = indexByNormalized.get(normalizeHeader(alias));
+      if (idx !== undefined) {
+        indexes[field] = idx;
+        break;
+      }
+    }
+  }
+
+  return indexes;
+}
+
+function buildSedeLegale(indirizzo: string, capCitta: string): string {
+  if (!indirizzo && !capCitta) return "";
+  if (!indirizzo) return capCitta;
+  if (!capCitta) return indirizzo;
+  return `${indirizzo}, ${capCitta}`;
+}
+
+export interface ParsedAnagrafica {
+  codice: string;
+  ragioneSociale: string;
+  indirizzo: string;
+  capCitta: string;
+  partitaIva: string;
+  sedeLegale: string;
+  searchText: string;
+}
+
+export function parseAnagraficheExcel(buffer: ArrayBuffer): ParsedAnagrafica[] {
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    raw: false,
+    defval: "",
+  });
+  if (matrix.length === 0) return [];
+
+  const headers = (matrix[0] ?? []).map((cell: unknown) => String(cell ?? "").trim());
+  const indexes = resolveAnagraficheColumnIndexes(headers);
+
+  const missingColumns = REQUIRED_ANAGRAFICA_FIELDS
+    .filter((field) => indexes[field] === undefined)
+    .map((field) => ANAGRAFICA_FIELD_LABELS[field]);
+
+  if (missingColumns.length > 0) {
+    throw new AnagraficheColumnMappingError({
+      missingColumns,
+      foundHeaders: headers.filter(Boolean),
+    });
+  }
+
+  const deduped = new Map<string, ParsedAnagrafica>();
+
+  for (const rawRow of matrix.slice(1)) {
+    const row = Array.isArray(rawRow) ? rawRow : [];
+    const codice = readTextCell(row, indexes.codice);
+    if (!codice) continue;
+
+    const ragioneSociale = readTextCell(row, indexes.ragioneSociale);
+    if (!ragioneSociale) continue;
+
+    const indirizzo = readTextCell(row, indexes.indirizzo);
+    const capCitta = readTextCell(row, indexes.capCitta);
+    const partitaIva = readTextCell(row, indexes.partitaIva);
+    const sedeLegale = buildSedeLegale(indirizzo, capCitta);
+    const searchText = normalizeForSearch(`${codice} ${ragioneSociale} ${indirizzo} ${capCitta} ${partitaIva}`);
+
+    deduped.set(codice, {
+      codice,
+      ragioneSociale,
+      indirizzo,
+      capCitta,
+      partitaIva,
+      sedeLegale,
+      searchText,
+    });
+  }
+
+  return Array.from(deduped.values());
+}

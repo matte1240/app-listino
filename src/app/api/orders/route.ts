@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { cliente, magazzino, luogoConsegna, dataConsegna, note, items } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items } = body as {
+    clienteId: number | null;
     cliente: string;
     magazzino: string;
     luogoConsegna: string;
@@ -42,18 +43,37 @@ export async function POST(req: NextRequest) {
     items: OrderHistoryItem[];
   };
 
-  if (!cliente?.trim() || !magazzino?.trim() || !Array.isArray(items) || items.length === 0) {
+  if (!magazzino?.trim() || !Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 
+  if (!Number.isInteger(clienteId) || clienteId <= 0) {
+    return NextResponse.json({ error: "Seleziona un cliente dalle anagrafiche" }, { status: 400 });
+  }
+
   const db = getDb();
+
+  const selectedCustomer = db
+    .prepare("SELECT id, ragione_sociale FROM anagrafiche WHERE id = ?")
+    .get(clienteId) as { id: number; ragione_sociale: string } | undefined;
+
+  if (!selectedCustomer) {
+    return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
+  }
+
+  const clienteName = selectedCustomer.ragione_sociale || cliente?.trim() || "";
+  if (!clienteName) {
+    return NextResponse.json({ error: "Seleziona un cliente valido" }, { status: 400 });
+  }
+
   const result = db
     .prepare(
-      `INSERT INTO orders (cliente, magazzino, luogo_consegna, data_consegna, note, agente, items)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO orders (cliente_id, cliente, magazzino, luogo_consegna, data_consegna, note, agente, items)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
-      cliente.trim(),
+      selectedCustomer.id,
+      clienteName,
       magazzino,
       luogoConsegna ?? "",
       dataConsegna ?? "",
@@ -67,7 +87,8 @@ export async function POST(req: NextRequest) {
   // Send email notification (fire-and-forget, don't block the response)
   const order: Order = {
     id: orderId,
-    cliente: cliente.trim(),
+    clienteId: selectedCustomer.id,
+    cliente: clienteName,
     magazzino,
     luogoConsegna: luogoConsegna ?? "",
     dataConsegna: dataConsegna ?? "",
@@ -83,6 +104,7 @@ export async function POST(req: NextRequest) {
 
 interface DbOrder {
   id: number;
+  cliente_id: number | null;
   cliente: string;
   magazzino: string;
   luogo_consegna: string;
@@ -96,6 +118,7 @@ interface DbOrder {
 function dbToOrder(r: DbOrder): Order {
   return {
     id: r.id,
+    clienteId: r.cliente_id ?? null,
     cliente: r.cliente,
     magazzino: r.magazzino,
     luogoConsegna: r.luogo_consegna,

@@ -25,6 +25,7 @@ interface OrderStore {
 }
 
 const defaultOrderInfo: OrderInfo = {
+  clienteId: null,
   cliente: "",
   luogoConsegna: "",
   dataConsegna: "",

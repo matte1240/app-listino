@@ -62,6 +62,23 @@ function createDb() {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS anagrafiche (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      codice TEXT NOT NULL UNIQUE,
+      ragione_sociale TEXT NOT NULL,
+      indirizzo TEXT NOT NULL DEFAULT '',
+      cap_citta TEXT NOT NULL DEFAULT '',
+      piva TEXT NOT NULL DEFAULT '',
+      sede_legale TEXT NOT NULL DEFAULT '',
+      search_text TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_ragione ON anagrafiche(ragione_sociale)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_search ON anagrafiche(search_text)");
+
   // Migration: add obsoleto column if missing (existing DBs)
   const materialCols = db.pragma("table_info(materials)") as { name: string }[];
   if (!materialCols.some((c) => c.name === "obsoleto")) {
@@ -71,6 +88,7 @@ function createDb() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente_id INTEGER,
       cliente TEXT NOT NULL,
       magazzino TEXT NOT NULL,
       luogo_consegna TEXT NOT NULL DEFAULT '',
@@ -81,6 +99,12 @@ function createDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // Migration: add cliente_id column if missing (existing DBs)
+  const orderCols = db.pragma("table_info(orders)") as { name: string }[];
+  if (!orderCols.some((c) => c.name === "cliente_id")) {
+    db.exec("ALTER TABLE orders ADD COLUMN cliente_id INTEGER");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS branch_emails (
