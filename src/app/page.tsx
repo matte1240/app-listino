@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { MAGAZZINI, type Anagrafica, type Order } from "@/types";
 import {
   Search,
-  Home,
+  Home as HomeIcon,
   FileText,
   Clock,
   Users,
@@ -64,7 +64,7 @@ function BottomNav({
   const lineCount = Object.values(orderItems).filter((i) => i.flagged && i.qty > 0).length;
 
   const tabs: { id: Screen; label: string; icon: React.FC<{ className?: string }> ; badge?: number }[] = [
-    { id: "catalog", label: "Listino", icon: Home },
+    { id: "catalog", label: "Listino", icon: HomeIcon },
     { id: "order", label: "Ordine", icon: FileText, badge: lineCount },
     { id: "history", label: "Storico", icon: Clock },
   ];
