@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutList, ClipboardList, Users, Sparkles, Menu, X, LogOut, Shield, FileText, Bot, Mail, FileSpreadsheet, Plus, ArrowLeft } from "lucide-react";
+import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, Bot, FileSpreadsheet, Plus, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -15,10 +15,7 @@ const navItems = [
   { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
   { href: "/listino-pdf", label: "Listino PDF", icon: FileSpreadsheet, adminOnly: false },
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
-  { href: "/admin/users", label: "Utenti", icon: Users, adminOnly: true },
-  { href: "/admin/anagrafiche", label: "Anagrafiche", icon: Users, adminOnly: true },
-  { href: "/admin/enrich", label: "AI", icon: Sparkles, adminOnly: true },
-  { href: "/admin/emails", label: "Email", icon: Mail, adminOnly: true },
+  { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
 export default function Navbar() {
