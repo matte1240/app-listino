@@ -158,7 +158,7 @@ function ClientPickerScreen({
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    fetch("/api/anagrafiche?limit=1000")
+    fetch("/api/anagrafiche?limit=20")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.anagrafiche) setAllClients(data.anagrafiche);
@@ -175,7 +175,7 @@ function ClientPickerScreen({
     const ctrl = new AbortController();
     setSearching(true);
     const tid = setTimeout(() => {
-      fetch(`/api/anagrafiche?q=${encodeURIComponent(q)}&limit=200`, {
+      fetch(`/api/anagrafiche?q=${encodeURIComponent(q)}&limit=20`, {
         signal: ctrl.signal,
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -447,7 +447,7 @@ function CatalogScreen({
       <div className="bg-white border-b border-ivi-border shrink-0">
         <div
           className="flex gap-1.5 px-4 py-2.5 overflow-x-auto"
-          style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+          style={{ scrollbarWidth: "none" }}
         >
           {categories.map((cat) => (
             <button
