@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { Eye, EyeOff, User } from "lucide-react";
 
@@ -33,15 +32,13 @@ export default function LoginPage() {
     <div className="min-h-dvh flex flex-col bg-white">
       {/* Navy header with IVI branding */}
       <div className="bg-ivi-navy px-8 py-14 flex flex-col items-center">
-        <Image
-          src="/IVI_white_marchio.png"
-          alt="IVI Colors"
-          width={160}
-          height={52}
-          className="h-12 w-auto object-contain"
-          priority
-        />
-        <div className="text-[11px] text-white/45 tracking-[0.2em] uppercase mt-3 font-medium">
+        <div
+          className="font-bold text-white leading-none tracking-tight"
+          style={{ fontSize: 38 }}
+        >
+          IVI<span className="text-ivi-red">colors</span>
+        </div>
+        <div className="text-[11px] text-white/45 tracking-[0.2em] uppercase mt-2 font-medium">
           Portale Agenti
         </div>
       </div>
