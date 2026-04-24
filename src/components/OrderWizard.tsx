@@ -50,6 +50,9 @@ export default function OrderWizard({ editingOrder }: Props) {
   const [customerResults, setCustomerResults] = useState<AnagraficaSearchItem[]>([]);
   const [customerLoading, setCustomerLoading] = useState(false);
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+  const [recentDestinations, setRecentDestinations] = useState<string[]>([]);
+  const [recentDestinationsLoading, setRecentDestinationsLoading] = useState(false);
+  const [selectedRecentDestination, setSelectedRecentDestination] = useState("");
 
   const isEditing = !!editingOrder;
 
@@ -103,12 +106,47 @@ export default function OrderWizard({ editingOrder }: Props) {
     return () => { cancelled = true; clearTimeout(timeout); };
   }, [orderInfo.cliente]);
 
+  // Load recent destinations for selected customer
+  useEffect(() => {
+    if (!orderInfo.clienteId) {
+      setRecentDestinations([]);
+      setRecentDestinationsLoading(false);
+      setSelectedRecentDestination("");
+      return;
+    }
+
+    let cancelled = false;
+    setRecentDestinationsLoading(true);
+
+    fetch(`/api/anagrafiche/${orderInfo.clienteId}/recent-destinations?limit=8`, {
+      credentials: "same-origin",
+    })
+      .then(async (res) => {
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data?.destinations) ? data.destinations : [];
+      })
+      .then((destinations: string[]) => {
+        if (!cancelled) {
+          setRecentDestinations(destinations);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRecentDestinations([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRecentDestinationsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [orderInfo.clienteId]);
+
   function handleSelectCustomer(customer: AnagraficaSearchItem) {
     setOrderInfo({
       clienteId: customer.id,
       cliente: customer.ragioneSociale,
-      luogoConsegna: orderInfo.luogoConsegna || `${customer.indirizzo} ${customer.capCitta}`.trim(),
     });
+    setSelectedRecentDestination("");
     setCustomerDropdownOpen(false);
   }
 
@@ -270,7 +308,13 @@ export default function OrderWizard({ editingOrder }: Props) {
                 onBlur={() => { setTimeout(() => setCustomerDropdownOpen(false), 120); }}
                 onChange={(e) => {
                   setOrderInfo({ cliente: e.target.value, clienteId: null });
+                  setRecentDestinations([]);
+                  setRecentDestinationsLoading(false);
+                  setSelectedRecentDestination("");
                   setCustomerDropdownOpen(true);
+                  if (!isEditing) {
+                    setOrderInfo({ luogoConsegna: "" });
+                  }
                 }}
                 className="h-11 rounded-xl text-base bg-background"
                 style={{ fontSize: "16px" }}
@@ -469,11 +513,43 @@ export default function OrderWizard({ editingOrder }: Props) {
               <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
               Luogo di consegna
             </Label>
+            {/* Recent destinations dropdown */}
+            <select
+              value={selectedRecentDestination}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedRecentDestination(value);
+                if (value) setOrderInfo({ luogoConsegna: value });
+              }}
+              disabled={!orderInfo.clienteId || recentDestinationsLoading || recentDestinations.length === 0}
+              className="h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:opacity-60"
+            >
+              <option value="">
+                {recentDestinationsLoading
+                  ? "Caricamento destinazioni recenti..."
+                  : !orderInfo.clienteId
+                    ? "Seleziona prima un cliente da anagrafica"
+                    : recentDestinations.length === 0
+                      ? "Nessuna destinazione recente disponibile"
+                      : "Destinazioni recenti del cliente"}
+              </option>
+              {recentDestinations.map((destination) => (
+                <option key={destination} value={destination}>
+                  {destination}
+                </option>
+              ))}
+            </select>
+            {/* Manual input */}
             <Input
               id="luogo"
               placeholder="Indirizzo di consegna (opzionale)"
               value={orderInfo.luogoConsegna}
-              onChange={(e) => setOrderInfo({ luogoConsegna: e.target.value })}
+              onChange={(e) => {
+                setOrderInfo({ luogoConsegna: e.target.value });
+                if (selectedRecentDestination && e.target.value !== selectedRecentDestination) {
+                  setSelectedRecentDestination("");
+                }
+              }}
               className="h-11 rounded-xl text-base bg-background"
               style={{ fontSize: "16px" }}
             />

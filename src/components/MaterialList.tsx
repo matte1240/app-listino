@@ -10,7 +10,11 @@ function materialSearchText(m: Material): string {
   return `${m.codice} ${m.descrizione} ${m.descrizioneAI ?? ""} ${m.categoria} ${m.raggr} ${m.um}`.toLowerCase();
 }
 
-export default function MaterialList() {
+interface Props {
+  isReadOnlyCatalog?: boolean;
+}
+
+export default function MaterialList({ isReadOnlyCatalog = false }: Props) {
   const materials = useOrderStore((s) => s.materials);
   const searchQuery = useOrderStore((s) => s.searchQuery);
   const showObsolete = useOrderStore((s) => s.showObsolete);
@@ -116,7 +120,7 @@ export default function MaterialList() {
           {/* Cards */}
           <div className="flex flex-col gap-2.5">
             {items.map((material) => (
-              <MaterialCard key={material.codice} material={material} />
+              <MaterialCard key={material.codice} material={material} isReadOnlyCatalog={isReadOnlyCatalog} />
             ))}
           </div>
         </div>

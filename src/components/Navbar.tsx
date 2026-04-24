@@ -18,11 +18,21 @@ const navItems = [
   { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
+function getUserInitials(username: string): string {
+  const trimmed = username.trim();
+  if (!trimmed) return "U";
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return "U";
+  if (tokens.length === 1) return tokens[0].substring(0, 2).toUpperCase();
+  return (tokens[0][0] + tokens[1][0]).toUpperCase();
+}
+
 export default function Navbar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
   const toggleShowOriginalDesc = useOrderStore((s) => s.toggleShowOriginalDesc);
   const orderInfo = useOrderStore((s) => s.orderInfo);
@@ -162,15 +172,41 @@ export default function Navbar() {
             </Button>
           )}
 
-          {/* User chip + logout */}
-          <div className="flex items-center gap-1.5">
-            <div className="hidden sm:flex items-center gap-1.5 bg-muted rounded-full px-2.5 py-1 text-xs text-muted-foreground">
-              <Shield className="h-3 w-3" />
-              <span className="font-semibold">{user.username}</span>
-            </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl" onClick={logout} aria-label="Esci">
-              <LogOut className="h-4 w-4" />
-            </Button>
+          {/* User badge with dropdown menu */}
+          <div className="relative">
+            <button
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              className="flex items-center justify-center h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-colors"
+              aria-expanded={isUserMenuOpen}
+              aria-label={`Menu utente ${user.username}`}
+              title={user.username}
+            >
+              {getUserInitials(user.username)}
+            </button>
+            {isUserMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsUserMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border text-sm">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Utente</p>
+                    <p className="font-semibold text-foreground">{user.username}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      logout();
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Esci
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -180,13 +216,13 @@ export default function Navbar() {
         <>
           <div
             className="fixed inset-0 z-50 bg-black/40 md:hidden"
-            onClick={() => setOpen(false)}
+            onClick={() => { setOpen(false); setIsUserMenuOpen(false); }}
           />
           <div className="fixed top-0 left-0 z-50 h-full w-60 bg-background border-r border-border shadow-xl md:hidden flex flex-col">
             <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
               <span className="font-bold text-sm">{user.username}</span>
               <button
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); setIsUserMenuOpen(false); }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
                 aria-label="Chiudi menu"
               >

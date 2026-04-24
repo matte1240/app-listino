@@ -40,7 +40,7 @@ export default function Home() {
 
       {/* Main scrollable content */}
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-5">
-        <MaterialList />
+        <MaterialList isReadOnlyCatalog={true} />
       </main>
 
     </div>

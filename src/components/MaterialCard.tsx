@@ -11,9 +11,10 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   material: Material;
+  isReadOnlyCatalog?: boolean;
 }
 
-export default function MaterialCard({ material }: Props) {
+export default function MaterialCard({ material, isReadOnlyCatalog = false }: Props) {
   const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const setQty = useOrderStore((s) => s.setQty);
@@ -59,22 +60,24 @@ export default function MaterialCard({ material }: Props) {
       <div className="p-4 flex-1 min-w-0">
         {/* Top row: checkbox + codice + badge pz/bancale */}
         <div className="flex items-start gap-3">
-          <Checkbox
-            id={`flag-${codice}`}
-            checked={isFlagged}
-            onCheckedChange={() => {
-              if (isFlagged) {
-                setQty(codice, 0);
-                setExpanded(false);
-              } else {
-                setExpanded((v) => !v);
-              }
-            }}
-            className="mt-1 h-5 w-5 shrink-0"
-          />
+          {!isReadOnlyCatalog && (
+            <Checkbox
+              id={`flag-${codice}`}
+              checked={isFlagged}
+              onCheckedChange={() => {
+                if (isFlagged) {
+                  setQty(codice, 0);
+                  setExpanded(false);
+                } else {
+                  setExpanded((v) => !v);
+                }
+              }}
+              className="mt-1 h-5 w-5 shrink-0"
+            />
+          )}
           <label
-            htmlFor={`flag-${codice}`}
-            className="flex-1 cursor-pointer min-w-0"
+            htmlFor={!isReadOnlyCatalog ? `flag-${codice}` : ""}
+            className={cn("flex-1 min-w-0", !isReadOnlyCatalog && "cursor-pointer")}
           >
             {/* Codice + badges */}
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -140,8 +143,8 @@ export default function MaterialCard({ material }: Props) {
           </label>
         </div>
 
-        {/* Quantity row — shown when expanded or flagged */}
-        {showQtyRow && (
+        {/* Quantity row — shown when expanded or flagged, hidden in catalog mode */}
+        {!isReadOnlyCatalog && showQtyRow && (
           <div className="mt-4 flex items-center gap-3 pl-8">
             <span className="text-sm font-medium text-muted-foreground shrink-0">Qtà ordine:</span>
             <div className="flex items-center rounded-xl border border-primary/30 bg-background overflow-hidden shadow-sm">

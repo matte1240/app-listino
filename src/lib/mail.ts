@@ -44,6 +44,47 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+function sanitizeSubjectPart(value: string | undefined): string {
+  const cleaned = (value ?? "").replace(/\s+/g, " ").trim();
+  return cleaned || "N/D";
+}
+
+function buildOrderSubject(order: Order, mode: "new" | "updated" | "cancelled"): string {
+  const prefix =
+    mode === "updated"
+      ? "Ordine Modificato"
+      : mode === "cancelled"
+        ? "Ordine Cancellato"
+        : "Nuovo Ordine";
+
+  const cliente = sanitizeSubjectPart(order.cliente);
+  const cantiere = sanitizeSubjectPart(order.luogoConsegna);
+  return `${prefix} #${order.id} // ${cliente} // ${cantiere}`;
+}
+
+function parseEmailList(value?: string): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function buildCcValue(branchCc?: string, agenteEmail?: string): string | undefined {
+  const unique = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const email of [...parseEmailList(branchCc), ...parseEmailList(agenteEmail)]) {
+    const key = email.toLowerCase();
+    if (!unique.has(key)) {
+      unique.add(key);
+      ordered.push(email);
+    }
+  }
+
+  return ordered.length > 0 ? ordered.join(", ") : undefined;
+}
+
 function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "new", _oldItems?: OrderHistoryItem[]): string {
   const title =
     mode === "updated"
@@ -174,8 +215,8 @@ export async function sendOrderEmail(order: Order, agenteEmail?: string): Promis
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to: branch.to,
-    cc: branch.cc || undefined,
-    subject: `Nuovo Ordine #${order.id} — ${order.cliente} (${order.magazzino})`,
+    cc: buildCcValue(branch.cc, agenteEmail),
+    subject: buildOrderSubject(order, "new"),
     text: buildOrderText(order, "new"),
     html: buildOrderHtml(order, "new"),
   });
@@ -192,8 +233,8 @@ export async function sendOrderUpdatedEmail(order: Order, oldItems: OrderHistory
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to: branch.to,
-    cc: branch.cc || undefined,
-    subject: `Ordine Modificato #${order.id} — Annulla e sostituisce — ${order.cliente} (${order.magazzino})`,
+    cc: buildCcValue(branch.cc, agenteEmail),
+    subject: buildOrderSubject(order, "updated"),
     text: buildOrderText(order, "updated"),
     html: buildOrderHtml(order, "updated", oldItems),
   });
@@ -210,8 +251,8 @@ export async function sendOrderCancelledEmail(order: Order, agenteEmail?: string
     from: `"App Listino" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to: branch.to,
-    cc: branch.cc || undefined,
-    subject: `Ordine Cancellato #${order.id} — ${order.cliente} (${order.magazzino})`,
+    cc: buildCcValue(branch.cc, agenteEmail),
+    subject: buildOrderSubject(order, "cancelled"),
     text: buildOrderText(order, "cancelled"),
     html: buildOrderHtml(order, "cancelled"),
   });
