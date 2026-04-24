@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2 } from "lucide-react";
+import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
@@ -16,6 +16,7 @@ export default function OrdersPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -82,6 +83,19 @@ export default function OrdersPage() {
     });
   }
 
+  function orderSearchText(order: Order): string {
+    return `${order.id} ${order.cliente} ${order.luogoConsegna} ${order.agente}`.toLowerCase();
+  }
+
+  function matchesSearch(order: Order): boolean {
+    if (!searchQuery.trim()) return true;
+    const searchText = orderSearchText(order);
+    const tokens = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    return tokens.every((token) => searchText.includes(token));
+  }
+
+  const filteredOrders = orders.filter(matchesSearch);
+
   if (authLoading || loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
@@ -94,20 +108,52 @@ export default function OrdersPage() {
     <div className="min-h-dvh bg-background">
       <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-3">
         <h1 className="font-bold text-base">Cronologia Ordini</h1>
-        {orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-              <ClipboardList className="h-9 w-9 text-muted-foreground/50" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Nessun ordine salvato</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Gli ordini salvati appariranno qui
-              </p>
-            </div>
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cerca per numero, cliente, cantiere, agente"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-border bg-background text-sm placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Cancella ricerca"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        ) : (
-          orders.map((order) => {
+          {filteredOrders.length === 0 && orders.length > 0 ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+                <ClipboardList className="h-9 w-9 text-muted-foreground/50" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Nessun ordine trovato</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Prova a modificare i criteri di ricerca
+                </p>
+              </div>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+                <ClipboardList className="h-9 w-9 text-muted-foreground/50" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Nessun ordine salvato</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Gli ordini salvati appariranno qui
+                </p>
+              </div>
+            </div>
+          ) : (
+            filteredOrders.map((order) => {
             const isOpen = expanded === order.id;
             const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
             const showDeleteConfirm = deleteConfirm === order.id;
@@ -125,6 +171,9 @@ export default function OrdersPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-foreground">{order.cliente}</span>
                       <Badge variant="outline" className="text-xs px-2 py-0 h-5">{order.magazzino}</Badge>
+                      {order.luogoConsegna && (
+                        <Badge variant="secondary" className="text-xs px-2 py-0 h-5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700">{order.luogoConsegna}</Badge>
+                      )}
                         {order.status === "bozza" && (
                           <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20">Bozza</Badge>
                         )}

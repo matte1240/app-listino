@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Minus, Plus } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
-import { useAuth } from "@/lib/auth-context";
 import type { Material } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -18,9 +17,6 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
   const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const setQty = useOrderStore((s) => s.setQty);
-  const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
 
   const isFlagged = orderItem?.flagged ?? false;
   const qty = orderItem?.qty ?? 0;
@@ -28,13 +24,6 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
   const qtyInputRef = useRef<HTMLInputElement>(null);
 
   const showQtyRow = expanded || isFlagged;
-
-  // Auto-focus quantity input when row expands
-  useEffect(() => {
-    if (showQtyRow) {
-      setTimeout(() => qtyInputRef.current?.focus(), 50);
-    }
-  }, [showQtyRow]);
 
   const handleQtyChange = (value: string) => {
     const parsed = parseInt(value, 10);
@@ -113,16 +102,17 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
               )}
             </div>
 
-            {/* Descrizione */}
+            {/* Descrizione AI (primaria - grande e visibile) */}
             <p className={cn(
-              "text-sm leading-snug break-words mt-0.5",
+              "text-sm leading-snug break-words mt-0.5 font-medium",
               obsoleto ? "text-muted-foreground" : "text-foreground/90"
             )}>
-              {isAdmin && showOriginalDesc ? descrizione : (descrizioneAI || descrizione)}
+              {descrizioneAI || descrizione}
             </p>
-            {isAdmin && showOriginalDesc && descrizioneAI && (
-              <p className="text-xs text-muted-foreground/60 leading-snug break-words mt-0.5 italic">
-                AI: {descrizioneAI}
+            {/* Descrizione originale (secondaria - piccola e grigia) */}
+            {descrizioneAI && descrizione && (
+              <p className="text-xs text-muted-foreground/70 leading-snug break-words mt-1 italic">
+                {descrizione}
               </p>
             )}
 

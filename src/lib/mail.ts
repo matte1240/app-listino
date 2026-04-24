@@ -85,7 +85,7 @@ function buildCcValue(branchCc?: string, agenteEmail?: string): string | undefin
   return ordered.length > 0 ? ordered.join(", ") : undefined;
 }
 
-function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "new", _oldItems?: OrderHistoryItem[]): string {
+function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "new"): string {
   const title =
     mode === "updated"
       ? `Ordine Modificato #${order.id}`
@@ -236,7 +236,7 @@ export async function sendOrderUpdatedEmail(order: Order, oldItems: OrderHistory
     cc: buildCcValue(branch.cc, agenteEmail),
     subject: buildOrderSubject(order, "updated"),
     text: buildOrderText(order, "updated"),
-    html: buildOrderHtml(order, "updated", oldItems),
+    html: buildOrderHtml(order, "updated"),
   });
 }
 

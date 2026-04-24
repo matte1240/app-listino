@@ -35,7 +35,6 @@ export default function Navbar() {
 
   const orderInfo = useOrderStore((s) => s.orderInfo);
   const setExitDialogOpen = useOrderStore((s) => s.setExitDialogOpen);
-  const isAdmin = user?.role === "admin";
 
   if (!user || pathname === "/login") return null;
 

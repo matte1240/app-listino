@@ -43,7 +43,6 @@ export default function EnrichPage() {
   const router = useRouter();
   const [enrichedCount, setEnrichedCount] = useState(0);
   const [totalMaterials, setTotalMaterials] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<EnrichState>(initialState);
   const logEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -81,9 +80,6 @@ export default function EnrichPage() {
 
   // Initial load + start polling if already running
   useEffect(() => {
-    setLoading(true);
-    pollStatus().finally(() => setLoading(false));
-
     // Start polling immediately — it will self-stop if not running
     pollRef.current = setInterval(pollStatus, 2000);
 
@@ -142,7 +138,7 @@ export default function EnrichPage() {
     }
   }
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento...</p>

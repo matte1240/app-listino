@@ -9,7 +9,6 @@ interface OrderStore {
   searchQuery: string;
   showObsolete: boolean;
   currentStep: 1 | 2 | 3 | 4;
-  showOriginalDesc: boolean;
   exitDialogOpen: boolean;
   setExitDialogOpen: (open: boolean) => void;
   setStep: (step: 1 | 2 | 3 | 4) => void;
@@ -20,7 +19,6 @@ interface OrderStore {
   setSearchQuery: (q: string) => void;
   setShowObsolete: (value: boolean) => void;
   setOrderInfo: (info: Partial<OrderInfo>) => void;
-  toggleShowOriginalDesc: () => void;
 }
 
 const defaultOrderInfo: OrderInfo = {
@@ -41,7 +39,6 @@ export const useOrderStore = create<OrderStore>()(
       searchQuery: "",
       showObsolete: true,
       currentStep: 1,
-      showOriginalDesc: false,
       exitDialogOpen: false,
       setExitDialogOpen: (exitDialogOpen) => set({ exitDialogOpen }),
       setStep: (currentStep) => set({ currentStep }),
@@ -83,9 +80,6 @@ export const useOrderStore = create<OrderStore>()(
 
       setOrderInfo: (info) =>
         set((state) => ({ orderInfo: { ...state.orderInfo, ...info } })),
-
-      toggleShowOriginalDesc: () =>
-        set((state) => ({ showOriginalDesc: !state.showOriginalDesc })),
     }),
     {
       name: "listino-order-store",

@@ -91,7 +91,7 @@ export function batchError(batch: number, totalBatches: number, error: string, e
   });
 }
 
-export function enrichDone(enrichedCount: number, errorCount: number, totalCount: number): void {
+export function enrichDone(enrichedCount: number, errorCount: number): void {
   const message = errorCount > 0
     ? `Arricchiti ${enrichedCount} articoli (${errorCount} errori)`
     : `Arricchiti ${enrichedCount} articoli con successo`;
