@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Material, OrderMap, OrderInfo, OrderHistoryItem } from "@/types";
+import type { Material, OrderMap, OrderInfo } from "@/types";
 
 interface OrderStore {
   materials: Material[];
@@ -8,11 +8,11 @@ interface OrderStore {
   orderInfo: OrderInfo;
   searchQuery: string;
   showObsolete: boolean;
-  drawerOpen: boolean;
-  editingId: number | null;
-  editingItems: OrderHistoryItem[];
+  currentStep: 1 | 2 | 3 | 4;
   showOriginalDesc: boolean;
-  setDrawerOpen: (open: boolean) => void;
+  exitDialogOpen: boolean;
+  setExitDialogOpen: (open: boolean) => void;
+  setStep: (step: 1 | 2 | 3 | 4) => void;
   setMaterials: (materials: Material[]) => void;
   toggleFlag: (codice: string) => void;
   setQty: (codice: string, qty: number) => void;
@@ -20,7 +20,6 @@ interface OrderStore {
   setSearchQuery: (q: string) => void;
   setShowObsolete: (value: boolean) => void;
   setOrderInfo: (info: Partial<OrderInfo>) => void;
-  setEditing: (id: number | null, items?: OrderHistoryItem[]) => void;
   toggleShowOriginalDesc: () => void;
 }
 
@@ -41,13 +40,11 @@ export const useOrderStore = create<OrderStore>()(
       orderInfo: defaultOrderInfo,
       searchQuery: "",
       showObsolete: true,
-      drawerOpen: false,
-      editingId: null,
-      editingItems: [],
+      currentStep: 1,
       showOriginalDesc: false,
-      setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
-
-      setEditing: (id, items = []) => set({ editingId: id, editingItems: items }),
+      exitDialogOpen: false,
+      setExitDialogOpen: (exitDialogOpen) => set({ exitDialogOpen }),
+      setStep: (currentStep) => set({ currentStep }),
 
       setMaterials: (materials) => set({ materials }),
 
@@ -78,7 +75,7 @@ export const useOrderStore = create<OrderStore>()(
         }));
       },
 
-      resetOrder: () => set({ orderItems: {}, orderInfo: defaultOrderInfo, editingId: null, editingItems: [] }),
+      resetOrder: () => set({ orderItems: {}, orderInfo: defaultOrderInfo, currentStep: 1 }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
 
@@ -95,8 +92,7 @@ export const useOrderStore = create<OrderStore>()(
       partialize: (state) => ({
         orderItems: state.orderItems,
         orderInfo: state.orderInfo,
-        editingId: state.editingId,
-        editingItems: state.editingItems,
+        currentStep: state.currentStep,
       }),
     }
   )

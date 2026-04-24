@@ -3,18 +3,15 @@
 import { useEffect } from "react";
 import SearchBar from "@/components/SearchBar";
 import MaterialList from "@/components/MaterialList";
-import OrderDrawer from "@/components/OrderDrawer";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useAuth } from "@/lib/auth-context";
 
 export default function Home() {
-  const drawerOpen = useOrderStore((s) => s.drawerOpen);
-  const setDrawerOpen = useOrderStore((s) => s.setDrawerOpen);
   const materials = useOrderStore((s) => s.materials);
   const setMaterials = useOrderStore((s) => s.setMaterials);
   const { loading } = useAuth();
 
-  // Load materials from DB (server-side, already enriched)
+  // Load materials if not yet loaded
   useEffect(() => {
     if (materials.length > 0) return;
     fetch("/api/materials")
@@ -23,15 +20,6 @@ export default function Home() {
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const editingId = useOrderStore((s) => s.editingId);
-
-  // Auto-open drawer when returning from edit flow
-  useEffect(() => {
-    if (editingId !== null) {
-      setDrawerOpen(true);
-    }
-  }, [editingId, setDrawerOpen]);
 
   if (loading) {
     return (
@@ -55,8 +43,6 @@ export default function Home() {
         <MaterialList />
       </main>
 
-      {/* Order drawer */}
-      <OrderDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
     </div>
   );
 }

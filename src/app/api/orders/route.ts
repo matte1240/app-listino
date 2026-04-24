@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items, status } = body as {
     clienteId?: number | null;
     cliente: string;
     magazzino: string;
@@ -41,7 +41,10 @@ export async function POST(req: NextRequest) {
     dataConsegna: string;
     note: string;
     items: OrderHistoryItem[];
+    status?: 'bozza' | 'confermato';
   };
+
+  const resolvedStatus: 'bozza' | 'confermato' = status === 'bozza' ? 'bozza' : 'confermato';
 
   const db = getDb();
   const normalizedClienteId = Number(clienteId);
@@ -69,8 +72,8 @@ export async function POST(req: NextRequest) {
 
   const result = db
     .prepare(
-      `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       resolvedCliente,
@@ -80,12 +83,13 @@ export async function POST(req: NextRequest) {
       dataConsegna ?? "",
       note ?? "",
       payload.username,
-      JSON.stringify(items)
+      JSON.stringify(items),
+      resolvedStatus
     );
 
   const orderId = result.lastInsertRowid as number;
 
-  // Send email notification (fire-and-forget, don't block the response)
+  // Send email notification only for confirmed orders (fire-and-forget)
   const order: Order = {
     id: orderId,
     clienteId: resolvedClienteId,
@@ -96,9 +100,12 @@ export async function POST(req: NextRequest) {
     note: note ?? "",
     agente: payload.username,
     items,
+    status: resolvedStatus,
     createdAt: new Date().toISOString(),
   };
-  sendOrderEmail(order, payload.email).catch((err) => console.error("[mail] Errore invio email ordine:", err));
+  if (resolvedStatus === 'confermato') {
+    sendOrderEmail(order, payload.email).catch((err) => console.error("[mail] Errore invio email ordine:", err));
+  }
 
   return NextResponse.json({ id: orderId }, { status: 201 });
 }
@@ -113,6 +120,7 @@ interface DbOrder {
   note: string;
   agente: string;
   items: string;
+  status: string;
   created_at: string;
 }
 
@@ -127,6 +135,7 @@ function dbToOrder(r: DbOrder): Order {
     note: r.note,
     agente: r.agente,
     items: JSON.parse(r.items) as OrderHistoryItem[],
+    status: (r.status === 'bozza' ? 'bozza' : 'confermato') as Order['status'],
     createdAt: r.created_at,
   };
 }

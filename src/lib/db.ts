@@ -79,6 +79,7 @@ function createDb() {
       note TEXT NOT NULL DEFAULT '',
       agente TEXT NOT NULL,
       items TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'confermato',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
@@ -87,6 +88,9 @@ function createDb() {
   const orderCols = db.pragma("table_info(orders)") as { name: string }[];
   if (!orderCols.some((c) => c.name === "cliente_id")) {
     db.exec("ALTER TABLE orders ADD COLUMN cliente_id INTEGER");
+  }
+  if (!orderCols.some((c) => c.name === "status")) {
+    db.exec("ALTER TABLE orders ADD COLUMN status TEXT NOT NULL DEFAULT 'confermato'");
   }
 
   db.exec(`

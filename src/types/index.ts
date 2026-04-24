@@ -27,6 +27,8 @@ export interface OrderHistoryItem {
   prezzoListino: number;
 }
 
+export type OrderStatus = 'bozza' | 'confermato';
+
 export interface Order {
   id: number;
   clienteId: number | null;
@@ -37,6 +39,7 @@ export interface Order {
   note: string;
   agente: string;
   items: OrderHistoryItem[];
+  status: OrderStatus;
   createdAt: string;
 }
 

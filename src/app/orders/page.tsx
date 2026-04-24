@@ -6,7 +6,6 @@ import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTr
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
-import { useOrderStore } from "@/lib/useOrderStore";
 import type { Order } from "@/types";
 
 export default function OrdersPage() {
@@ -17,10 +16,6 @@ export default function OrdersPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  const setOrderInfo = useOrderStore((s) => s.setOrderInfo);
-  const resetOrder = useOrderStore((s) => s.resetOrder);
-  const setEditing = useOrderStore((s) => s.setEditing);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -48,17 +43,7 @@ export default function OrdersPage() {
   }
 
   function handleEdit(order: Order) {
-    resetOrder();
-    setOrderInfo({
-      clienteId: order.clienteId ?? null,
-      cliente: order.cliente,
-      magazzino: order.magazzino as Parameters<typeof setOrderInfo>[0]["magazzino"],
-      luogoConsegna: order.luogoConsegna,
-      dataConsegna: order.dataConsegna,
-      note: order.note,
-    });
-    setEditing(order.id, order.items);
-    router.push("/");
+    router.push(`/orders/${order.id}/edit`);
   }
 
   async function handleDelete(id: number) {
@@ -140,6 +125,9 @@ export default function OrdersPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-foreground">{order.cliente}</span>
                       <Badge variant="outline" className="text-xs px-2 py-0 h-5">{order.magazzino}</Badge>
+                        {order.status === "bozza" && (
+                          <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20">Bozza</Badge>
+                        )}
                       {user?.role === "admin" && (
                         <span className="text-xs text-muted-foreground/70">{order.agente}</span>
                       )}

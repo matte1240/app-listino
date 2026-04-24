@@ -14,6 +14,7 @@ interface DbOrder {
   note: string;
   agente: string;
   items: string;
+  status: string;
   created_at: string;
 }
 
@@ -28,6 +29,7 @@ function dbToOrder(r: DbOrder): Order {
     note: r.note,
     agente: r.agente,
     items: JSON.parse(r.items) as OrderHistoryItem[],
+    status: (r.status === 'bozza' ? 'bozza' : 'confermato') as Order['status'],
     createdAt: r.created_at,
   };
 }
@@ -78,7 +80,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items, status } = body as {
     clienteId?: number | null;
     cliente: string;
     magazzino: string;
@@ -86,7 +88,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     dataConsegna: string;
     note: string;
     items: OrderHistoryItem[];
+    status?: 'bozza' | 'confermato';
   };
+
+  const resolvedStatus: 'bozza' | 'confermato' = status === 'bozza' ? 'bozza' : 'confermato';
 
   const normalizedClienteId = Number(clienteId);
   const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
@@ -112,7 +117,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   db.prepare(
-    `UPDATE orders SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?
+    `UPDATE orders SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?
      WHERE id = ?`
   ).run(
     resolvedCliente,
@@ -122,6 +127,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     dataConsegna ?? "",
     note ?? "",
     JSON.stringify(items),
+    resolvedStatus,
     orderId
   );
 
@@ -130,9 +136,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const updated = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder;
   const order = dbToOrder(updated);
 
-  sendOrderUpdatedEmail(order, oldItems, payload.email).catch((err) =>
-    console.error("[mail] Errore invio email modifica ordine:", err)
-  );
+  // Send email only if confirmed
+  if (resolvedStatus === 'confermato') {
+    sendOrderUpdatedEmail(order, oldItems, payload.email).catch((err) =>
+      console.error("[mail] Errore invio email modifica ordine:", err)
+    );
+  }
 
   return NextResponse.json({ order });
 }
