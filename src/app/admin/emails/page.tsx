@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Save, Loader2, CheckCircle2, Warehouse } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Save, Loader2, CheckCircle2, Warehouse } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { MAGAZZINI } from "@/types";
 
 type BranchConfig = Record<string, { emailTo: string; emailCc: string }>;
+
+const inputClass =
+  "w-full h-10 px-3.5 rounded-xl border border-ivi-border bg-ivi-bg text-sm text-ivi-text placeholder:text-ivi-muted/60 outline-none focus:border-ivi-navy focus:bg-white transition-colors";
 
 export default function EmailsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -27,18 +27,13 @@ export default function EmailsPage() {
     if (!authLoading && user?.role === "admin") {
       fetch("/api/branch-emails")
         .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.config) setConfig(data.config);
-        })
+        .then((data) => { if (data?.config) setConfig(data.config); })
         .finally(() => setLoading(false));
     }
   }, [authLoading, user]);
 
   function updateField(magazzino: string, field: "emailTo" | "emailCc", value: string) {
-    setConfig((prev) => ({
-      ...prev,
-      [magazzino]: { ...prev[magazzino], [field]: value },
-    }));
+    setConfig((prev) => ({ ...prev, [magazzino]: { ...prev[magazzino], [field]: value } }));
   }
 
   async function handleSave() {
@@ -61,25 +56,24 @@ export default function EmailsPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
-        <p className="text-muted-foreground">Caricamento…</p>
+      <div className="min-h-dvh bg-ivi-bg flex items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-ivi-muted" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-background">
-      <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-5">
-        <div className="flex items-center justify-between">
-          <h1 className="font-bold text-base flex items-center gap-2">
-            <Mail className="h-4.5 w-4.5" />
-            Email Filiali
-          </h1>
-          <Button
+    <div className="min-h-dvh bg-ivi-bg">
+      <div className="bg-ivi-navy px-4 pt-5 pb-4">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          <div>
+            <div className="text-lg font-bold text-white">Email Filiali</div>
+            <div className="text-xs text-white/50 mt-0.5">Destinatari per ogni filiale</div>
+          </div>
+          <button
             onClick={handleSave}
             disabled={saving || saved}
-            size="sm"
-            className="gap-1.5 rounded-xl h-9"
+            className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-sm font-semibold px-3 py-2 rounded-xl transition-colors border-none cursor-pointer disabled:opacity-60"
           >
             {saved ? (
               <><CheckCircle2 className="h-4 w-4" /> Salvato</>
@@ -88,57 +82,52 @@ export default function EmailsPage() {
             ) : (
               <><Save className="h-4 w-4" /> Salva</>
             )}
-          </Button>
+          </button>
         </div>
+      </div>
 
-        <p className="text-sm text-muted-foreground -mt-2">
-          Configura gli indirizzi email destinatari per ogni filiale. Gli ordini verranno inviati all&apos;email della filiale selezionata.
+      <main className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
+        <p className="text-sm text-ivi-muted">
+          Configura i destinatari per ogni filiale. Gli ordini vengono inviati all&apos;email della filiale selezionata.
         </p>
 
-        <div className="flex flex-col gap-4">
-          {MAGAZZINI.map((magazzino) => {
-            const entry = config[magazzino] ?? { emailTo: "", emailCc: "" };
-            return (
-              <div
-                key={magazzino}
-                className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3"
-              >
-                <h2 className="font-semibold text-sm flex items-center gap-2">
-                  <Warehouse className="h-4 w-4 text-primary" />
-                  {magazzino}
-                </h2>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`to-${magazzino}`} className="text-xs font-medium text-muted-foreground">
-                    Destinatario (To)
-                  </Label>
-                  <Input
-                    id={`to-${magazzino}`}
-                    type="email"
-                    placeholder="ordini@filiale.it"
-                    value={entry.emailTo}
-                    onChange={(e) => updateField(magazzino, "emailTo", e.target.value)}
-                    className="h-10 rounded-xl text-sm bg-background"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`cc-${magazzino}`} className="text-xs font-medium text-muted-foreground">
-                    Copia conoscenza (CC) — separare più indirizzi con virgola
-                  </Label>
-                  <Input
-                    id={`cc-${magazzino}`}
-                    type="text"
-                    placeholder="responsabile@filiale.it, admin@azienda.it"
-                    value={entry.emailCc}
-                    onChange={(e) => updateField(magazzino, "emailCc", e.target.value)}
-                    className="h-10 rounded-xl text-sm bg-background"
-                  />
-                </div>
+        {MAGAZZINI.map((magazzino) => {
+          const entry = config[magazzino] ?? { emailTo: "", emailCc: "" };
+          return (
+            <div key={magazzino} className="bg-white rounded-xl border border-ivi-border p-4 flex flex-col gap-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-ivi-text">
+                <Warehouse className="h-4 w-4 text-ivi-navy" />
+                {magazzino}
               </div>
-            );
-          })}
-        </div>
+
+              <div>
+                <label htmlFor={`to-${magazzino}`} className="block text-[11px] font-bold text-ivi-muted tracking-[0.08em] uppercase mb-1.5">
+                  Destinatario (To)
+                </label>
+                <input
+                  id={`to-${magazzino}`} type="email"
+                  placeholder="ordini@filiale.it"
+                  value={entry.emailTo}
+                  onChange={(e) => updateField(magazzino, "emailTo", e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label htmlFor={`cc-${magazzino}`} className="block text-[11px] font-bold text-ivi-muted tracking-[0.08em] uppercase mb-1.5">
+                  Copia (CC) — separare più indirizzi con virgola
+                </label>
+                <input
+                  id={`cc-${magazzino}`} type="text"
+                  placeholder="responsabile@filiale.it, admin@azienda.it"
+                  value={entry.emailCc}
+                  onChange={(e) => updateField(magazzino, "emailCc", e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          );
+        })}
       </main>
     </div>
   );
