@@ -92,14 +92,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 
-  const normalizedClienteId = Number(clienteId);
-  if (!Number.isInteger(normalizedClienteId) || normalizedClienteId <= 0) {
+  if (!Number.isInteger(clienteId) || clienteId <= 0) {
     return NextResponse.json({ error: "Seleziona un cliente dalle anagrafiche" }, { status: 400 });
   }
 
   const selectedCustomer = db
     .prepare("SELECT id, ragione_sociale FROM anagrafiche WHERE id = ?")
-    .get(normalizedClienteId) as { id: number; ragione_sociale: string } | undefined;
+    .get(clienteId) as { id: number; ragione_sociale: string } | undefined;
 
   if (!selectedCustomer) {
     return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
