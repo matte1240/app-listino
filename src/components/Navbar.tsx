@@ -28,7 +28,7 @@ export default function Navbar() {
   const isHome = pathname === "/";
   const isAdmin = user?.role === "admin";
 
-  if (!user || pathname === "/login" || pathname === "/") return null;
+  if (!user || pathname === "/login") return null;
 
   const items = navItems.filter((item) => !item.adminOnly || user.role === "admin");
 
