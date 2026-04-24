@@ -40,7 +40,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static   ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public          ./public
 
 # Install su-exec for entrypoint and create data directory
-RUN apk add --no-cache su-exec && \
+RUN apk add --no-cache su-exec tzdata && \
     mkdir -p /app/data && chown nextjs:nodejs /app/data
 
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
