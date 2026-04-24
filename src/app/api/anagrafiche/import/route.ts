@@ -9,7 +9,7 @@ import {
   type ParsedAnagrafica,
 } from "@/lib/excel";
 
-const ANAGRAFICHE_PATH = path.join(process.cwd(), "data", "anagrafiche.xlsx");
+const ANAGRAFICHE_PATH = path.join(process.cwd(), "public", "ANAGRAFICHE.xlsx");
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -20,16 +20,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
-  const formData = await req.formData();
-  const file = formData.get("file");
-  if (!file || typeof file === "string") {
-    return NextResponse.json({ error: "File mancante" }, { status: 400 });
+  if (!fs.existsSync(ANAGRAFICHE_PATH)) {
+    return NextResponse.json({ error: "File ANAGRAFICHE.xlsx non trovato in /public" }, { status: 404 });
   }
 
-  const buffer = Buffer.from(await (file as Blob).arrayBuffer());
-  const dir = path.dirname(ANAGRAFICHE_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(ANAGRAFICHE_PATH, buffer);
+  const buffer = fs.readFileSync(ANAGRAFICHE_PATH);
 
   let anagrafiche: ParsedAnagrafica[];
   try {
@@ -47,11 +42,13 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
     console.error("[anagrafiche] Errore parsing file:", error);
     return NextResponse.json({ error: "Formato file anagrafiche non valido" }, { status: 400 });
   }
 
   const db = getDb();
+
   const existingRows = db.prepare("SELECT codice FROM anagrafiche").all() as { codice: string }[];
   const knownCodes = new Set(existingRows.map((row) => row.codice));
 
@@ -79,6 +76,7 @@ export async function POST(req: NextRequest) {
         imported += 1;
         knownCodes.add(row.codice);
       }
+
       upsert.run(
         row.codice,
         row.ragioneSociale,
@@ -93,5 +91,10 @@ export async function POST(req: NextRequest) {
 
   upsertAll(anagrafiche);
 
-  return NextResponse.json({ ok: true, total: anagrafiche.length, imported, updated });
+  return NextResponse.json({
+    ok: true,
+    total: anagrafiche.length,
+    imported,
+    updated,
+  });
 }

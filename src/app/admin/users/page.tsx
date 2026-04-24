@@ -3,7 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Plus, Pencil, Trash2, X, Users, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Pencil, Trash2, X } from "lucide-react";
 
 interface UserRow {
   id: number;
@@ -13,17 +17,14 @@ interface UserRow {
   created_at: string;
 }
 
-interface UserForm {
+interface FormData {
   username: string;
   password: string;
   role: "admin" | "agente";
   email: string;
 }
 
-const emptyForm: UserForm = { username: "", password: "", role: "agente", email: "" };
-
-const inputClass =
-  "w-full h-11 px-3.5 rounded-xl border border-ivi-border bg-ivi-bg text-sm text-ivi-text placeholder:text-ivi-muted/60 outline-none focus:border-ivi-navy focus:bg-white transition-colors";
+const emptyForm: FormData = { username: "", password: "", role: "agente", email: "" };
 
 export default function AdminUsersPage() {
   const { user, loading } = useAuth();
@@ -31,9 +32,11 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [error, setError] = useState("");
+
+  // Form state
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<UserForm>(emptyForm);
+  const [form, setForm] = useState<FormData>(emptyForm);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -49,215 +52,249 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && (!user || user.role !== "admin")) { router.push("/"); return; }
+    if (!loading && (!user || user.role !== "admin")) {
+      router.push("/");
+      return;
+    }
     if (loading || user?.role !== "admin") return;
-    fetchUsers();
-  }, [user, loading, router, fetchUsers]);
+
+    let cancelled = false;
+    fetch("/api/users").then(async (res) => {
+      if (cancelled) return;
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data.users);
+      } else {
+        setError("Errore nel caricamento utenti");
+      }
+      setLoadingUsers(false);
+    }).catch(() => {
+      if (!cancelled) {
+        setError("Errore nel caricamento utenti");
+        setLoadingUsers(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [user, loading, router]);
 
   function openCreate() {
-    setEditingId(null); setForm(emptyForm); setFormError(""); setShowForm(true);
+    setEditingId(null);
+    setForm(emptyForm);
+    setFormError("");
+    setShowForm(true);
   }
+
   function openEdit(u: UserRow) {
     setEditingId(u.id);
     setForm({ username: u.username, password: "", role: u.role, email: u.email });
-    setFormError(""); setShowForm(true);
+    setFormError("");
+    setShowForm(true);
   }
+
   function closeForm() {
-    setShowForm(false); setEditingId(null); setForm(emptyForm); setFormError("");
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
+    setFormError("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setFormError(""); setSaving(true);
+    setFormError("");
+    setSaving(true);
+
+    const url = editingId ? `/api/users/${editingId}` : "/api/users";
+    const method = editingId ? "PUT" : "POST";
+
+    const body: Record<string, string> = {
+      username: form.username,
+      role: form.role,
+      email: form.email,
+    };
+    if (form.password) body.password = form.password;
+    // For create, password is required
     if (!editingId && !form.password) {
       setFormError("La password è obbligatoria per un nuovo utente");
-      setSaving(false); return;
+      setSaving(false);
+      return;
     }
-    const body: Record<string, string> = { username: form.username, role: form.role, email: form.email };
-    if (form.password) body.password = form.password;
-    const res = await fetch(editingId ? `/api/users/${editingId}` : "/api/users", {
-      method: editingId ? "PUT" : "POST",
+
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+
     const data = await res.json();
-    if (!res.ok) { setFormError(data.error || "Errore nel salvataggio"); setSaving(false); return; }
-    setSaving(false); closeForm(); fetchUsers();
+    if (!res.ok) {
+      setFormError(data.error || "Errore nel salvataggio");
+      setSaving(false);
+      return;
+    }
+
+    setSaving(false);
+    closeForm();
+    fetchUsers();
   }
 
   async function handleDelete(u: UserRow) {
-    if (!confirm(`Eliminare l'utente "${u.username}"?`)) return;
+    if (!confirm(`Sei sicuro di voler eliminare l'utente "${u.username}"?`)) return;
+
     const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
-    if (res.ok) { fetchUsers(); } else { const d = await res.json(); alert(d.error || "Errore"); }
+    if (res.ok) {
+      fetchUsers();
+    } else {
+      const data = await res.json();
+      alert(data.error || "Errore nell'eliminazione");
+    }
   }
 
   if (loading || loadingUsers) {
     return (
-      <div className="min-h-dvh bg-ivi-bg flex items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-ivi-muted" />
+      <div className="min-h-dvh flex items-center justify-center">
+        <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-ivi-bg">
-      <div className="bg-ivi-navy px-4 pt-5 pb-4">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div>
-            <div className="text-lg font-bold text-white">Gestione Utenti</div>
-            <div className="text-xs text-white/50 mt-0.5">Accessi e ruoli agenti</div>
-          </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-sm font-semibold px-3 py-2 rounded-xl transition-colors border-none cursor-pointer"
-          >
+    <div className="min-h-dvh bg-background">
+      <main className="max-w-2xl mx-auto w-full px-4 pt-5 pb-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="font-bold text-base">Gestione Utenti</h1>
+          <Button size="sm" onClick={openCreate} className="gap-1.5 h-9 rounded-xl">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Nuovo utente</span>
-          </button>
+          </Button>
         </div>
-      </div>
+        {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <main className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
-        {error && <p className="text-sm text-ivi-red">{error}</p>}
-
+        {/* Form overlay */}
         {showForm && (
-          <div className="bg-white rounded-xl border border-ivi-border p-4 flex flex-col gap-3.5">
+          <div className="border border-border rounded-xl p-4 bg-card shadow-sm space-y-4">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-bold text-ivi-text">
+              <h2 className="font-semibold text-sm">
                 {editingId ? "Modifica utente" : "Nuovo utente"}
-              </div>
-              <button
-                onClick={closeForm}
-                className="h-7 w-7 rounded-lg flex items-center justify-center hover:bg-ivi-bg border-none cursor-pointer text-ivi-muted"
-              >
+              </h2>
+              <Button variant="ghost" size="icon" onClick={closeForm} className="h-7 w-7">
                 <X className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-              <div>
-                <label htmlFor="form-username" className="block text-[11px] font-bold text-ivi-muted tracking-[0.08em] uppercase mb-1.5">
-                  Username
-                </label>
-                <input
-                  id="form-username" type="text" required minLength={3}
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="form-username" className="text-xs">Username</Label>
+                <Input
+                  id="form-username"
+                  required
+                  minLength={3}
                   value={form.username}
                   onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                  placeholder="Inserisci username" className={inputClass}
+                  placeholder="Inserisci username"
                 />
               </div>
 
-              <div>
-                <label htmlFor="form-password" className="block text-[11px] font-bold text-ivi-muted tracking-[0.08em] uppercase mb-1.5">
+              <div className="space-y-1.5">
+                <Label htmlFor="form-password" className="text-xs">
                   Password{editingId ? " (lascia vuoto per non cambiare)" : ""}
-                </label>
-                <input
-                  id="form-password" type="password"
-                  required={!editingId} minLength={editingId ? 0 : 6}
+                </Label>
+                <Input
+                  id="form-password"
+                  type="password"
+                  minLength={editingId ? 0 : 6}
+                  required={!editingId}
                   value={form.password}
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                   placeholder={editingId ? "Nuova password (opzionale)" : "Inserisci password"}
-                  className={inputClass}
                 />
               </div>
 
-              <div>
-                <label htmlFor="form-role" className="block text-[11px] font-bold text-ivi-muted tracking-[0.08em] uppercase mb-1.5">
-                  Ruolo
-                </label>
+              <div className="space-y-1.5">
+                <Label htmlFor="form-role" className="text-xs">Ruolo</Label>
                 <select
-                  id="form-role" value={form.role}
+                  id="form-role"
+                  value={form.role}
                   onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as "admin" | "agente" }))}
-                  className={inputClass}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   <option value="agente">Agente</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
 
-              <div>
-                <label htmlFor="form-email" className="block text-[11px] font-bold text-ivi-muted tracking-[0.08em] uppercase mb-1.5">
-                  Email
-                </label>
-                <input
-                  id="form-email" type="email"
+              <div className="space-y-1.5">
+                <Label htmlFor="form-email" className="text-xs">Email</Label>
+                <Input
+                  id="form-email"
+                  type="email"
                   value={form.email}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  placeholder="email@esempio.com" className={inputClass}
+                  placeholder="email@esempio.com"
                 />
               </div>
 
-              {formError && <p className="text-sm text-ivi-red">{formError}</p>}
+              {formError && <p className="text-sm text-red-500">{formError}</p>}
 
               <div className="flex gap-2 pt-1">
-                <button
-                  type="submit" disabled={saving}
-                  className="flex items-center gap-1.5 bg-ivi-navy text-white text-sm font-semibold px-4 py-2.5 rounded-xl border-none cursor-pointer disabled:opacity-60 transition-colors"
-                >
-                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {saving ? "Salvataggio…" : editingId ? "Salva modifiche" : "Crea utente"}
-                </button>
-                <button
-                  type="button" onClick={closeForm}
-                  className="text-sm font-semibold px-4 py-2.5 rounded-xl border border-ivi-border text-ivi-muted bg-white cursor-pointer hover:bg-ivi-bg transition-colors"
-                >
+                <Button type="submit" size="sm" disabled={saving}>
+                  {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Crea utente"}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={closeForm}>
                   Annulla
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
+        {/* Users list */}
+        <div className="space-y-2">
           {users.map((u) => (
             <div
               key={u.id}
-              className="flex items-center justify-between gap-3 bg-white border border-ivi-border rounded-xl p-3.5"
+              className="flex items-center justify-between gap-3 border border-border rounded-xl p-3 bg-card"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-ivi-text truncate">{u.username}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    u.role === "admin" ? "bg-ivi-navy/10 text-ivi-navy" : "bg-ivi-bg text-ivi-muted"
-                  }`}>
+                  <span className="font-medium text-sm truncate">{u.username}</span>
+                  <Badge variant={u.role === "admin" ? "default" : "secondary"} className="text-xs">
                     {u.role}
-                  </span>
+                  </Badge>
                 </div>
-                <p className="text-xs text-ivi-muted mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {u.email && <>{u.email} · </>}
-                  {new Date(u.created_at + "Z").toLocaleDateString("it-IT")}
+                  Creato: {new Date(u.created_at + "Z").toLocaleDateString("it-IT")}
                 </p>
               </div>
               <div className="flex gap-1 shrink-0">
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={() => openEdit(u)}
-                  className="h-8 w-8 rounded-lg flex items-center justify-center text-ivi-muted hover:text-ivi-navy hover:bg-ivi-bg border-none cursor-pointer transition-colors"
                   aria-label={`Modifica ${u.username}`}
                 >
                   <Pencil className="h-3.5 w-3.5" />
-                </button>
+                </Button>
                 {u.id !== user?.id && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-500 hover:text-red-600"
                     onClick={() => handleDelete(u)}
-                    className="h-8 w-8 rounded-lg flex items-center justify-center text-ivi-muted hover:text-ivi-red hover:bg-ivi-red/10 border-none cursor-pointer transition-colors"
                     aria-label={`Elimina ${u.username}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
           ))}
-
-          {users.length === 0 && (
-            <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-ivi-border flex items-center justify-center">
-                <Users className="h-6 w-6 text-ivi-muted" />
-              </div>
-              <p className="text-sm text-ivi-muted">Nessun utente trovato</p>
-            </div>
-          )}
         </div>
+
+        {users.length === 0 && !loadingUsers && (
+          <p className="text-center text-sm text-muted-foreground py-8">Nessun utente trovato</p>
+        )}
       </main>
     </div>
   );

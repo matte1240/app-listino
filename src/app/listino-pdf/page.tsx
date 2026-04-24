@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Printer, PackageSearch, Loader2 } from "lucide-react";
+import { Printer, PackageSearch } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import type { Material } from "@/types";
 
@@ -50,41 +51,38 @@ export default function ListinoPdfPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-dvh bg-ivi-bg flex items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-ivi-muted" />
+      <div className="min-h-dvh flex items-center justify-center">
+        <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
   }
 
   if (materials.length === 0) {
     return (
-      <div className="min-h-dvh bg-ivi-bg flex items-center justify-center px-4">
+      <div className="min-h-dvh flex items-center justify-center px-4">
         <div className="text-center">
-          <div className="mx-auto mb-3 h-16 w-16 rounded-2xl bg-ivi-border flex items-center justify-center">
-            <PackageSearch className="h-7 w-7 text-ivi-muted" />
+          <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+            <PackageSearch className="h-7 w-7 text-muted-foreground/60" />
           </div>
-          <p className="font-semibold text-ivi-text">Nessun listino disponibile</p>
-          <p className="text-sm text-ivi-muted mt-1">Carica prima un file Excel dalla sezione Admin.</p>
+          <p className="font-semibold">Nessun listino disponibile</p>
+          <p className="text-sm text-muted-foreground mt-1">Carica prima un file Excel dal pulsante in alto.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="listino-pdf-page min-h-dvh bg-ivi-bg">
+    <div className="listino-pdf-page min-h-dvh bg-background">
       <main className="max-w-6xl mx-auto px-4 py-5 md:py-8">
         <div className="no-print mb-4 flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-ivi-text">Listino PDF</h1>
-            <p className="text-sm text-ivi-muted">Vista stampabile per consultazione in cantiere.</p>
+            <h1 className="text-lg font-bold">Listino PDF</h1>
+            <p className="text-sm text-muted-foreground">Vista stampabile per consultazione in cantiere.</p>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 bg-ivi-navy text-white text-sm font-semibold px-4 py-2.5 rounded-xl border-none cursor-pointer hover:bg-ivi-navy-light transition-colors"
-          >
+          <Button onClick={() => window.print()} className="rounded-xl gap-2">
             <Printer className="h-4 w-4" />
             Esporta PDF
-          </button>
+          </Button>
         </div>
 
         <section className="listino-sheet rounded-xl border bg-white text-black p-4 md:p-6">

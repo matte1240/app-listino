@@ -44,5 +44,4 @@ yarn-error.log*
 next-env.d.ts
 
 # Uploaded Excel files
-/public/*.xlsx
-/public/*.xls
+/public/PER MATTEO.xlsx
