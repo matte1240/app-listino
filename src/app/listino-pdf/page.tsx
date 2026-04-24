@@ -79,7 +79,7 @@ export default function ListinoPdfPage() {
             <h1 className="text-lg font-bold">Listino PDF</h1>
             <p className="text-sm text-muted-foreground">Vista stampabile per consultazione in cantiere.</p>
           </div>
-          <Button onClick={() => window.print()} className="rounded-xl gap-2">
+          <Button onClick={() => window.print()} className="gap-2">
             <Printer className="h-4 w-4" />
             Esporta PDF
           </Button>

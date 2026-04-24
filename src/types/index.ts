@@ -25,6 +25,7 @@ export interface OrderHistoryItem {
   qty: number;
   um: string;
   prezzoListino: number;
+  sconto?: number; // 0 | 8 | 15
 }
 
 export type OrderStatus = 'bozza' | 'confermato';
@@ -46,6 +47,7 @@ export interface Order {
 export interface OrderItem {
   flagged: boolean;
   qty: number;
+  sconto: 0 | 8 | 15;
 }
 
 export type OrderMap = Record<string, OrderItem>;

@@ -176,6 +176,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         qty: orderItems[m.codice]?.qty ?? 0,
         um: m.um,
         prezzoListino: m.prezzoListino,
+        sconto: orderItems[m.codice]?.sconto ?? 0,
       }));
       const url = isEditing ? `/api/orders/${editingOrder!.id}` : "/api/orders";
       const method = isEditing ? "PUT" : "POST";
@@ -204,6 +205,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         qty: orderItems[m.codice]?.qty ?? 0,
         um: m.um,
         prezzoListino: m.prezzoListino,
+        sconto: orderItems[m.codice]?.sconto ?? 0,
       }));
 
       const url = isEditing ? `/api/orders/${editingOrder!.id}` : "/api/orders";
@@ -363,7 +365,7 @@ export default function OrderWizard({ editingOrder }: Props) {
           </div>
 
           <Button
-            className="mt-2 h-11 rounded-xl gap-2 font-semibold"
+            className="mt-2 h-11 gap-2 font-semibold"
             disabled={!canGoNextStep1}
             onClick={() => setStep(2)}
           >
@@ -429,14 +431,13 @@ export default function OrderWizard({ editingOrder }: Props) {
 
             <Button
               variant="outline"
-              className="rounded-xl gap-2 text-sm"
-              onClick={() => setStep(1)}
+              className="gap-2 text-sm"
             >
               <ChevronLeft className="h-4 w-4" />
               Indietro
             </Button>
             <Button
-              className="rounded-xl gap-2 text-sm font-semibold"
+              className="gap-2 text-sm font-semibold"
               disabled={!canGoNextStep2}
               onClick={() => setStep(3)}
             >
@@ -449,7 +450,7 @@ export default function OrderWizard({ editingOrder }: Props) {
 
         {/* Mobile sticky bottom bar */}
         <div className="md:hidden sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border px-4 py-3 flex items-center gap-3">
-          <Button variant="outline" size="sm" className="rounded-xl gap-1.5" onClick={() => setStep(1)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setStep(1)}>
             <ChevronLeft className="h-4 w-4" />
             Indietro
           </Button>
@@ -459,7 +460,7 @@ export default function OrderWizard({ editingOrder }: Props) {
           </div>
           <Button
             size="sm"
-            className="rounded-xl gap-1.5 font-semibold"
+            className="gap-1.5 font-semibold"
             disabled={!canGoNextStep2}
             onClick={() => setStep(3)}
           >
@@ -497,7 +498,7 @@ export default function OrderWizard({ editingOrder }: Props) {
               id="magazzino"
               value={orderInfo.magazzino}
               onChange={(e) => setOrderInfo({ magazzino: e.target.value as typeof orderInfo.magazzino })}
-              className="h-11 rounded-xl border border-input bg-background px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-base text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               style={{ fontSize: "16px" }}
             >
               <option value="">Seleziona magazzino…</option>
@@ -522,7 +523,7 @@ export default function OrderWizard({ editingOrder }: Props) {
                 if (value) setOrderInfo({ luogoConsegna: value });
               }}
               disabled={!orderInfo.clienteId || recentDestinationsLoading || recentDestinations.length === 0}
-              className="h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:opacity-60"
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60"
             >
               <option value="">
                 {recentDestinationsLoading
@@ -592,15 +593,13 @@ export default function OrderWizard({ editingOrder }: Props) {
           <div className="flex gap-3 mt-2">
             <Button
               variant="outline"
-              className="flex-1 h-11 rounded-xl gap-2"
-              onClick={() => setStep(2)}
+              className="flex-1 h-11 gap-2"
             >
               <ChevronLeft className="h-4 w-4" />
               Indietro
             </Button>
             <Button
-              className="flex-1 h-11 rounded-xl gap-2 font-semibold"
-              disabled={!canGoNextStep3}
+              className="flex-1 h-11 gap-2 font-semibold"
               onClick={() => setStep(4)}
             >
               Avanti — Riepilogo
@@ -697,6 +696,8 @@ export default function OrderWizard({ editingOrder }: Props) {
           <div className="divide-y divide-border/60">
             {flaggedItems.map((m) => {
               const qty = orderItems[m.codice]?.qty ?? 0;
+              const sconto = orderItems[m.codice]?.sconto ?? 0;
+              const prezzoScontato = sconto > 0 ? m.prezzoListino * (1 - sconto / 100) : null;
               return (
                 <div key={m.codice} className="flex items-center gap-3 px-4 py-2.5">
                   <div className="flex-1 min-w-0">
@@ -706,7 +707,15 @@ export default function OrderWizard({ editingOrder }: Props) {
                   <div className="flex items-center gap-2 text-xs shrink-0">
                     <span className="font-bold">{qty}</span>
                     <span className="text-muted-foreground">{m.um}</span>
-                    <span className="text-muted-foreground/60">€{m.prezzoListino.toFixed(3)}</span>
+                    {sconto > 0 ? (
+                      <span className="flex items-center gap-1">
+                        <span className="line-through text-muted-foreground/50">€{m.prezzoListino.toFixed(3)}</span>
+                        <span className="font-semibold text-primary">€{prezzoScontato!.toFixed(3)}</span>
+                        <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{sconto}%</span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/60">€{m.prezzoListino.toFixed(3)}</span>
+                    )}
                   </div>
                 </div>
               );
@@ -722,7 +731,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         <div className="flex gap-3 mt-2">
           <Button
             variant="outline"
-            className="h-11 rounded-xl gap-2 px-4"
+            className="h-11 gap-2 px-4"
             onClick={() => setStep(3)}
             disabled={saving}
           >
@@ -731,7 +740,7 @@ export default function OrderWizard({ editingOrder }: Props) {
           </Button>
           <Button
             variant="outline"
-            className="flex-1 h-11 rounded-xl gap-2 font-semibold border-dashed"
+            className="flex-1 h-11 gap-2 font-semibold border-dashed"
             onClick={() => handleSave("bozza")}
             disabled={saving}
           >
@@ -739,7 +748,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             Salva bozza
           </Button>
           <Button
-            className="flex-1 h-11 rounded-xl gap-2 font-semibold"
+            className="flex-1 h-11 gap-2 font-semibold"
             onClick={() => handleSave("confermato")}
             disabled={saving}
           >

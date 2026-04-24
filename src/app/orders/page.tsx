@@ -107,7 +107,7 @@ export default function OrdersPage() {
   return (
     <div className="min-h-dvh bg-background">
       <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-3">
-        <h1 className="font-bold text-base">Cronologia Ordini</h1>
+        <h1 className="font-bold text-lg">Cronologia Ordini</h1>
           {/* Search Box */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -116,12 +116,12 @@ export default function OrdersPage() {
               placeholder="Cerca per numero, cliente, cantiere, agente"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-border bg-background text-sm placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full pl-9 pr-9 h-11 rounded-xl border border-border bg-card text-sm shadow-sm placeholder:text-muted-foreground/55 focus:outline-none focus:ring-[3px] focus:ring-ring/50 focus:border-ring transition-[color,box-shadow]"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
                 aria-label="Cancella ricerca"
               >
                 <X className="h-4 w-4" />
@@ -231,7 +231,15 @@ export default function OrdersPage() {
                           <div className="flex items-center gap-2 shrink-0 text-xs">
                             <span className="font-bold text-foreground">{item.qty}</span>
                             <span className="text-muted-foreground">{item.um}</span>
-                            <span className="text-muted-foreground/60">€{item.prezzoListino.toFixed(3)}</span>
+                            {item.sconto && item.sconto > 0 ? (
+                              <span className="flex items-center gap-1">
+                                <span className="line-through text-muted-foreground/50">€{item.prezzoListino.toFixed(3)}</span>
+                                <span className="font-semibold text-primary">€{(item.prezzoListino * (1 - item.sconto / 100)).toFixed(3)}</span>
+                                <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{item.sconto}%</span>
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/60">€{item.prezzoListino.toFixed(3)}</span>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -255,7 +263,7 @@ export default function OrdersPage() {
                                 variant="destructive"
                                 onClick={() => handleDelete(order.id)}
                                 disabled={deleting}
-                                className="rounded-xl text-xs h-8"
+                                className="text-xs h-8"
                               >
                                 {deleting ? (
                                   <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Cancellazione…</>
@@ -268,7 +276,7 @@ export default function OrdersPage() {
                                 variant="outline"
                                 onClick={() => setDeleteConfirm(null)}
                                 disabled={deleting}
-                                className="rounded-xl text-xs h-8"
+                                className="text-xs h-8"
                               >
                                 Annulla
                               </Button>
@@ -285,7 +293,7 @@ export default function OrdersPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(order)}
-                          className="text-primary hover:bg-primary/10 hover:text-primary rounded-xl text-xs"
+                          className="text-primary hover:bg-primary/10 hover:text-primary text-xs"
                         >
                           <Pencil className="h-3.5 w-3.5 mr-1.5" />
                           Modifica ordine
@@ -294,7 +302,7 @@ export default function OrdersPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteConfirm(order.id)}
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive rounded-xl text-xs"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                           Elimina ordine

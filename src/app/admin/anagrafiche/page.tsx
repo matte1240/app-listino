@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Users } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 import UploadAnagrafiche from "@/components/UploadAnagrafiche";
 import { useAuth } from "@/lib/auth-context";
 
@@ -27,10 +28,12 @@ export default function AdminAnagrafichePage() {
   return (
     <div className="min-h-dvh bg-background">
       <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-5">
-        <h1 className="font-bold text-base flex items-center gap-2">
-          <Users className="h-4 w-4" />
-          Anagrafiche clienti
-        </h1>
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-foreground font-medium">Anagrafiche</span>
+        </div>
+        <h1 className="font-bold text-lg">Anagrafiche clienti</h1>
 
         <div className="rounded-2xl border bg-card p-4 flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">

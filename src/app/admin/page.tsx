@@ -56,16 +56,17 @@ export default function AdminHomePage() {
     <div className="min-h-dvh bg-background">
       <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-5">
         <div>
-          <h1 className="font-bold text-base">Pannello Admin</h1>
+          <h1 className="font-bold text-lg">Pannello Admin</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Seleziona l&apos;area amministrativa che vuoi gestire.
           </p>
         </div>
 
-        {/* Admin tools */}
-        <div className="flex items-center gap-2 p-3 rounded-2xl bg-muted/40 border border-border">
-          <div className="flex-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Strumenti</p>
+        {/* Upload listino */}
+        <div className="rounded-2xl border border-border bg-card p-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-sm">Importa listino</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Carica un file Excel per aggiornare il catalogo materiali.</p>
           </div>
           <UploadExcel />
         </div>

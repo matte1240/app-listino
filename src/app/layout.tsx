@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { DM_Sans } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
 import Navbar from "@/components/Navbar";
 import PwaRegister from "@/components/PwaRegister";
 import "./globals.css";
+
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "Listino Materiali",
@@ -35,7 +38,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#005f93",
+  themeColor: "#1B3A6B",
 };
 
 export default function RootLayout({
@@ -44,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="it">
+    <html lang="it" className={dmSans.variable}>
       <body className="font-sans antialiased bg-background text-foreground">
         <PwaRegister />
         <AuthProvider>

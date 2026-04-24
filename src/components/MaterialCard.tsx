@@ -17,9 +17,11 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
   const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const setQty = useOrderStore((s) => s.setQty);
+  const setSconto = useOrderStore((s) => s.setSconto);
 
   const isFlagged = orderItem?.flagged ?? false;
   const qty = orderItem?.qty ?? 0;
+  const sconto = orderItem?.sconto ?? 0;
   const [expanded, setExpanded] = useState(false);
   const qtyInputRef = useRef<HTMLInputElement>(null);
 
@@ -138,48 +140,72 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
           </label>
         </div>
 
-        {/* Quantity row — shown when expanded or flagged, hidden in catalog mode */}
+        {/* Quantity + discount rows — shown when expanded or flagged, hidden in catalog mode */}
         {!isReadOnlyCatalog && showQtyRow && (
-          <div className="mt-4 flex items-center gap-3 pl-8">
-            <span className="text-sm font-medium text-muted-foreground shrink-0">Qtà ordine:</span>
-            <div className="flex items-center rounded-xl border border-primary/30 bg-background overflow-hidden shadow-sm">
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setQty(codice, qty - 1)}
-                className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
-                aria-label="Diminuisci quantità"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-              <input
-                ref={qtyInputRef}
-                type="number"
-                min={0}
-                value={qty === 0 ? "" : qty}
-                onChange={(e) => handleQtyChange(e.target.value)}
-                onBlur={(e) => {
-                  if (e.target.value === "" || e.target.value === "0") {
-                    setQty(codice, 0);
-                    setExpanded(false);
-                  }
-                }}
-                placeholder="0"
-                inputMode="numeric"
-                className="w-14 h-10 text-center font-bold bg-background border-x border-primary/30 focus:outline-none focus:bg-primary/5"
-                style={{ fontSize: "16px" }}
-              />
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setQty(codice, qty + 1)}
-                className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
-                aria-label="Aumenta quantità"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
+          <div className="mt-4 flex flex-col gap-3">
+            <div className="flex items-center gap-3 pl-8">
+              <span className="text-sm font-medium text-muted-foreground shrink-0">Qtà ordine:</span>
+              <div className="flex items-center rounded-xl border border-primary/30 bg-background overflow-hidden shadow-sm">
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setQty(codice, qty - 1)}
+                  className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
+                  aria-label="Diminuisci quantità"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <input
+                  ref={qtyInputRef}
+                  type="number"
+                  min={0}
+                  value={qty === 0 ? "" : qty}
+                  onChange={(e) => handleQtyChange(e.target.value)}
+                  onBlur={(e) => {
+                    if (e.target.value === "" || e.target.value === "0") {
+                      setQty(codice, 0);
+                      setExpanded(false);
+                    }
+                  }}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className="w-14 h-10 text-center font-bold bg-background border-x border-primary/30 focus:outline-none focus:bg-primary/5"
+                  style={{ fontSize: "16px" }}
+                />
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setQty(codice, qty + 1)}
+                  className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
+                  aria-label="Aumenta quantità"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {um && (
+                <span className="text-xs font-semibold text-muted-foreground">{um}</span>
+              )}
             </div>
-            {um && (
-              <span className="text-xs font-semibold text-muted-foreground">{um}</span>
-            )}
+
+            {/* Discount selector */}
+            <div className="flex items-center gap-2 pl-8">
+              <span className="text-sm font-medium text-muted-foreground shrink-0">Sconto:</span>
+              <div className="flex gap-1.5">
+                {([0, 8, 15] as const).map((pct) => (
+                  <button
+                    key={pct}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setSconto(codice, pct)}
+                    className={cn(
+                      "h-7 px-2.5 rounded-lg text-xs font-semibold border transition-colors",
+                      sconto === pct
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                    )}
+                  >
+                    {pct === 0 ? "Nessuno" : `-${pct}%`}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

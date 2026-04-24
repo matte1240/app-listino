@@ -50,7 +50,7 @@ export default function Navbar() {
   return (
     <>
       {/* Top bar */}
-      <nav className="sticky top-0 z-40 h-14 bg-background/95 backdrop-blur-md border-b border-border flex items-center">
+      <nav className="sticky top-0 z-40 h-14 bg-primary border-b border-primary-foreground/10 flex items-center">
         <div className="w-full px-4 flex items-center justify-between">
 
           {/* Left section: Logo + hamburger */}
@@ -58,7 +58,7 @@ export default function Navbar() {
             {/* Mobile: hamburger (only outside wizard) */}
             {!isWizardMode && (
               <button
-                className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors shrink-0"
+                className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg text-white hover:bg-white/10 transition-colors shrink-0"
                 onClick={() => setOpen(true)}
                 aria-label="Apri menu"
               >
@@ -70,19 +70,11 @@ export default function Navbar() {
             {!isWizardMode && (
               <Link href="/" className="flex items-center shrink-0">
                 <Image
-                  src="/IVICOLORS_marchio.png"
-                  alt="IVI Colors"
-                  width={110}
-                  height={36}
-                  className="h-8 w-auto object-contain dark:hidden"
-                  priority
-                />
-                <Image
                   src="/IVI_white_marchio.png"
                   alt="IVI Colors"
                   width={110}
                   height={36}
-                  className="h-8 w-auto object-contain hidden dark:block"
+                  className="h-8 w-auto object-contain"
                   priority
                 />
               </Link>
@@ -91,14 +83,14 @@ export default function Navbar() {
             {/* Wizard mode: context label */}
             {isWizardMode && (
               <div className="flex items-center gap-2 shrink-0">
-                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isEditOrder ? "bg-amber-500" : "bg-primary"} text-primary-foreground`}>
+                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isEditOrder ? "bg-amber-400" : "bg-white/20"} text-white`}>
                   {isEditOrder ? <FileText className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                 </div>
-                <span className="font-bold text-sm">
+                <span className="font-bold text-sm text-white">
                   {isEditOrder ? `Modifica ordine #${editOrderId}` : "Nuovo ordine"}
                 </span>
                 {orderInfo.cliente && (
-                  <span className="hidden sm:inline text-xs text-muted-foreground">— {orderInfo.cliente}</span>
+                  <span className="hidden sm:inline text-xs text-white/60">— {orderInfo.cliente}</span>
                 )}
               </div>
             )}
@@ -116,8 +108,8 @@ export default function Navbar() {
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors",
                       active
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        ? "bg-white/15 text-white"
+                        : "text-white/70 hover:text-white hover:bg-white/10"
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -136,7 +128,7 @@ export default function Navbar() {
             {!isWizardMode && (
               <Button
                 size="sm"
-                className="gap-1.5 h-8 rounded-xl font-semibold"
+                className="gap-1.5 h-8 rounded-xl font-semibold bg-white text-primary hover:bg-white/90"
                 onClick={() => router.push("/orders/new")}
               >
                 <Plus className="h-4 w-4" />
@@ -149,7 +141,7 @@ export default function Navbar() {
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-1.5 h-8 rounded-xl font-semibold text-muted-foreground"
+                className="gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
                   onClick={() => setExitDialogOpen(true)}
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -161,7 +153,7 @@ export default function Navbar() {
             <div className="relative">
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center justify-center h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-colors"
+                className="flex items-center justify-center h-8 w-8 rounded-full bg-white/20 text-white font-bold text-xs border border-white/30 hover:bg-white/30 transition-colors"
                 aria-expanded={isUserMenuOpen}
                 aria-label={`Menu utente ${user.username}`}
                 title={user.username}
@@ -206,7 +198,7 @@ export default function Navbar() {
           />
           <div className="fixed top-0 left-0 z-50 h-full w-60 bg-background border-r border-border shadow-xl md:hidden flex flex-col">
             <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
-              <span className="font-bold text-sm">{user.username}</span>
+              <span className="font-bold text-sm text-foreground">{user.username}</span>
               <button
                 onClick={() => { setOpen(false); setIsUserMenuOpen(false); }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
@@ -230,7 +222,6 @@ export default function Navbar() {
                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     )}
                   >
-                    <Icon className="h-5 w-5" />
                     {label}
                   </Link>
                 );

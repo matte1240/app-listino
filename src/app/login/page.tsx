@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ShoppingCart } from "lucide-react";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -32,50 +32,58 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <ShoppingCart className="h-6 w-6" />
-          </div>
-          <h1 className="text-xl font-bold text-foreground">Listino Materiali</h1>
-          <p className="text-sm text-muted-foreground">Accedi per continuare</p>
+      <div className="w-full max-w-sm overflow-hidden rounded-2xl shadow-lg border border-border">
+        {/* Header navy con logo IVI */}
+        <div className="bg-primary px-6 py-8 flex flex-col items-center gap-2">
+          <Image
+            src="/IVI_white_marchio.png"
+            alt="IVI Colors"
+            width={150}
+            height={50}
+            className="h-10 w-auto object-contain"
+            priority
+          />
+          <p className="text-primary-foreground/70 text-sm mt-1">Accedi per ordinare materiali</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              type="text"
-              autoComplete="username"
-              required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Inserisci username"
-            />
-          </div>
+        {/* Form su sfondo chiaro */}
+        <div className="bg-card px-6 py-6 space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                autoComplete="username"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Inserisci username"
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Inserisci password"
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Inserisci password"
+              />
+            </div>
 
-          {error && (
-            <p className="text-sm text-red-500 font-medium">{error}</p>
-          )}
+            {error && (
+              <p className="text-sm text-destructive font-medium">{error}</p>
+            )}
 
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? "Accesso..." : "Accedi"}
-          </Button>
-        </form>
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? "Accesso..." : "Accedi"}
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );

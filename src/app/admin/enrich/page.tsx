@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { Sparkles, Loader2, CheckCircle2, AlertCircle, RotateCw, Package } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, AlertCircle, RotateCw, Package, ChevronRight } from "lucide-react";
 
 interface LogEntry {
   time: string;
@@ -151,7 +152,12 @@ export default function EnrichPage() {
   return (
     <div className="min-h-dvh bg-background">
       <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-6">
-        <h1 className="font-bold text-base">Arricchimento AI</h1>
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-foreground font-medium">AI</span>
+        </div>
+        <h1 className="font-bold text-lg">Arricchimento AI</h1>
         {/* Info card */}
         <div className="rounded-2xl border bg-card p-5">
           <h2 className="font-bold text-sm mb-2">Come funziona</h2>
@@ -195,7 +201,7 @@ export default function EnrichPage() {
             <Button
               onClick={() => handleEnrich(true)}
               disabled={isRunning}
-              className="flex-1 rounded-xl"
+              className="flex-1"
             >
               {isRunning ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -208,7 +214,7 @@ export default function EnrichPage() {
               variant="outline"
               onClick={() => handleEnrich(false)}
               disabled={isRunning}
-              className="flex-1 rounded-xl"
+              className="flex-1"
             >
               {isRunning ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -239,8 +245,8 @@ export default function EnrichPage() {
                   background: progress.status === "error"
                     ? "var(--color-destructive)"
                     : progress.status === "done"
-                    ? "linear-gradient(90deg, #22c55e, #16a34a)"
-                    : "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.7))",
+                    ? "oklch(0.527 0.154 150)"
+                    : "linear-gradient(90deg, var(--color-primary), color-mix(in oklch, var(--color-primary) 70%, transparent))",
                 }}
               />
               {isRunning && (
@@ -261,7 +267,7 @@ export default function EnrichPage() {
                 </span>
               )}
               {progress.errorCount > 0 && (
-                <span className="text-red-500 font-medium">
+                <span className="text-destructive font-medium">
                   {progress.errorCount} errori
                 </span>
               )}
@@ -273,7 +279,7 @@ export default function EnrichPage() {
                 <div key={i} className="flex gap-2">
                   <span className="text-muted-foreground/50 shrink-0 tabular-nums">{log.time}</span>
                   <span className={
-                    log.type === "error" ? "text-red-500" :
+                    log.type === "error" ? "text-destructive" :
                     log.type === "success" ? "text-green-600 dark:text-green-400" :
                     "text-foreground/70"
                   }>
@@ -289,14 +295,14 @@ export default function EnrichPage() {
         {/* Final result */}
         {progress.status === "done" && progress.message && (
           <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4 flex items-start gap-3">
-            <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
             <p className="text-sm">{progress.message}</p>
           </div>
         )}
 
         {progress.status === "error" && progress.message && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <p className="text-sm">{progress.message}</p>
           </div>
         )}

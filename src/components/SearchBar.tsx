@@ -26,7 +26,7 @@ export default function SearchBar() {
               e.stopPropagation();
             }
           }}
-          className="pl-9 pr-9 text-base h-12 rounded-2xl bg-card border-border shadow-sm placeholder:text-muted-foreground/55 focus-visible:ring-primary/50"
+          className="pl-9 pr-9 text-sm h-11 rounded-xl bg-card border-border shadow-sm placeholder:text-muted-foreground/55 focus-visible:ring-ring/50"
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"

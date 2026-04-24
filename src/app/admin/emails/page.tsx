@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Save, Loader2, CheckCircle2, Warehouse } from "lucide-react";
+import { Mail, Save, Loader2, CheckCircle2, Warehouse, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { MAGAZZINI } from "@/types";
 
@@ -70,16 +71,17 @@ export default function EmailsPage() {
   return (
     <div className="min-h-dvh bg-background">
       <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-5">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-foreground font-medium">Email</span>
+        </div>
         <div className="flex items-center justify-between">
-          <h1 className="font-bold text-base flex items-center gap-2">
-            <Mail className="h-4.5 w-4.5" />
-            Email Filiali
-          </h1>
+          <h1 className="font-bold text-lg">Email Filiali</h1>
           <Button
             onClick={handleSave}
             disabled={saving || saved}
             size="sm"
-            className="gap-1.5 rounded-xl h-9"
           >
             {saved ? (
               <><CheckCircle2 className="h-4 w-4" /> Salvato</>
@@ -118,7 +120,7 @@ export default function EmailsPage() {
                     placeholder="ordini@filiale.it"
                     value={entry.emailTo}
                     onChange={(e) => updateField(magazzino, "emailTo", e.target.value)}
-                    className="h-10 rounded-xl text-sm bg-background"
+                    className="text-sm bg-background"
                   />
                 </div>
 
@@ -132,7 +134,7 @@ export default function EmailsPage() {
                     placeholder="responsabile@filiale.it, admin@azienda.it"
                     value={entry.emailCc}
                     onChange={(e) => updateField(magazzino, "emailCc", e.target.value)}
-                    className="h-10 rounded-xl text-sm bg-background"
+                    className="text-sm bg-background"
                   />
                 </div>
               </div>

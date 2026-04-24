@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X, ChevronRight } from "lucide-react";
+import Link from "next/link";
 
 interface UserRow {
   id: number;
@@ -160,18 +161,23 @@ export default function AdminUsersPage() {
   return (
     <div className="min-h-dvh bg-background">
       <main className="max-w-2xl mx-auto w-full px-4 pt-5 pb-5 space-y-4">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-foreground font-medium">Utenti</span>
+        </div>
         <div className="flex items-center justify-between">
-          <h1 className="font-bold text-base">Gestione Utenti</h1>
-          <Button size="sm" onClick={openCreate} className="gap-1.5 h-9 rounded-xl">
+          <h1 className="font-bold text-lg">Gestione Utenti</h1>
+          <Button size="sm" onClick={openCreate} className="gap-1.5 h-9">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Nuovo utente</span>
           </Button>
         </div>
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         {/* Form overlay */}
         {showForm && (
-          <div className="border border-border rounded-xl p-4 bg-card shadow-sm space-y-4">
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-sm">
                 {editingId ? "Modifica utente" : "Nuovo utente"}
@@ -215,7 +221,7 @@ export default function AdminUsersPage() {
                   id="form-role"
                   value={form.role}
                   onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as "admin" | "agente" }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="h-9 w-full rounded-xl border border-input bg-transparent px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                   <option value="agente">Agente</option>
                   <option value="admin">Admin</option>
@@ -233,7 +239,7 @@ export default function AdminUsersPage() {
                 />
               </div>
 
-              {formError && <p className="text-sm text-red-500">{formError}</p>}
+              {formError && <p className="text-sm text-destructive">{formError}</p>}
 
               <div className="flex gap-2 pt-1">
                 <Button type="submit" size="sm" disabled={saving}>
@@ -252,7 +258,7 @@ export default function AdminUsersPage() {
           {users.map((u) => (
             <div
               key={u.id}
-              className="flex items-center justify-between gap-3 border border-border rounded-xl p-3 bg-card"
+              className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card shadow-sm p-3"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">

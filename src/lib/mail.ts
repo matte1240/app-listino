@@ -96,14 +96,23 @@ function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "n
   const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0);
   const rows = order.items
     .map(
-      (item) => `
+      (item) => {
+        const prezzoEffettivo = item.sconto && item.sconto > 0
+          ? item.prezzoListino * (1 - item.sconto / 100)
+          : item.prezzoListino;
+        const scontoCell = item.sconto && item.sconto > 0
+          ? `<strong>-${item.sconto}%</strong>`
+          : `—`;
+        return `
       <tr>
         <td style="border:1px solid #cccccc;padding:6px;text-align:left">${item.codice}</td>
         <td style="border:1px solid #cccccc;padding:6px;text-align:left">${item.descrizione}</td>
         <td style="border:1px solid #cccccc;padding:6px;text-align:center">${item.qty}</td>
         <td style="border:1px solid #cccccc;padding:6px;text-align:center">${item.um}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:right">EUR ${item.prezzoListino.toFixed(2)}</td>
-      </tr>`
+        <td style="border:1px solid #cccccc;padding:6px;text-align:center">${scontoCell}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:right">EUR ${prezzoEffettivo.toFixed(2)}</td>
+      </tr>`;
+      }
     )
     .join("");
 
@@ -147,6 +156,7 @@ function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "n
               <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Descrizione</th>
               <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">Qta</th>
               <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">UM</th>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">Sconto</th>
               <th style="border:1px solid #cccccc;padding:6px;text-align:right;background:#f2f2f2;">Prezzo</th>
             </tr>
           </thead>
@@ -155,7 +165,7 @@ function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "n
             <tr>
               <td colspan="2" style="border:1px solid #cccccc;padding:6px;"><strong>Totale pezzi</strong></td>
               <td style="border:1px solid #cccccc;padding:6px;text-align:center;"><strong>${totalQty}</strong></td>
-              <td colspan="2" style="border:1px solid #cccccc;padding:6px;"></td>
+              <td colspan="3" style="border:1px solid #cccccc;padding:6px;"></td>
             </tr>
           </tbody>
         </table>
@@ -197,7 +207,11 @@ function buildOrderText(order: Order, mode: "new" | "updated" | "cancelled" = "n
 
   lines.push("", "Righe ordine:");
   for (const item of order.items) {
-    lines.push(`- ${item.codice} | ${item.descrizione} | Qta: ${item.qty} ${item.um} | EUR ${item.prezzoListino.toFixed(2)}`);
+    const prezzoEffettivo = item.sconto && item.sconto > 0
+      ? item.prezzoListino * (1 - item.sconto / 100)
+      : item.prezzoListino;
+    const scontoLabel = item.sconto && item.sconto > 0 ? ` | Sconto: -${item.sconto}%` : "";
+    lines.push(`- ${item.codice} | ${item.descrizione} | Qta: ${item.qty} ${item.um}${scontoLabel} | EUR ${prezzoEffettivo.toFixed(2)}`);
   }
   lines.push(`Totale pezzi: ${order.items.reduce((sum, item) => sum + item.qty, 0)}`);
 

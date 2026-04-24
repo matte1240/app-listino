@@ -15,6 +15,7 @@ interface OrderStore {
   setMaterials: (materials: Material[]) => void;
   toggleFlag: (codice: string) => void;
   setQty: (codice: string, qty: number) => void;
+  setSconto: (codice: string, sconto: 0 | 8 | 15) => void;
   resetOrder: () => void;
   setSearchQuery: (q: string) => void;
   setShowObsolete: (value: boolean) => void;
@@ -54,6 +55,7 @@ export const useOrderStore = create<OrderStore>()(
             [codice]: {
               flagged: !wasFlagged,
               qty: current?.qty ?? 0,
+              sconto: current?.sconto ?? 0,
             },
           },
         }));
@@ -67,6 +69,19 @@ export const useOrderStore = create<OrderStore>()(
             [codice]: {
               flagged: newQty > 0,
               qty: newQty,
+              sconto: state.orderItems[codice]?.sconto ?? 0,
+            },
+          },
+        }));
+      },
+
+      setSconto: (codice, sconto) => {
+        set((state) => ({
+          orderItems: {
+            ...state.orderItems,
+            [codice]: {
+              ...state.orderItems[codice],
+              sconto,
             },
           },
         }));
