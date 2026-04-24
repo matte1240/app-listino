@@ -16,6 +16,7 @@ const navItems = [
   { href: "/listino-pdf", label: "Listino PDF", icon: FileSpreadsheet, adminOnly: false },
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
   { href: "/admin/users", label: "Utenti", icon: Users, adminOnly: true },
+  { href: "/admin/anagrafiche", label: "Anagrafiche", icon: Users, adminOnly: true },
   { href: "/admin/enrich", label: "AI", icon: Sparkles, adminOnly: true },
   { href: "/admin/emails", label: "Email", icon: Mail, adminOnly: true },
 ];

@@ -72,6 +72,7 @@ function createDb() {
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       cliente TEXT NOT NULL,
+      cliente_id INTEGER,
       magazzino TEXT NOT NULL,
       luogo_consegna TEXT NOT NULL DEFAULT '',
       data_consegna TEXT NOT NULL DEFAULT '',
@@ -81,6 +82,58 @@ function createDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // Migration: add cliente_id column if missing (existing DBs)
+  const orderCols = db.pragma("table_info(orders)") as { name: string }[];
+  if (!orderCols.some((c) => c.name === "cliente_id")) {
+    db.exec("ALTER TABLE orders ADD COLUMN cliente_id INTEGER");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS anagrafiche (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      codice TEXT NOT NULL DEFAULT '',
+      ragione_sociale TEXT NOT NULL DEFAULT '',
+      indirizzo TEXT NOT NULL DEFAULT '',
+      cap_citta TEXT NOT NULL DEFAULT '',
+      piva TEXT NOT NULL DEFAULT '',
+      piva_norm TEXT NOT NULL DEFAULT '',
+      search_text TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Migration: add missing anagrafiche columns if table already existed
+  const anagraficheCols = db.pragma("table_info(anagrafiche)") as { name: string }[];
+  if (!anagraficheCols.some((c) => c.name === "codice")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN codice TEXT NOT NULL DEFAULT ''");
+  }
+  if (!anagraficheCols.some((c) => c.name === "ragione_sociale")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN ragione_sociale TEXT NOT NULL DEFAULT ''");
+  }
+  if (!anagraficheCols.some((c) => c.name === "indirizzo")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN indirizzo TEXT NOT NULL DEFAULT ''");
+  }
+  if (!anagraficheCols.some((c) => c.name === "cap_citta")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN cap_citta TEXT NOT NULL DEFAULT ''");
+  }
+  if (!anagraficheCols.some((c) => c.name === "piva")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN piva TEXT NOT NULL DEFAULT ''");
+  }
+  if (!anagraficheCols.some((c) => c.name === "piva_norm")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN piva_norm TEXT NOT NULL DEFAULT ''");
+  }
+  if (!anagraficheCols.some((c) => c.name === "search_text")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN search_text TEXT NOT NULL DEFAULT ''");
+  }
+  if (!anagraficheCols.some((c) => c.name === "updated_at")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
+  }
+
+  db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_codice_piva ON anagrafiche(codice, piva_norm)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_ragione ON anagrafiche(ragione_sociale)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_search ON anagrafiche(search_text)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS branch_emails (

@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrderStore } from "@/lib/useOrderStore";
-import { MAGAZZINI } from "@/types";
+import { MAGAZZINI, type AnagraficaSearchItem } from "@/types";
 import { useState, useEffect } from "react";
 
 interface Props {
@@ -36,6 +36,9 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   const setEditing = useOrderStore((s) => s.setEditing);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [customerResults, setCustomerResults] = useState<AnagraficaSearchItem[]>([]);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
 
   // On open, check if we need to load editing items into the order
   useEffect(() => {
@@ -55,6 +58,51 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      setCustomerDropdownOpen(false);
+      setCustomerResults([]);
+      setCustomerLoading(false);
+      return;
+    }
+
+    const q = orderInfo.cliente.trim();
+    if (q.length < 2) {
+      setCustomerResults([]);
+      setCustomerLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timeout = setTimeout(async () => {
+      setCustomerLoading(true);
+      try {
+        const res = await fetch(`/api/anagrafiche?q=${encodeURIComponent(q)}&limit=8`, {
+          credentials: "same-origin",
+        });
+
+        if (!res.ok) {
+          if (!cancelled) setCustomerResults([]);
+          return;
+        }
+
+        const data = await res.json();
+        if (!cancelled) {
+          setCustomerResults(Array.isArray(data?.anagrafiche) ? data.anagrafiche : []);
+        }
+      } catch {
+        if (!cancelled) setCustomerResults([]);
+      } finally {
+        if (!cancelled) setCustomerLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [open, orderInfo.cliente]);
+
   const isEditing = editingId !== null;
 
   // When editing and materials aren't loaded yet, show items from order directly
@@ -72,6 +120,15 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
 
   const hasItems = flaggedItems.length > 0 || editItemsNotInMaterials.length > 0;
   const canSend = orderInfo.cliente.trim() !== "" && hasItems && orderInfo.magazzino !== "";
+
+  function handleSelectCustomer(customer: AnagraficaSearchItem) {
+    setOrderInfo({
+      clienteId: customer.id,
+      cliente: customer.ragioneSociale,
+      luogoConsegna: orderInfo.luogoConsegna || `${customer.indirizzo} ${customer.capCitta}`.trim(),
+    });
+    setCustomerDropdownOpen(false);
+  }
 
   async function handleSave() {
     if (!canSend || saving) return;
@@ -149,15 +206,70 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
                   <User className="h-3.5 w-3.5 text-muted-foreground" />
                   Cliente <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  id="cliente"
-                  placeholder="Nome azienda o cliente"
-                  value={orderInfo.cliente}
-                  onChange={(e) => setOrderInfo({ cliente: e.target.value })}
-                  className="h-11 rounded-xl text-base bg-background"
-                  style={{ fontSize: "16px" }}
-                  autoComplete="organization"
-                />
+                <div className="relative">
+                  <Input
+                    id="cliente"
+                    placeholder="Nome azienda o cliente"
+                    value={orderInfo.cliente}
+                    onFocus={() => setCustomerDropdownOpen(true)}
+                    onBlur={() => {
+                      setTimeout(() => setCustomerDropdownOpen(false), 120);
+                    }}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setOrderInfo({ cliente: nextValue, clienteId: null });
+                      setCustomerDropdownOpen(true);
+                    }}
+                    className="h-11 rounded-xl text-base bg-background"
+                    style={{ fontSize: "16px" }}
+                    autoComplete="organization"
+                  />
+
+                  {customerDropdownOpen && orderInfo.cliente.trim().length >= 2 && (
+                    <div className="absolute z-30 mt-1 w-full rounded-xl border border-border bg-popover shadow-lg overflow-hidden">
+                      {customerLoading && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Ricerca clienti...</div>
+                      )}
+
+                      {!customerLoading && customerResults.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          Nessuna anagrafica trovata. Puoi inserire il cliente manualmente.
+                        </div>
+                      )}
+
+                      {!customerLoading && customerResults.length > 0 && (
+                        <div className="max-h-56 overflow-y-auto">
+                          {customerResults.map((customer) => {
+                            const isSelected = customer.id === orderInfo.clienteId;
+                            return (
+                              <button
+                                key={customer.id}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => handleSelectCustomer(customer)}
+                                className={`w-full text-left px-3 py-2.5 border-b border-border/60 last:border-b-0 hover:bg-muted/50 transition-colors ${
+                                  isSelected ? "bg-primary/10" : ""
+                                }`}
+                              >
+                                <p className="text-sm font-medium truncate">{customer.ragioneSociale}</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {customer.codice}
+                                  {customer.partitaIva ? ` · P.IVA ${customer.partitaIva}` : ""}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {orderInfo.clienteId ? (
+                  <p className="text-[11px] text-primary">Cliente selezionato da anagrafica</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Puoi cercare nelle anagrafiche o inserire il nome manualmente</p>
+                )}
               </div>
 
               {/* Magazzino */}

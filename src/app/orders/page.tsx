@@ -50,6 +50,7 @@ export default function OrdersPage() {
   function handleEdit(order: Order) {
     resetOrder();
     setOrderInfo({
+      clienteId: order.clienteId ?? null,
       cliente: order.cliente,
       magazzino: order.magazzino as Parameters<typeof setOrderInfo>[0]["magazzino"],
       luogoConsegna: order.luogoConsegna,
