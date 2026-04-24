@@ -64,20 +64,25 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
             <Checkbox
               id={`flag-${codice}`}
               checked={isFlagged}
-              onCheckedChange={() => {
-                if (isFlagged) {
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  setExpanded(true);
+                } else {
                   setQty(codice, 0);
                   setExpanded(false);
-                } else {
-                  setExpanded((v) => !v);
                 }
               }}
               className="mt-1 h-5 w-5 shrink-0"
             />
           )}
           <label
-            htmlFor={!isReadOnlyCatalog ? `flag-${codice}` : ""}
-            className={cn("flex-1 min-w-0", !isReadOnlyCatalog && "cursor-pointer")}
+            htmlFor={""}
+            onClick={() => {
+              if (!isReadOnlyCatalog && qty === 0) {
+                setExpanded((v) => !v);
+              }
+            }}
+            className={cn("flex-1 min-w-0", !isReadOnlyCatalog && qty === 0 && "cursor-pointer")}
           >
             {/* Codice + badges */}
             <div className="flex items-center gap-2 flex-wrap mb-1">

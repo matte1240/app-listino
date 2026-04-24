@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Sparkles, Mail, Building2, ArrowRight } from "lucide-react";
+import { Users, Sparkles, Mail, Building2, ArrowRight, FileText, Bot } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useOrderStore } from "@/lib/useOrderStore";
+import { Button } from "@/components/ui/button";
+import UploadExcel from "@/components/UploadExcel";
 
 const adminSections = [
   {
@@ -36,6 +39,8 @@ const adminSections = [
 export default function AdminHomePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
+  const toggleShowOriginalDesc = useOrderStore((s) => s.toggleShowOriginalDesc);
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "admin")) {
@@ -59,6 +64,24 @@ export default function AdminHomePage() {
           <p className="text-sm text-muted-foreground mt-1">
             Seleziona l&apos;area amministrativa che vuoi gestire.
           </p>
+        </div>
+
+        {/* Admin tools */}
+        <div className="flex items-center gap-2 p-3 rounded-2xl bg-muted/40 border border-border">
+          <div className="flex-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Strumenti</p>
+          </div>
+          <Button
+            variant={showOriginalDesc ? "default" : "outline"}
+            size="sm"
+            onClick={toggleShowOriginalDesc}
+            className="gap-1.5 h-8 rounded-xl font-semibold text-xs"
+            title={showOriginalDesc ? "Mostra descrizione AI" : "Mostra descrizione originale"}
+          >
+            {showOriginalDesc ? <FileText className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+            <span className="hidden sm:inline">{showOriginalDesc ? "Descrizione originale" : "Descrizione AI"}</span>
+          </Button>
+          <UploadExcel />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

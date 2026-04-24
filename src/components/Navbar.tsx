@@ -3,13 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, Bot, FileSpreadsheet, Plus, ArrowLeft } from "lucide-react";
+import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, FileSpreadsheet, Plus, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOrderStore } from "@/lib/useOrderStore";
-import UploadExcel from "@/components/UploadExcel";
 
 const navItems = [
   { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
@@ -33,8 +32,7 @@ export default function Navbar() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
-  const toggleShowOriginalDesc = useOrderStore((s) => s.toggleShowOriginalDesc);
+
   const orderInfo = useOrderStore((s) => s.orderInfo);
   const setExitDialogOpen = useOrderStore((s) => s.setExitDialogOpen);
   const isAdmin = user?.role === "admin";
@@ -54,59 +52,62 @@ export default function Navbar() {
     <>
       {/* Top bar */}
       <nav className="sticky top-0 z-40 h-14 bg-background/95 backdrop-blur-md border-b border-border flex items-center">
-        <div className="max-w-5xl w-full mx-auto px-4 flex items-center gap-3">
+        <div className="w-full px-4 flex items-center justify-between">
 
-          {/* Mobile: hamburger (only outside wizard) */}
-          {!isWizardMode && (
-            <button
-              className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors shrink-0"
-              onClick={() => setOpen(true)}
-              aria-label="Apri menu"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          )}
+          {/* Left section: Logo + hamburger */}
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Mobile: hamburger (only outside wizard) */}
+            {!isWizardMode && (
+              <button
+                className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors shrink-0"
+                onClick={() => setOpen(true)}
+                aria-label="Apri menu"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
 
-          {/* Logo (outside wizard) */}
-          {!isWizardMode && (
-            <Link href="/" className="flex items-center shrink-0">
-              <Image
-                src="/IVICOLORS_marchio.png"
-                alt="IVI Colors"
-                width={110}
-                height={36}
-                className="h-8 w-auto object-contain dark:hidden"
-                priority
-              />
-              <Image
-                src="/IVI_white_marchio.png"
-                alt="IVI Colors"
-                width={110}
-                height={36}
-                className="h-8 w-auto object-contain hidden dark:block"
-                priority
-              />
-            </Link>
-          )}
+            {/* Logo (outside wizard) */}
+            {!isWizardMode && (
+              <Link href="/" className="flex items-center shrink-0">
+                <Image
+                  src="/IVICOLORS_marchio.png"
+                  alt="IVI Colors"
+                  width={110}
+                  height={36}
+                  className="h-8 w-auto object-contain dark:hidden"
+                  priority
+                />
+                <Image
+                  src="/IVI_white_marchio.png"
+                  alt="IVI Colors"
+                  width={110}
+                  height={36}
+                  className="h-8 w-auto object-contain hidden dark:block"
+                  priority
+                />
+              </Link>
+            )}
 
-          {/* Wizard mode: context label */}
-          {isWizardMode && (
-            <div className="flex items-center gap-2 shrink-0">
-              <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isEditOrder ? "bg-amber-500" : "bg-primary"} text-primary-foreground`}>
-                {isEditOrder ? <FileText className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+            {/* Wizard mode: context label */}
+            {isWizardMode && (
+              <div className="flex items-center gap-2 shrink-0">
+                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isEditOrder ? "bg-amber-500" : "bg-primary"} text-primary-foreground`}>
+                  {isEditOrder ? <FileText className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                </div>
+                <span className="font-bold text-sm">
+                  {isEditOrder ? `Modifica ordine #${editOrderId}` : "Nuovo ordine"}
+                </span>
+                {orderInfo.cliente && (
+                  <span className="hidden sm:inline text-xs text-muted-foreground">— {orderInfo.cliente}</span>
+                )}
               </div>
-              <span className="font-bold text-sm">
-                {isEditOrder ? `Modifica ordine #${editOrderId}` : "Nuovo ordine"}
-              </span>
-              {orderInfo.cliente && (
-                <span className="hidden sm:inline text-xs text-muted-foreground">— {orderInfo.cliente}</span>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Desktop: nav links (outside wizard) */}
+          {/* Center section: nav links (outside wizard) */}
           {!isWizardMode && (
-            <div className="hidden md:flex items-center gap-1 ml-2">
+            <div className="hidden md:flex items-center gap-1">
               {items.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href;
                 return (
@@ -128,85 +129,71 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* Spacer */}
-          <div className="flex-1" />
+          {/* Right section: tools + badge */}
+          <div className="flex items-center gap-2 shrink-0">
 
-          {/* Admin tools on listino page */}
-          {pathname === "/" && isAdmin && (
-            <div className="flex items-center gap-1.5">
+
+            {/* New order button (outside wizard) */}
+            {!isWizardMode && (
               <Button
-                variant={showOriginalDesc ? "default" : "outline"}
                 size="sm"
-                onClick={toggleShowOriginalDesc}
-                className="gap-1.5 h-8 rounded-xl font-semibold text-xs"
-                title={showOriginalDesc ? "Mostra descrizione AI" : "Mostra descrizione originale"}
+                className="gap-1.5 h-8 rounded-xl font-semibold"
+                onClick={() => router.push("/orders/new")}
               >
-                {showOriginalDesc ? <FileText className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Nuovo ordine</span>
               </Button>
-              <UploadExcel />
-            </div>
-          )}
-
-          {/* New order button (outside wizard) */}
-          {!isWizardMode && (
-            <Button
-              size="sm"
-              className="gap-1.5 h-8 rounded-xl font-semibold"
-              onClick={() => router.push("/orders/new")}
-            >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Nuovo ordine</span>
-            </Button>
-          )}
-
-          {/* Wizard: exit button */}
-          {isWizardMode && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 h-8 rounded-xl font-semibold text-muted-foreground"
-                onClick={() => setExitDialogOpen(true)}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Esci</span>
-            </Button>
-          )}
-
-          {/* User badge with dropdown menu */}
-          <div className="relative">
-            <button
-              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-              className="flex items-center justify-center h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-colors"
-              aria-expanded={isUserMenuOpen}
-              aria-label={`Menu utente ${user.username}`}
-              title={user.username}
-            >
-              {getUserInitials(user.username)}
-            </button>
-            {isUserMenuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setIsUserMenuOpen(false)}
-                />
-                <div className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
-                  <div className="px-4 py-3 border-b border-border text-sm">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Utente</p>
-                    <p className="font-semibold text-foreground">{user.username}</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      logout();
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Esci
-                  </button>
-                </div>
-              </>
             )}
+
+            {/* Wizard: exit button */}
+            {isWizardMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-8 rounded-xl font-semibold text-muted-foreground"
+                  onClick={() => setExitDialogOpen(true)}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Esci</span>
+              </Button>
+            )}
+
+            {/* User badge with dropdown menu */}
+            <div className="relative">
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center justify-center h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-colors"
+                aria-expanded={isUserMenuOpen}
+                aria-label={`Menu utente ${user.username}`}
+                title={user.username}
+              >
+                {getUserInitials(user.username)}
+              </button>
+              {isUserMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsUserMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border text-sm">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Utente</p>
+                      <p className="font-semibold text-foreground">{user.username}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Esci
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </nav>
