@@ -72,7 +72,7 @@ export default function ListinoPdfPage() {
 
   return (
     <div className="listino-pdf-page min-h-dvh bg-ivi-bg">
-      <main className="max-w-6xl mx-auto px-4 py-5 md:py-8">
+      <main className="max-w-4xl mx-auto px-4 py-5 md:py-8">
         <div className="no-print mb-4 flex items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-bold text-ivi-text">Listino PDF</h1>
