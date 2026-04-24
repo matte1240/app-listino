@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
   if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
 
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
-  const requestedLimit = Number.parseInt(req.nextUrl.searchParams.get("limit") ?? "10", 10);
-  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 20)) : 10;
+  const requestedLimit = Number.parseInt(req.nextUrl.searchParams.get("limit") ?? "50", 10);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 1000)) : 50;
 
   const db = getDb();
 
