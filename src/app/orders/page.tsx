@@ -12,13 +12,10 @@ import {
   Loader2,
   Clock,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { useOrderStore } from "@/lib/useOrderStore";
 import type { Order } from "@/types";
-
-const btnPrimary = "flex items-center gap-1.5 bg-ivi-red text-white text-xs font-semibold px-3 py-1.5 rounded-xl border-none cursor-pointer disabled:opacity-60 transition-colors";
-const btnOutline = "flex items-center gap-1.5 border border-ivi-border text-ivi-muted text-xs font-semibold px-3 py-1.5 rounded-xl bg-white cursor-pointer disabled:opacity-60 hover:bg-ivi-bg transition-colors";
-const btnGhost = (color: string) => `flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border-none cursor-pointer transition-colors ${color}`;
 
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
@@ -115,8 +112,8 @@ export default function OrdersPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-dvh bg-ivi-bg flex items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-ivi-muted" />
+      <div className="min-h-dvh flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-ivi-navy" />
       </div>
     );
   }
@@ -272,24 +269,32 @@ export default function OrdersPage() {
                               inviata una email di cancellazione.
                             </p>
                             <div className="flex gap-2 mt-3">
-                              <button
+                              <Button
+                                size="sm"
                                 onClick={() => handleDelete(order.id)}
                                 disabled={deleting}
-                                className={btnPrimary}
+                                className="rounded-xl text-xs h-8 bg-ivi-red hover:bg-ivi-red/90"
                               >
                                 {deleting ? (
-                                  <><Loader2 className="h-3 w-3 animate-spin" /> Cancellazione…</>
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />{" "}
+                                    Cancellazione…
+                                  </>
                                 ) : (
-                                  <><Trash2 className="h-3 w-3" /> Sì, cancella</>
+                                  <>
+                                    <Trash2 className="h-3 w-3 mr-1.5" /> Sì, cancella
+                                  </>
                                 )}
-                              </button>
-                              <button
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 onClick={() => setDeleteConfirm(null)}
                                 disabled={deleting}
-                                className={btnOutline}
+                                className="rounded-xl text-xs h-8"
                               >
                                 Annulla
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -299,18 +304,24 @@ export default function OrdersPage() {
                     {/* Actions */}
                     {canEditOrder(order) && !showDeleteConfirm && (
                       <div className="px-4 py-3 border-t border-ivi-border flex justify-end gap-2">
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleEdit(order)}
-                          className={btnGhost("text-ivi-navy hover:bg-ivi-navy/8")}
+                          className="text-ivi-navy hover:bg-ivi-navy/8 hover:text-ivi-navy rounded-xl text-xs"
                         >
-                          <Pencil className="h-3.5 w-3.5" /> Modifica
-                        </button>
-                        <button
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                          Modifica
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setDeleteConfirm(order.id)}
-                          className={btnGhost("text-ivi-red hover:bg-ivi-red/8")}
+                          className="text-ivi-red hover:bg-ivi-red/8 hover:text-ivi-red rounded-xl text-xs"
                         >
-                          <Trash2 className="h-3.5 w-3.5" /> Elimina
-                        </button>
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                          Elimina
+                        </Button>
                       </div>
                     )}
                   </div>
