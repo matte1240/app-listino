@@ -6,7 +6,6 @@ import type { Order, OrderHistoryItem } from "@/types";
 
 interface DbOrder {
   id: number;
-  cliente_id: number | null;
   cliente: string;
   magazzino: string;
   luogo_consegna: string;
@@ -20,7 +19,6 @@ interface DbOrder {
 function dbToOrder(r: DbOrder): Order {
   return {
     id: r.id,
-    clienteId: r.cliente_id ?? null,
     cliente: r.cliente,
     magazzino: r.magazzino,
     luogoConsegna: r.luogo_consegna,
@@ -78,8 +76,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items } = body as {
-    clienteId: number | null;
+  const { cliente, magazzino, luogoConsegna, dataConsegna, note, items } = body as {
     cliente: string;
     magazzino: string;
     luogoConsegna: string;
@@ -88,33 +85,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     items: OrderHistoryItem[];
   };
 
-  if (!magazzino?.trim() || !Array.isArray(items) || items.length === 0) {
+  if (!cliente?.trim() || !magazzino?.trim() || !Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 
-  if (!Number.isInteger(clienteId) || clienteId <= 0) {
-    return NextResponse.json({ error: "Seleziona un cliente dalle anagrafiche" }, { status: 400 });
-  }
-
-  const selectedCustomer = db
-    .prepare("SELECT id, ragione_sociale FROM anagrafiche WHERE id = ?")
-    .get(clienteId) as { id: number; ragione_sociale: string } | undefined;
-
-  if (!selectedCustomer) {
-    return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
-  }
-
-  const clienteName = selectedCustomer.ragione_sociale || cliente?.trim() || "";
-  if (!clienteName) {
-    return NextResponse.json({ error: "Seleziona un cliente valido" }, { status: 400 });
-  }
-
   db.prepare(
-    `UPDATE orders SET cliente_id = ?, cliente = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?
+    `UPDATE orders SET cliente = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?
      WHERE id = ?`
   ).run(
-    selectedCustomer.id,
-    clienteName,
+    cliente.trim(),
     magazzino,
     luogoConsegna ?? "",
     dataConsegna ?? "",

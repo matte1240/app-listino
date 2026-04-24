@@ -10,7 +10,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOrderStore } from "@/lib/useOrderStore";
 import UploadExcel from "@/components/UploadExcel";
-import UploadAnagrafiche from "@/components/UploadAnagrafiche";
 
 const navItems = [
   { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
@@ -111,7 +110,6 @@ export default function Navbar() {
                   {showOriginalDesc ? <FileText className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                 </Button>
               )}
-              {isAdmin && <UploadAnagrafiche />}
               {isAdmin && <UploadExcel />}
               <Button
                 variant={flaggedCount > 0 ? "default" : "outline"}

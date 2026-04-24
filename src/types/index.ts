@@ -29,7 +29,6 @@ export interface OrderHistoryItem {
 
 export interface Order {
   id: number;
-  clienteId: number | null;
   cliente: string;
   magazzino: string;
   luogoConsegna: string;
@@ -51,22 +50,9 @@ export const MAGAZZINI = ["Pordenone", "Udine", "Fossalta di Portogruaro", "Trie
 export type Magazzino = typeof MAGAZZINI[number];
 
 export interface OrderInfo {
-  clienteId: number | null;
   cliente: string;
   luogoConsegna: string;
   dataConsegna: string;
   note: string;
   magazzino: Magazzino | "";
 }
-
-export interface Anagrafica {
-  id: number;
-  codice: string;
-  ragioneSociale: string;
-  indirizzo: string;
-  capCitta: string;
-  partitaIva: string;
-  sedeLegale: string;
-}
-
-export type AnagraficaSearchItem = Anagrafica;

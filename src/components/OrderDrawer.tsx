@@ -1,6 +1,6 @@
 "use client";
 
-import { ShoppingCart, Trash2, SendHorizonal, Pencil, User, MapPin, Calendar, MessageSquare, Package, Warehouse, CheckCircle2, Loader2, Check } from "lucide-react";
+import { ShoppingCart, Trash2, SendHorizonal, Pencil, User, MapPin, Calendar, MessageSquare, Package, Warehouse, CheckCircle2, Loader2 } from "lucide-react";
 import {
   Drawer,
   DrawerContent,
@@ -15,8 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrderStore } from "@/lib/useOrderStore";
-import { MAGAZZINI, type AnagraficaSearchItem } from "@/types";
-import { useState, useEffect, useRef } from "react";
+import { MAGAZZINI } from "@/types";
+import { useState, useEffect } from "react";
 
 interface Props {
   open: boolean;
@@ -36,11 +36,6 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   const setEditing = useOrderStore((s) => s.setEditing);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [customerQuery, setCustomerQuery] = useState(orderInfo.cliente);
-  const [customerResults, setCustomerResults] = useState<AnagraficaSearchItem[]>([]);
-  const [customerOpen, setCustomerOpen] = useState(false);
-  const [customerLoading, setCustomerLoading] = useState(false);
-  const customerBlurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // On open, check if we need to load editing items into the order
   useEffect(() => {
@@ -60,56 +55,6 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    setCustomerQuery(orderInfo.cliente);
-  }, [open, orderInfo.cliente]);
-
-  useEffect(() => {
-    return () => {
-      if (customerBlurTimeoutRef.current) {
-        clearTimeout(customerBlurTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const q = customerQuery.trim();
-    if (q.length < 2) {
-      setCustomerResults([]);
-      setCustomerLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(async () => {
-      setCustomerLoading(true);
-      try {
-        const res = await fetch(`/api/anagrafiche?q=${encodeURIComponent(q)}&limit=8`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          setCustomerResults([]);
-          return;
-        }
-        const data = await res.json();
-        setCustomerResults(Array.isArray(data?.anagrafiche) ? data.anagrafiche : []);
-      } catch (error) {
-        if ((error as Error).name !== "AbortError") {
-          setCustomerResults([]);
-        }
-      } finally {
-        setCustomerLoading(false);
-      }
-    }, 220);
-
-    return () => {
-      controller.abort();
-      clearTimeout(timeoutId);
-    };
-  }, [customerQuery, open]);
-
   const isEditing = editingId !== null;
 
   // When editing and materials aren't loaded yet, show items from order directly
@@ -126,34 +71,7 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
   const obsoleteFlaggedCount = flaggedItems.filter((m) => m.obsoleto).length;
 
   const hasItems = flaggedItems.length > 0 || editItemsNotInMaterials.length > 0;
-  const hasSelectedCustomer = typeof orderInfo.clienteId === "number" && orderInfo.clienteId > 0;
-  const canSend = hasSelectedCustomer && hasItems && orderInfo.magazzino !== "";
-  const customerNeedsSelection = customerQuery.trim() !== "" && !hasSelectedCustomer;
-
-  function handleSelectCustomer(customer: AnagraficaSearchItem) {
-    setOrderInfo({
-      clienteId: customer.id,
-      cliente: customer.ragioneSociale,
-      luogoConsegna: customer.sedeLegale,
-    });
-    setCustomerQuery(customer.ragioneSociale);
-    setCustomerResults([]);
-    setCustomerOpen(false);
-  }
-
-  function handleCustomerBlur() {
-    customerBlurTimeoutRef.current = setTimeout(() => {
-      setCustomerOpen(false);
-    }, 120);
-  }
-
-  function handleCustomerFocus() {
-    if (customerBlurTimeoutRef.current) {
-      clearTimeout(customerBlurTimeoutRef.current);
-      customerBlurTimeoutRef.current = null;
-    }
-    setCustomerOpen(true);
-  }
+  const canSend = orderInfo.cliente.trim() !== "" && hasItems && orderInfo.magazzino !== "";
 
   async function handleSave() {
     if (!canSend || saving) return;
@@ -176,16 +94,12 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...orderInfo, items }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Errore salvataggio");
-      }
+      if (!res.ok) throw new Error("Errore salvataggio");
       setSaved(true);
       resetOrder();
-      setCustomerQuery("");
       setTimeout(() => { setSaved(false); onOpenChange(false); }, 1500);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Errore nel salvataggio dell'ordine");
+    } catch {
+      alert("Errore nel salvataggio dell'ordine");
     } finally {
       setSaving(false);
     }
@@ -235,65 +149,15 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
                   <User className="h-3.5 w-3.5 text-muted-foreground" />
                   Cliente <span className="text-destructive">*</span>
                 </Label>
-                <div className="relative">
-                  <Input
-                    id="cliente"
-                    placeholder="Cerca per codice o ragione sociale"
-                    value={customerQuery}
-                    onChange={(e) => {
-                      const nextValue = e.target.value;
-                      setCustomerQuery(nextValue);
-                      setOrderInfo({ cliente: nextValue, clienteId: null });
-                      setCustomerOpen(true);
-                    }}
-                    onFocus={handleCustomerFocus}
-                    onBlur={handleCustomerBlur}
-                    className="h-11 rounded-xl text-base bg-background"
-                    style={{ fontSize: "16px" }}
-                    autoComplete="off"
-                  />
-
-                  {customerOpen && (customerQuery.trim().length >= 2 || customerLoading) && (
-                    <div className="absolute z-20 mt-1 w-full rounded-xl border border-border bg-popover shadow-lg overflow-hidden">
-                      {customerLoading ? (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">Ricerca clienti…</div>
-                      ) : customerResults.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">Nessun cliente trovato</div>
-                      ) : (
-                        <div className="max-h-56 overflow-y-auto">
-                          {customerResults.map((customer) => {
-                            const selected = customer.id === orderInfo.clienteId;
-                            return (
-                              <button
-                                key={customer.id}
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  handleSelectCustomer(customer);
-                                }}
-                                className="w-full text-left px-3 py-2.5 hover:bg-muted/60 transition-colors"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <p className="text-xs font-semibold font-mono text-muted-foreground">{customer.codice}</p>
-                                  <p className="text-sm font-semibold text-foreground truncate">{customer.ragioneSociale}</p>
-                                  {selected && <Check className="h-3.5 w-3.5 text-primary shrink-0 ml-auto" />}
-                                </div>
-                                <p className="text-xs text-muted-foreground truncate mt-0.5">{customer.sedeLegale || "Sede legale non disponibile"}</p>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {hasSelectedCustomer ? (
-                  <p className="text-[11px] text-primary">Cliente anagrafica selezionato</p>
-                ) : customerNeedsSelection ? (
-                  <p className="text-[11px] text-destructive">Seleziona un cliente dai risultati per continuare</p>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">Campo obbligatorio: selezione da anagrafiche</p>
-                )}
+                <Input
+                  id="cliente"
+                  placeholder="Nome azienda o cliente"
+                  value={orderInfo.cliente}
+                  onChange={(e) => setOrderInfo({ cliente: e.target.value })}
+                  className="h-11 rounded-xl text-base bg-background"
+                  style={{ fontSize: "16px" }}
+                  autoComplete="organization"
+                />
               </div>
 
               {/* Magazzino */}
@@ -331,9 +195,6 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
                   style={{ fontSize: "16px" }}
                   autoComplete="street-address"
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Precompilato dalla sede legale del cliente; puoi modificarlo manualmente se la destinazione e diversa.
-                </p>
               </div>
 
               {/* Data di consegna */}
@@ -495,16 +356,16 @@ export default function OrderDrawer({ open, onOpenChange }: Props) {
         <DrawerFooter className="pt-3 border-t border-border shrink-0">
           {!canSend && (
             <p className="text-xs text-center text-muted-foreground mb-1">
-              {!hasSelectedCustomer && !hasItems && orderInfo.magazzino === ""
-                ? "Seleziona cliente, magazzino e almeno un articolo"
-                : !hasSelectedCustomer && !hasItems
-                ? "Seleziona un cliente dalle anagrafiche e almeno un articolo"
+              {orderInfo.cliente.trim() === "" && !hasItems && orderInfo.magazzino === ""
+                ? "Inserisci il cliente, il magazzino e seleziona almeno un articolo"
+                : orderInfo.cliente.trim() === "" && !hasItems
+                ? "Inserisci il cliente e seleziona almeno un articolo"
                 : orderInfo.magazzino === "" && !hasItems
                 ? "Seleziona il magazzino e almeno un articolo"
-                : !hasSelectedCustomer && orderInfo.magazzino === ""
-                ? "Seleziona cliente e magazzino"
-                : !hasSelectedCustomer
-                ? "Seleziona un cliente dalle anagrafiche"
+                : orderInfo.cliente.trim() === "" && orderInfo.magazzino === ""
+                ? "Inserisci il cliente e seleziona il magazzino"
+                : orderInfo.cliente.trim() === ""
+                ? "Inserisci il nome del cliente per continuare"
                 : orderInfo.magazzino === ""
                 ? "Seleziona il magazzino di destinazione"
                 : "Seleziona almeno un articolo per continuare"}
