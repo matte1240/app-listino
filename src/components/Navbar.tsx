@@ -50,7 +50,7 @@ export default function Navbar() {
   return (
     <>
       {/* Top bar */}
-      <nav className="sticky top-0 z-40 h-14 bg-primary border-b border-primary-foreground/10 flex items-center">
+      <nav className="sticky top-0 z-40 h-14 bg-primary flex items-center">
         <div className="w-full px-4 flex items-center justify-between">
 
           {/* Left section: Logo + hamburger */}
