@@ -80,6 +80,7 @@ function createDb() {
       agente TEXT NOT NULL,
       items TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'confermato',
+      parent_order_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
@@ -92,6 +93,10 @@ function createDb() {
   if (!orderCols.some((c) => c.name === "status")) {
     db.exec("ALTER TABLE orders ADD COLUMN status TEXT NOT NULL DEFAULT 'confermato'");
   }
+  if (!orderCols.some((c) => c.name === "parent_order_id")) {
+    db.exec("ALTER TABLE orders ADD COLUMN parent_order_id INTEGER");
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS anagrafiche (

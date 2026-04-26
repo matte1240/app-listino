@@ -73,8 +73,8 @@ export async function POST(req: NextRequest) {
 
   const result = db
     .prepare(
-      `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status, parent_order_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       resolvedCliente,
@@ -85,7 +85,8 @@ export async function POST(req: NextRequest) {
       note ?? "",
       payload.username,
       JSON.stringify(items),
-      resolvedStatus
+      resolvedStatus,
+      null
     );
 
   const orderId = result.lastInsertRowid as number;
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
   // Send email notification only for confirmed orders (fire-and-forget)
   const order: Order = {
     id: orderId,
+    parentOrderId: null,
     clienteId: resolvedClienteId,
     cliente: resolvedCliente,
     magazzino,
@@ -113,6 +115,7 @@ export async function POST(req: NextRequest) {
 
 interface DbOrder {
   id: number;
+  parent_order_id: number | null;
   cliente: string;
   cliente_id: number | null;
   magazzino: string;
@@ -128,6 +131,7 @@ interface DbOrder {
 function dbToOrder(r: DbOrder): Order {
   return {
     id: r.id,
+    parentOrderId: r.parent_order_id ?? null,
     clienteId: r.cliente_id ?? null,
     cliente: r.cliente,
     magazzino: r.magazzino,

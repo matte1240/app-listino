@@ -26,6 +26,13 @@ export default function OrdersPage() {
     if (!authLoading && user) loadOrders();
   }, [authLoading, user]);
 
+  const linkedDraftByParentId = new Map<number, Order>();
+  for (const order of orders) {
+    if (order.status === "bozza" && order.parentOrderId !== null && !linkedDraftByParentId.has(order.parentOrderId)) {
+      linkedDraftByParentId.set(order.parentOrderId, order);
+    }
+  }
+
   async function loadOrders() {
     setLoading(true);
     try {
@@ -44,6 +51,14 @@ export default function OrdersPage() {
   }
 
   function handleEdit(order: Order) {
+    if (order.status === "confermato") {
+      const linkedDraft = linkedDraftByParentId.get(order.id);
+      if (linkedDraft) {
+        router.push(`/orders/${linkedDraft.id}/edit`);
+        return;
+      }
+    }
+
     router.push(`/orders/${order.id}/edit`);
   }
 
@@ -84,7 +99,7 @@ export default function OrdersPage() {
   }
 
   function orderSearchText(order: Order): string {
-    return `${order.id} ${order.cliente} ${order.luogoConsegna} ${order.agente}`.toLowerCase();
+    return `${order.id} ${order.parentOrderId ?? ""} ${order.cliente} ${order.luogoConsegna} ${order.agente}`.toLowerCase();
   }
 
   function matchesSearch(order: Order): boolean {
@@ -156,10 +171,16 @@ export default function OrdersPage() {
             filteredOrders.map((order) => {
             const isOpen = expanded === order.id;
             const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
-            const discountedItems = order.items.filter((i) => (i.sconto ?? 0) > 0);
-            const discountSummary = discountedItems
-              .map((i) => `${i.codice} -${i.sconto}%`)
-              .join(" · ");
+            const isDraft = order.status === "bozza";
+            const isLinkedDraft = isDraft && order.parentOrderId !== null;
+            const hasLinkedDraft = order.status === "confermato" && linkedDraftByParentId.has(order.id);
+            const linkedDraftLabel = isLinkedDraft ? `Bozza modifica #${order.parentOrderId}` : "Bozza";
+            const deleteTitle = isDraft ? "Conferma eliminazione bozza" : "Conferma cancellazione";
+            const deleteMessage = isDraft
+              ? `La bozza #${order.id} per ${order.cliente} verrà eliminata. Non sarà inviata alcuna email al magazzino.`
+              : `L'ordine #${order.id} per ${order.cliente} verrà eliminato e sarà inviata una email di cancellazione.${hasLinkedDraft ? " L'eventuale bozza di modifica collegata verrà eliminata automaticamente." : ""} Questa azione non è reversibile.`;
+            const editActionLabel = hasLinkedDraft ? "Apri bozza" : isDraft ? "Modifica bozza" : "Modifica ordine";
+            const deleteActionLabel = isDraft ? "Elimina bozza" : "Elimina ordine";
             const showDeleteConfirm = deleteConfirm === order.id;
             return (
               <div
@@ -178,9 +199,12 @@ export default function OrdersPage() {
                       {order.luogoConsegna && (
                         <Badge variant="secondary" className="text-xs px-2 py-0 h-5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700">{order.luogoConsegna}</Badge>
                       )}
-                        {order.status === "bozza" && (
-                          <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20">Bozza</Badge>
-                        )}
+                      {isDraft && (
+                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20">{linkedDraftLabel}</Badge>
+                      )}
+                      {hasLinkedDraft && (
+                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-blue-700 border-blue-300 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-700">Bozza aperta</Badge>
+                      )}
                       {user?.role === "admin" && (
                         <span className="text-xs text-muted-foreground/70">{order.agente}</span>
                       )}
@@ -201,14 +225,6 @@ export default function OrdersPage() {
                         </>
                       )}
                     </div>
-                    {discountedItems.length > 0 && (
-                      <p
-                        className="mt-1 text-xs text-primary/85 truncate"
-                        title={discountSummary}
-                      >
-                        Sconti: {discountSummary}
-                      </p>
-                    )}
                   </div>
                   {isOpen ? (
                     <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -265,9 +281,9 @@ export default function OrdersPage() {
                             <AlertTriangle className="h-4.5 w-4.5 text-destructive" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-semibold text-destructive">Conferma cancellazione</p>
+                            <p className="text-sm font-semibold text-destructive">{deleteTitle}</p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              L&apos;ordine #{order.id} per <strong>{order.cliente}</strong> verrà eliminato e sarà inviata una email di cancellazione. Questa azione non è reversibile.
+                              {deleteMessage}
                             </p>
                             <div className="flex gap-2 mt-3">
                               <Button
@@ -280,7 +296,7 @@ export default function OrdersPage() {
                                 {deleting ? (
                                   <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Cancellazione…</>
                                 ) : (
-                                  <><Trash2 className="h-3 w-3 mr-1.5" /> Sì, cancella ordine</>
+                                  <><Trash2 className="h-3 w-3 mr-1.5" /> Sì, conferma eliminazione</>
                                 )}
                               </Button>
                               <Button
@@ -308,7 +324,7 @@ export default function OrdersPage() {
                           className="text-primary hover:bg-primary/10 hover:text-primary text-xs"
                         >
                           <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                          Modifica ordine
+                          {editActionLabel}
                         </Button>
                         <Button
                           variant="ghost"
@@ -317,7 +333,7 @@ export default function OrdersPage() {
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                          Elimina ordine
+                          {deleteActionLabel}
                         </Button>
                       </div>
                     )}

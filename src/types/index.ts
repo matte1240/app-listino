@@ -32,6 +32,7 @@ export type OrderStatus = 'bozza' | 'confermato';
 
 export interface Order {
   id: number;
+  parentOrderId: number | null;
   clienteId: number | null;
   cliente: string;
   magazzino: string;

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { sendOrderUpdatedEmail, sendOrderCancelledEmail } from "@/lib/mail";
+import { sendOrderEmail, sendOrderUpdatedEmail, sendOrderCancelledEmail } from "@/lib/mail";
 import { normalizeUtcTimestamp } from "@/lib/datetime";
 import type { Order, OrderHistoryItem } from "@/types";
 
 interface DbOrder {
   id: number;
+  parent_order_id: number | null;
   cliente: string;
   cliente_id: number | null;
   magazzino: string;
@@ -22,6 +23,7 @@ interface DbOrder {
 function dbToOrder(r: DbOrder): Order {
   return {
     id: r.id,
+    parentOrderId: r.parent_order_id ?? null,
     clienteId: r.cliente_id ?? null,
     cliente: r.cliente,
     magazzino: r.magazzino,
@@ -117,8 +119,120 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 
+  const existingStatus: Order["status"] = existing.status === "bozza" ? "bozza" : "confermato";
+  const existingParentOrderId = existing.parent_order_id ?? null;
+  const isLinkedDraft = existingStatus === "bozza" && existingParentOrderId !== null;
+
+  // Editing a confirmed order and saving as draft creates/updates a linked draft copy.
+  if (existingStatus === "confermato" && resolvedStatus === "bozza") {
+    const linkedDraft = db
+      .prepare(
+        "SELECT * FROM orders WHERE parent_order_id = ? AND status = 'bozza' ORDER BY id DESC LIMIT 1"
+      )
+      .get(orderId) as DbOrder | undefined;
+
+    let linkedDraftId: number;
+    if (linkedDraft) {
+      db.prepare(
+        `UPDATE orders
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, agente = ?, items = ?, status = ?, parent_order_id = ?
+         WHERE id = ?`
+      ).run(
+        resolvedCliente,
+        resolvedClienteId,
+        magazzino,
+        luogoConsegna ?? "",
+        dataConsegna ?? "",
+        note ?? "",
+        existing.agente,
+        JSON.stringify(items),
+        "bozza",
+        orderId,
+        linkedDraft.id
+      );
+      linkedDraftId = linkedDraft.id;
+    } else {
+      const result = db
+        .prepare(
+          `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status, parent_order_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          resolvedCliente,
+          resolvedClienteId,
+          magazzino,
+          luogoConsegna ?? "",
+          dataConsegna ?? "",
+          note ?? "",
+          existing.agente,
+          JSON.stringify(items),
+          "bozza",
+          orderId
+        );
+      linkedDraftId = Number(result.lastInsertRowid);
+    }
+
+    const savedDraft = db.prepare("SELECT * FROM orders WHERE id = ?").get(linkedDraftId) as DbOrder | undefined;
+    if (!savedDraft) {
+      return NextResponse.json({ error: "Errore nel salvataggio della bozza" }, { status: 500 });
+    }
+
+    return NextResponse.json({ order: dbToOrder(savedDraft), linkedTo: orderId });
+  }
+
+  // Confirming a linked draft applies changes to the parent confirmed order and removes the draft.
+  if (isLinkedDraft && resolvedStatus === "confermato") {
+    const parentId = existingParentOrderId as number;
+    const parent = db.prepare("SELECT * FROM orders WHERE id = ?").get(parentId) as DbOrder | undefined;
+    if (!parent) {
+      return NextResponse.json({ error: "Ordine principale non trovato" }, { status: 409 });
+    }
+    if (payload.role !== "admin" && parent.agente !== payload.username) {
+      return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+    }
+
+    const oldItems = JSON.parse(parent.items) as OrderHistoryItem[];
+
+    db.transaction(() => {
+      db.prepare(
+        `UPDATE orders
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?
+         WHERE id = ?`
+      ).run(
+        resolvedCliente,
+        resolvedClienteId,
+        magazzino,
+        luogoConsegna ?? "",
+        dataConsegna ?? "",
+        note ?? "",
+        JSON.stringify(items),
+        "confermato",
+        null,
+        parentId
+      );
+
+      db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
+    })();
+
+    const updatedParent = db.prepare("SELECT * FROM orders WHERE id = ?").get(parentId) as DbOrder | undefined;
+    if (!updatedParent) {
+      return NextResponse.json({ error: "Ordine principale non trovato" }, { status: 500 });
+    }
+
+    const order = dbToOrder(updatedParent);
+    sendOrderUpdatedEmail(order, oldItems, payload.email).catch((err) =>
+      console.error("[mail] Errore invio email modifica ordine:", err)
+    );
+
+    return NextResponse.json({ order, appliedDraftId: orderId });
+  }
+
+  const oldItems = JSON.parse(existing.items) as OrderHistoryItem[];
+  const nextParentOrderId = isLinkedDraft ? existingParentOrderId : null;
+
   db.prepare(
-    `UPDATE orders SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?
+    `UPDATE orders
+     SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?
      WHERE id = ?`
   ).run(
     resolvedCliente,
@@ -129,19 +243,27 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     note ?? "",
     JSON.stringify(items),
     resolvedStatus,
+    nextParentOrderId,
     orderId
   );
 
-  const oldItems = JSON.parse(existing.items) as OrderHistoryItem[];
+  const updated = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder | undefined;
+  if (!updated) {
+    return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
+  }
 
-  const updated = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder;
   const order = dbToOrder(updated);
 
-  // Send email only if confirmed
-  if (resolvedStatus === 'confermato') {
-    sendOrderUpdatedEmail(order, oldItems, payload.email).catch((err) =>
-      console.error("[mail] Errore invio email modifica ordine:", err)
-    );
+  if (resolvedStatus === "confermato") {
+    if (existingStatus === "bozza" && existingParentOrderId === null) {
+      sendOrderEmail(order, payload.email).catch((err) =>
+        console.error("[mail] Errore invio email ordine:", err)
+      );
+    } else {
+      sendOrderUpdatedEmail(order, oldItems, payload.email).catch((err) =>
+        console.error("[mail] Errore invio email modifica ordine:", err)
+      );
+    }
   }
 
   return NextResponse.json({ order });
@@ -168,9 +290,29 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   const order = dbToOrder(existing);
+  const shouldSendCancellationEmail = order.status === "confermato" && order.parentOrderId === null;
 
-  const result = db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
-  if (result.changes === 0) {
+  if (!shouldSendCancellationEmail) {
+    const result = db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
+    if (result.changes === 0) {
+      return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true, deletedLinkedDrafts: 0, cancellationEmailSent: false });
+  }
+
+  const txResult = db.transaction(() => {
+    const linkedDraftsDelete = db
+      .prepare("DELETE FROM orders WHERE parent_order_id = ? AND status = 'bozza'")
+      .run(orderId);
+    const parentDelete = db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
+    return {
+      parentChanges: parentDelete.changes,
+      linkedDraftChanges: linkedDraftsDelete.changes,
+    };
+  })();
+
+  if (txResult.parentChanges === 0) {
     return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
   }
 
@@ -178,5 +320,5 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     console.error("[mail] Errore invio email cancellazione ordine:", err)
   );
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, deletedLinkedDrafts: txResult.linkedDraftChanges, cancellationEmailSent: true });
 }
