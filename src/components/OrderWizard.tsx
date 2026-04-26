@@ -432,6 +432,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             <Button
               variant="outline"
               className="gap-2 text-sm"
+              onClick={() => setStep(1)}
             >
               <ChevronLeft className="h-4 w-4" />
               Indietro
@@ -594,6 +595,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             <Button
               variant="outline"
               className="flex-1 h-11 gap-2"
+              onClick={() => setStep(2)}
             >
               <ChevronLeft className="h-4 w-4" />
               Indietro
