@@ -37,6 +37,7 @@ export default function OrderWizard({ editingOrder }: Props) {
   const setOrderInfo = useOrderStore((s) => s.setOrderInfo);
   const toggleFlag = useOrderStore((s) => s.toggleFlag);
   const setQty = useOrderStore((s) => s.setQty);
+  const setSconto = useOrderStore((s) => s.setSconto);
   const resetOrder = useOrderStore((s) => s.resetOrder);
 
   const exitDialogOpen = useOrderStore((s) => s.exitDialogOpen);
@@ -73,6 +74,8 @@ export default function OrderWizard({ editingOrder }: Props) {
       const current = useOrderStore.getState().orderItems[item.codice];
       if (!current?.flagged) toggleFlag(item.codice);
       if ((current?.qty ?? 0) !== item.qty) setQty(item.codice, item.qty);
+      const normalizedSconto: 0 | 8 | 15 = item.sconto === 8 || item.sconto === 15 ? item.sconto : 0;
+      if ((current?.sconto ?? 0) !== normalizedSconto) setSconto(item.codice, normalizedSconto);
     }
     // Start at step 3 when editing (client + materials already set)
     setStep(3);
@@ -157,7 +160,6 @@ export default function OrderWizard({ editingOrder }: Props) {
 
   const canGoNextStep1 = orderInfo.cliente.trim() !== "";
   const canGoNextStep2 = flaggedCount > 0;
-  const canGoNextStep3 = orderInfo.magazzino !== "";
   const today = new Date().toISOString().split("T")[0];
 
   const handleSaveDraftAndExit = useCallback(async () => {

@@ -27,6 +27,13 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
 
   const showQtyRow = expanded || isFlagged;
 
+  const dismissKeyboard = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
+      active.blur();
+    }
+  };
+
   const handleQtyChange = (value: string) => {
     const parsed = parseInt(value, 10);
     setQty(codice, isNaN(parsed) ? 0 : parsed);
@@ -147,8 +154,10 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
               <span className="text-sm font-medium text-muted-foreground shrink-0">Qtà ordine:</span>
               <div className="flex items-center rounded-xl border border-primary/30 bg-background overflow-hidden shadow-sm">
                 <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setQty(codice, qty - 1)}
+                  onClick={() => {
+                    dismissKeyboard();
+                    setQty(codice, qty - 1);
+                  }}
                   className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
                   aria-label="Diminuisci quantità"
                 >
@@ -172,8 +181,10 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
                   style={{ fontSize: "16px" }}
                 />
                 <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setQty(codice, qty + 1)}
+                  onClick={() => {
+                    dismissKeyboard();
+                    setQty(codice, qty + 1);
+                  }}
                   className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
                   aria-label="Aumenta quantità"
                 >
@@ -192,8 +203,10 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
                 {([0, 8, 15] as const).map((pct) => (
                   <button
                     key={pct}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => setSconto(codice, pct)}
+                    onClick={() => {
+                      dismissKeyboard();
+                      setSconto(codice, pct);
+                    }}
                     className={cn(
                       "h-7 px-2.5 rounded-lg text-xs font-semibold border transition-colors",
                       sconto === pct

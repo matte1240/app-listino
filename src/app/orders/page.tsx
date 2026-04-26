@@ -156,6 +156,10 @@ export default function OrdersPage() {
             filteredOrders.map((order) => {
             const isOpen = expanded === order.id;
             const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
+            const discountedItems = order.items.filter((i) => (i.sconto ?? 0) > 0);
+            const discountSummary = discountedItems
+              .map((i) => `${i.codice} -${i.sconto}%`)
+              .join(" · ");
             const showDeleteConfirm = deleteConfirm === order.id;
             return (
               <div
@@ -197,6 +201,14 @@ export default function OrdersPage() {
                         </>
                       )}
                     </div>
+                    {discountedItems.length > 0 && (
+                      <p
+                        className="mt-1 text-xs text-primary/85 truncate"
+                        title={discountSummary}
+                      >
+                        Sconti: {discountSummary}
+                      </p>
+                    )}
                   </div>
                   {isOpen ? (
                     <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
