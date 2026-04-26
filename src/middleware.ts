@@ -8,7 +8,7 @@ const secret = new TextEncoder().encode(
 
 const COOKIE_NAME = "listino-token";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health", "/manifest.webmanifest"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
-    pathname.match(/\.(ico|png|jpg|jpeg|svg|css|js|woff2?)$/)
+    pathname.match(/\.(ico|png|jpg|jpeg|svg|css|js|woff2?|webmanifest|json)$/)
   ) {
     return NextResponse.next();
   }
