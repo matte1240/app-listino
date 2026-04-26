@@ -44,6 +44,12 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+function buildGoogleMapsSearchUrl(address?: string): string | null {
+  const query = (address ?? "").trim();
+  if (!query) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 function sanitizeSubjectPart(value: string | undefined): string {
   const cleaned = (value ?? "").replace(/\s+/g, " ").trim();
   return cleaned || "N/D";
@@ -94,6 +100,7 @@ function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "n
         : `Nuovo Ordine #${order.id}`;
 
   const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0);
+  const mapsUrl = buildGoogleMapsSearchUrl(order.luogoConsegna);
   const rows = order.items
     .map(
       (item) => {
@@ -139,6 +146,7 @@ function buildOrderHtml(order: Order, mode: "new" | "updated" | "cancelled" = "n
           <tr><td style="padding:3px 0;"><strong>Magazzino:</strong> ${order.magazzino}</td></tr>
           <tr><td style="padding:3px 0;"><strong>Agente:</strong> ${order.agente}</td></tr>
           ${order.luogoConsegna ? `<tr><td style="padding:3px 0;"><strong>Luogo consegna:</strong> ${order.luogoConsegna}</td></tr>` : ""}
+          ${mapsUrl ? `<tr><td style="padding:3px 0;"><strong>Google Maps:</strong> <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">Apri indirizzo cantiere</a></td></tr>` : ""}
           ${order.dataConsegna ? `<tr><td style="padding:3px 0;"><strong>Data consegna:</strong> ${formatDate(order.dataConsegna)}</td></tr>` : ""}
           ${order.note ? `<tr><td style="padding:3px 0;"><strong>Note:</strong> ${order.note}</td></tr>` : ""}
         </table>
@@ -195,8 +203,10 @@ function buildOrderText(order: Order, mode: "new" | "updated" | "cancelled" = "n
     `Magazzino: ${order.magazzino}`,
     `Agente: ${order.agente}`,
   ];
+  const mapsUrl = buildGoogleMapsSearchUrl(order.luogoConsegna);
 
   if (order.luogoConsegna) lines.push(`Luogo consegna: ${order.luogoConsegna}`);
+  if (mapsUrl) lines.push(`Google Maps: ${mapsUrl}`);
   if (order.dataConsegna) lines.push(`Data consegna: ${formatDate(order.dataConsegna)}`);
   if (order.note) lines.push(`Note: ${order.note}`);
 
