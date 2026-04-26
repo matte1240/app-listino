@@ -121,6 +121,9 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    background-color: var(--primary);
+  }
   body {
     @apply bg-background text-foreground;
   }
