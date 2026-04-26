@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { normalizeUtcTimestamp } from "@/lib/datetime";
 import { hashSync } from "bcryptjs";
 import type { DbUser } from "@/lib/db";
 
@@ -25,7 +26,12 @@ export async function GET() {
     .prepare("SELECT id, username, role, email, created_at FROM users ORDER BY id")
     .all() as Omit<DbUser, "password">[];
 
-  return NextResponse.json({ users });
+  const normalizedUsers = users.map((u) => ({
+    ...u,
+    created_at: normalizeUtcTimestamp(u.created_at),
+  }));
+
+  return NextResponse.json({ users: normalizedUsers });
 }
 
 export async function POST(request: Request) {

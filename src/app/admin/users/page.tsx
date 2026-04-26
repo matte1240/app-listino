@@ -269,7 +269,7 @@ export default function AdminUsersPage() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {u.email && <>{u.email} · </>}
-                  Creato: {new Date(u.created_at + "Z").toLocaleDateString("it-IT")}
+                  Creato: {new Date(u.created_at).toLocaleDateString("it-IT")}
                 </p>
               </div>
               <div className="flex gap-1 shrink-0">

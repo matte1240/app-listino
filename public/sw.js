@@ -1,4 +1,4 @@
-const CACHE_NAME = "listino-materiali-v3";
+const CACHE_NAME = "listino-materiali-v4";
 const APP_SHELL = [
   "/",
   "/login",

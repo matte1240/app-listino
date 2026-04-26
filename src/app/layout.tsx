@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   applicationName: "Listino Materiali",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black",
     title: "Listino",
   },
   formatDetection: {
@@ -39,6 +39,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: "#0C2B57",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -48,12 +49,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it" className={dmSans.variable}>
-      <body className="font-sans antialiased bg-background text-foreground">
+      <body className="font-sans antialiased">
         <PwaRegister />
-        <AuthProvider>
-          <Navbar />
-          {children}
-        </AuthProvider>
+        <div className="min-h-dvh bg-background text-foreground">
+          <AuthProvider>
+            <Navbar />
+            {children}
+          </AuthProvider>
+        </div>
       </body>
     </html>
   );

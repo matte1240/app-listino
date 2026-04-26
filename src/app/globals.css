@@ -125,7 +125,8 @@
     background-color: var(--primary);
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--primary);
+    color: var(--foreground);
   }
 }
 

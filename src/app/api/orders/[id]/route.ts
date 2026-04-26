@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { sendOrderUpdatedEmail, sendOrderCancelledEmail } from "@/lib/mail";
+import { normalizeUtcTimestamp } from "@/lib/datetime";
 import type { Order, OrderHistoryItem } from "@/types";
 
 interface DbOrder {
@@ -30,7 +31,7 @@ function dbToOrder(r: DbOrder): Order {
     agente: r.agente,
     items: JSON.parse(r.items) as OrderHistoryItem[],
     status: (r.status === 'bozza' ? 'bozza' : 'confermato') as Order['status'],
-    createdAt: r.created_at,
+    createdAt: normalizeUtcTimestamp(r.created_at),
   };
 }
 
