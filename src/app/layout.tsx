@@ -1,12 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
-import Script from "next/script";
 import { AuthProvider } from "@/lib/auth-context";
 import Navbar from "@/components/Navbar";
 import PwaRegister from "@/components/PwaRegister";
 import "./globals.css";
-
-const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -53,13 +50,6 @@ export default function RootLayout({
   return (
     <html lang="it" className={dmSans.variable}>
       <body className="font-sans antialiased">
-        {GMAPS_KEY && (
-          <Script
-            id="google-maps-places"
-            src={`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places&language=it&region=IT`}
-            strategy="afterInteractive"
-          />
-        )}
         <PwaRegister />
         <div className="min-h-dvh bg-background text-foreground">
           <AuthProvider>

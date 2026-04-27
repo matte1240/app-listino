@@ -124,8 +124,8 @@ const AddressAutocompleteInput = forwardRef<
           geocoderRef.current = new win.google.maps.Geocoder();
         }
       })
-      .catch((err) => {
-        console.warn("[AddressAutocomplete] Google Maps not available:", err?.message);
+      .catch(() => {
+        // Google Maps non disponibile: il campo funziona come testo libero
       });
   }, []);
 
