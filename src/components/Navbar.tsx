@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, FileSpreadsheet, Plus, ArrowLeft } from "lucide-react";
+import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, FileSpreadsheet, Plus, ArrowLeft, ShoppingCart } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -34,6 +34,9 @@ export default function Navbar() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const orderInfo = useOrderStore((s) => s.orderInfo);
+  const orderItems = useOrderStore((s) => s.orderItems);
+  const currentStep = useOrderStore((s) => s.currentStep);
+  const setMobileCartOpen = useOrderStore((s) => s.setMobileCartOpen);
   const setExitDialogOpen = useOrderStore((s) => s.setExitDialogOpen);
 
   if (!user || pathname === "/login") return null;
@@ -44,6 +47,8 @@ export default function Navbar() {
   const isEditOrder = !!editMatch;
   const editOrderId = editMatch ? editMatch[1] : null;
   const isWizardMode = isNewOrder || isEditOrder;
+  const isMaterialsStep = isWizardMode && currentStep === 2;
+  const flaggedCount = Object.values(orderItems).filter((item) => item?.flagged).length;
 
   const items = navItems.filter((item) => !item.adminOnly || user.role === "admin");
 
@@ -138,15 +143,34 @@ export default function Navbar() {
 
             {/* Wizard: exit button */}
             {isWizardMode && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
+              <>
+                {isMaterialsStep && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
+                    onClick={() => setMobileCartOpen(true)}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    Carrello
+                    {flaggedCount > 0 && (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/20 px-1.5 text-[10px] font-bold text-white">
+                        {flaggedCount}
+                      </span>
+                    )}
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
                   onClick={() => setExitDialogOpen(true)}
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Esci</span>
-              </Button>
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">Esci</span>
+                </Button>
+              </>
             )}
 
             {/* User badge with dropdown menu */}
@@ -208,7 +232,7 @@ export default function Navbar() {
               </button>
             </div>
             <div className="flex flex-col gap-1 p-3 flex-1">
-              {items.map(({ href, label, icon: Icon }) => {
+              {items.map(({ href, label }) => {
                 const active = pathname === href;
                 return (
                   <Link

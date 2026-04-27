@@ -1,11 +1,16 @@
 "use client";
 
+import { forwardRef } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useOrderStore } from "@/lib/useOrderStore";
 
-export default function SearchBar() {
+interface Props {
+  autoFocus?: boolean;
+}
+
+const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar({ autoFocus = false }, ref) {
   const searchQuery = useOrderStore((s) => s.searchQuery);
   const setSearchQuery = useOrderStore((s) => s.setSearchQuery);
   const showObsolete = useOrderStore((s) => s.showObsolete);
@@ -16,10 +21,12 @@ export default function SearchBar() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
+          ref={ref}
           type="text"
           inputMode="search"
           placeholder="Cerca codice o descrizione..."
           value={searchQuery}
+          autoFocus={autoFocus}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Backspace" && searchQuery.length === 0) {
@@ -60,4 +67,6 @@ export default function SearchBar() {
       </div>
     </div>
   );
-}
+});
+
+export default SearchBar;

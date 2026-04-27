@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# App Listino
 
-## Getting Started
+Applicazione Next.js per consultazione listino, creazione ordini e invio notifiche email.
 
-First, run the development server:
+## Setup locale
+
+1. Installa le dipendenze:
+
+```bash
+npm install
+```
+
+2. Crea il file ambiente partendo dal template:
+
+```bash
+cp .env.example .env
+```
+
+3. Avvia in sviluppo:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+L'app e disponibile su http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variabili ambiente
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Variabili principali (vedi anche `.env.example`):
 
-## Learn More
+- `JWT_SECRET`: chiave JWT per autenticazione.
+- `COOKIE_SECURE`: `true` in produzione HTTPS, `false` in locale.
+- `GMAIL_USER` / `GMAIL_APP_PASSWORD`: credenziali SMTP Gmail per invio email ordini.
+- `ORDER_EMAIL_TO`: fallback destinatario email se non configurato per magazzino.
+- `OPENAI_API_KEY`: chiave per funzionalita enrich AI.
+- `AI_MODEL`: modello OpenAI usato dall'enrich (default `gpt-4o-mini`).
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`: chiave Google Maps JS usata nel campo "Luogo di consegna" con compilazione guidata.
 
-To learn more about Next.js, take a look at the following resources:
+## Google Places Autocomplete (Luogo di consegna)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Per abilitare la compilazione guidata indirizzi nello step Dettagli ordine:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Crea una key in Google Cloud.
+2. Abilita `Maps JavaScript API` e `Places API` sul progetto Google Cloud.
+3. Inserisci la key in `.env` con `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...`.
+4. Applica restrizioni consigliate alla key:
+- Restrizione applicazione: HTTP referrers (domini dell'app).
+- Restrizione API: solo Maps JavaScript API e Places API.
 
-## Deploy on Vercel
+Se la variabile non e presente o la API non e raggiungibile, il campo resta utilizzabile come input manuale (fallback automatico).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy Docker
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Con `docker-compose.yml`:
+
+```bash
+docker compose up -d
+```
+
+Il servizio legge le variabili da `.env` e monta i dati persistenti nella cartella `data/`.

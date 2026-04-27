@@ -16,6 +16,7 @@ export default function OrdersPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [submittingDraftId, setSubmittingDraftId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -75,6 +76,44 @@ export default function OrdersPage() {
       }
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleSendDraft(draft: Order) {
+    if (draft.status !== "bozza") return;
+
+    const confirmMessage = draft.parentOrderId !== null
+      ? `Vuoi inviare la bozza di modifica per l'ordine #${draft.parentOrderId}?`
+      : `Vuoi inviare la bozza ordine #${draft.id}?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    setSubmittingDraftId(draft.id);
+    try {
+      const res = await fetch(`/api/orders/${draft.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clienteId: draft.clienteId,
+          cliente: draft.cliente,
+          magazzino: draft.magazzino,
+          luogoConsegna: draft.luogoConsegna,
+          dataConsegna: draft.dataConsegna,
+          note: draft.note,
+          items: draft.items,
+          status: "confermato",
+        }),
+      });
+
+      if (!res.ok) {
+        alert("Errore durante l'invio della bozza");
+        return;
+      }
+
+      setExpanded(null);
+      await loadOrders();
+    } finally {
+      setSubmittingDraftId(null);
     }
   }
 
@@ -172,8 +211,13 @@ export default function OrdersPage() {
             const isOpen = expanded === order.id;
             const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
             const isDraft = order.status === "bozza";
+            const isSent = order.status === "confermato";
             const isLinkedDraft = isDraft && order.parentOrderId !== null;
             const hasLinkedDraft = order.status === "confermato" && linkedDraftByParentId.has(order.id);
+            const linkedDraft = order.status === "confermato" ? linkedDraftByParentId.get(order.id) : undefined;
+            const draftToSend = isDraft ? order : linkedDraft;
+            const canSendDraft = !!draftToSend;
+            const isSendingThisDraft = !!draftToSend && submittingDraftId === draftToSend.id;
             const linkedDraftLabel = isLinkedDraft ? `Bozza modifica #${order.parentOrderId}` : "Bozza";
             const deleteTitle = isDraft ? "Conferma eliminazione bozza" : "Conferma cancellazione";
             const deleteMessage = isDraft
@@ -201,6 +245,11 @@ export default function OrdersPage() {
                       )}
                       {isDraft && (
                         <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20">{linkedDraftLabel}</Badge>
+                      )}
+                      {isSent && (
+                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-700">
+                          Inviato
+                        </Badge>
                       )}
                       {hasLinkedDraft && (
                         <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-blue-700 border-blue-300 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-700">Bozza aperta</Badge>
@@ -317,10 +366,26 @@ export default function OrdersPage() {
                     {/* Actions */}
                     {canEditOrder(order) && !showDeleteConfirm && (
                       <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
+                        {canSendDraft && draftToSend && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSendDraft(draftToSend)}
+                            disabled={isSendingThisDraft || deleting}
+                            className="text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20 text-xs"
+                          >
+                            {isSendingThisDraft ? (
+                              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Invio bozza…</>
+                            ) : (
+                              <><ClipboardList className="h-3.5 w-3.5 mr-1.5" /> Invia bozza</>
+                            )}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(order)}
+                          disabled={isSendingThisDraft}
                           className="text-primary hover:bg-primary/10 hover:text-primary text-xs"
                         >
                           <Pencil className="h-3.5 w-3.5 mr-1.5" />
@@ -330,6 +395,7 @@ export default function OrdersPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteConfirm(order.id)}
+                          disabled={isSendingThisDraft}
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1.5" />

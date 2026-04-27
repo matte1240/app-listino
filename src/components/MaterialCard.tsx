@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Minus, Plus } from "lucide-react";
@@ -11,21 +11,35 @@ import { cn } from "@/lib/utils";
 interface Props {
   material: Material;
   isReadOnlyCatalog?: boolean;
+  onArticleConfirmed?: () => void;
+  openArticleRequest?: { codice: string; requestId: number } | null;
+  onOpenArticleRequestHandled?: (requestId: number) => void;
 }
 
-export default function MaterialCard({ material, isReadOnlyCatalog = false }: Props) {
+export default function MaterialCard({
+  material,
+  isReadOnlyCatalog = false,
+  onArticleConfirmed,
+  openArticleRequest,
+  onOpenArticleRequestHandled,
+}: Props) {
   const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const setQty = useOrderStore((s) => s.setQty);
   const setSconto = useOrderStore((s) => s.setSconto);
 
-  const isFlagged = orderItem?.flagged ?? false;
-  const qty = orderItem?.qty ?? 0;
-  const sconto = orderItem?.sconto ?? 0;
-  const [expanded, setExpanded] = useState(false);
-  const qtyInputRef = useRef<HTMLInputElement>(null);
+  const isInCart = orderItem?.flagged ?? false;
+  const cartQty = orderItem?.qty ?? 0;
+  const cartSconto = orderItem?.sconto ?? 0;
 
-  const showQtyRow = expanded || isFlagged;
+  const [expanded, setExpanded] = useState(false);
+  const [draftQty, setDraftQty] = useState(0);
+  const [draftSconto, setDraftSconto] = useState<0 | 8 | 15>(0);
+  const [editorMode, setEditorMode] = useState<"add" | "edit">("add");
+  const qtyInputRef = useRef<HTMLInputElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const showQtyRow = expanded;
 
   const dismissKeyboard = () => {
     const active = document.activeElement;
@@ -34,25 +48,93 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
     }
   };
 
+  const resetDraft = () => {
+    setDraftQty(0);
+    setDraftSconto(0);
+    setEditorMode("add");
+    setExpanded(false);
+  };
+
+  const openEditor = ({ resetValues = true, mode = "add" }: { resetValues?: boolean; mode?: "add" | "edit" } = {}) => {
+    setExpanded(true);
+    setEditorMode(mode);
+    if (resetValues) {
+      if (mode === "edit") {
+        setDraftQty(cartQty);
+        setDraftSconto(cartSconto);
+      } else {
+        setDraftQty(0);
+        setDraftSconto(isInCart ? cartSconto : 0);
+      }
+    }
+    window.requestAnimationFrame(() => qtyInputRef.current?.focus());
+  };
+
   const handleQtyChange = (value: string) => {
     const parsed = parseInt(value, 10);
-    setQty(codice, isNaN(parsed) ? 0 : parsed);
+    setDraftQty(isNaN(parsed) ? 0 : Math.max(0, parsed));
   };
+
+  const handleConfirm = () => {
+    if (draftQty <= 0) return;
+    const nextQty = editorMode === "edit" ? draftQty : (isInCart ? cartQty : 0) + draftQty;
+    setQty(codice, nextQty);
+    setSconto(codice, draftSconto);
+    resetDraft();
+    onArticleConfirmed?.();
+  };
+
+  useEffect(() => {
+    if (!openArticleRequest || openArticleRequest.codice !== codice) return;
+
+    openEditor({ resetValues: true, mode: "edit" });
+    window.requestAnimationFrame(() => {
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    onOpenArticleRequestHandled?.(openArticleRequest.requestId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openArticleRequest, codice, cartQty, cartSconto, onOpenArticleRequestHandled]);
+
+  useEffect(() => {
+    if (!expanded) return;
+
+    const handleOutsidePointer = (event: MouseEvent | TouchEvent) => {
+      if (draftQty > 0) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (cardRef.current?.contains(target)) return;
+
+      // Same behavior as pressing "Annulla" when nothing was entered.
+      setDraftQty(0);
+      setDraftSconto(0);
+      setEditorMode("add");
+      setExpanded(false);
+    };
+
+    document.addEventListener("mousedown", handleOutsidePointer);
+    document.addEventListener("touchstart", handleOutsidePointer);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsidePointer);
+      document.removeEventListener("touchstart", handleOutsidePointer);
+    };
+  }, [expanded, draftQty]);
 
   return (
     <div
+      ref={cardRef}
       className={cn(
         "rounded-2xl border transition-all duration-200 select-none overflow-hidden flex",
-        isFlagged
+        isInCart
           ? "border-primary/35 bg-card shadow-md shadow-primary/10"
           : "border-border bg-card shadow-sm hover:shadow-md hover:border-border/80",
-        obsoleto && (isFlagged ? "bg-muted/35" : "bg-muted/40 border-border/70")
+        obsoleto && (isInCart ? "bg-muted/35" : "bg-muted/40 border-border/70")
       )}
     >
       {/* Colored left accent strip when flagged */}
       <div className={cn(
         "w-1 shrink-0 rounded-l-2xl transition-all duration-200",
-        isFlagged ? "bg-gradient-to-b from-primary to-primary/50" : "bg-transparent"
+        isInCart ? "bg-gradient-to-b from-primary to-primary/50" : "bg-transparent"
       )} />
 
       <div className="p-4 flex-1 min-w-0">
@@ -61,26 +143,28 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
           {!isReadOnlyCatalog && (
             <Checkbox
               id={`flag-${codice}`}
-              checked={isFlagged}
+              checked={expanded}
               onCheckedChange={(checked) => {
-                if (checked) {
-                  setExpanded(true);
-                } else {
-                  setQty(codice, 0);
-                  setExpanded(false);
+                if (checked === true) {
+                  openEditor({ resetValues: !expanded, mode: "add" });
+                  return;
                 }
+                resetDraft();
               }}
               className="mt-1 h-5 w-5 shrink-0"
             />
           )}
           <label
-            htmlFor={""}
             onClick={() => {
-              if (!isReadOnlyCatalog && qty === 0) {
-                setExpanded((v) => !v);
+              if (!isReadOnlyCatalog) {
+                if (expanded) {
+                  qtyInputRef.current?.focus();
+                } else {
+                  openEditor({ resetValues: true, mode: "add" });
+                }
               }
             }}
-            className={cn("flex-1 min-w-0", !isReadOnlyCatalog && qty === 0 && "cursor-pointer")}
+            className={cn("flex-1 min-w-0", !isReadOnlyCatalog && "cursor-pointer")}
           >
             {/* Codice + badges */}
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -107,6 +191,11 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
                   )}
                 >
                   U.M.: {um}
+                </Badge>
+              )}
+              {isInCart && (
+                <Badge className="text-[10px] px-2 py-0 h-5 shrink-0 bg-primary/10 text-primary border border-primary/30">
+                  Nel carrello: {cartQty} {um || "pz"}
                 </Badge>
               )}
             </div>
@@ -156,7 +245,7 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
                 <button
                   onClick={() => {
                     dismissKeyboard();
-                    setQty(codice, qty - 1);
+                    setDraftQty((prev) => Math.max(0, prev - 1));
                   }}
                   className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
                   aria-label="Diminuisci quantità"
@@ -167,12 +256,11 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
                   ref={qtyInputRef}
                   type="number"
                   min={0}
-                  value={qty === 0 ? "" : qty}
+                  value={draftQty === 0 ? "" : draftQty}
                   onChange={(e) => handleQtyChange(e.target.value)}
                   onBlur={(e) => {
                     if (e.target.value === "" || e.target.value === "0") {
-                      setQty(codice, 0);
-                      setExpanded(false);
+                      setDraftQty(0);
                     }
                   }}
                   placeholder="0"
@@ -183,7 +271,7 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
                 <button
                   onClick={() => {
                     dismissKeyboard();
-                    setQty(codice, qty + 1);
+                    setDraftQty((prev) => prev + 1);
                   }}
                   className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
                   aria-label="Aumenta quantità"
@@ -205,11 +293,11 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
                     key={pct}
                     onClick={() => {
                       dismissKeyboard();
-                      setSconto(codice, pct);
+                      setDraftSconto(pct);
                     }}
                     className={cn(
                       "h-7 px-2.5 rounded-lg text-xs font-semibold border transition-colors",
-                      sconto === pct
+                      draftSconto === pct
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                     )}
@@ -218,6 +306,33 @@ export default function MaterialCard({ material, isReadOnlyCatalog = false }: Pr
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 pl-8">
+              <button
+                onClick={() => {
+                  dismissKeyboard();
+                  handleConfirm();
+                }}
+                disabled={draftQty <= 0}
+                className={cn(
+                  "h-8 px-3 rounded-lg text-xs font-semibold border transition-colors",
+                  draftQty > 0
+                    ? "bg-primary text-primary-foreground border-primary hover:opacity-95"
+                    : "bg-muted text-muted-foreground border-border cursor-not-allowed"
+                )}
+              >
+                {editorMode === "edit" ? "Salva modifica" : "Conferma"}
+              </button>
+              <button
+                onClick={() => {
+                  dismissKeyboard();
+                  resetDraft();
+                }}
+                className="h-8 px-3 rounded-lg text-xs font-semibold border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+              >
+                Annulla
+              </button>
             </div>
           </div>
         )}

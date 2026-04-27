@@ -12,9 +12,17 @@ function materialSearchText(m: Material): string {
 
 interface Props {
   isReadOnlyCatalog?: boolean;
+  onArticleConfirmed?: () => void;
+  openArticleRequest?: { codice: string; requestId: number } | null;
+  onOpenArticleRequestHandled?: (requestId: number) => void;
 }
 
-export default function MaterialList({ isReadOnlyCatalog = false }: Props) {
+export default function MaterialList({
+  isReadOnlyCatalog = false,
+  onArticleConfirmed,
+  openArticleRequest,
+  onOpenArticleRequestHandled,
+}: Props) {
   const materials = useOrderStore((s) => s.materials);
   const searchQuery = useOrderStore((s) => s.searchQuery);
   const showObsolete = useOrderStore((s) => s.showObsolete);
@@ -120,7 +128,14 @@ export default function MaterialList({ isReadOnlyCatalog = false }: Props) {
           {/* Cards */}
           <div className="flex flex-col gap-2.5">
             {items.map((material) => (
-              <MaterialCard key={material.codice} material={material} isReadOnlyCatalog={isReadOnlyCatalog} />
+              <MaterialCard
+                key={material.codice}
+                material={material}
+                isReadOnlyCatalog={isReadOnlyCatalog}
+                onArticleConfirmed={onArticleConfirmed}
+                openArticleRequest={openArticleRequest}
+                onOpenArticleRequestHandled={onOpenArticleRequestHandled}
+              />
             ))}
           </div>
         </div>

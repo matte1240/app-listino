@@ -1,19 +1,21 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   User, Warehouse, MapPin, Calendar, MessageSquare,
   ChevronRight, ChevronLeft, CheckCircle2, Loader2,
-  Package, Send, Save, ShoppingCart,
+  Package, Send, Save, ShoppingCart, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import SearchBar from "@/components/SearchBar";
 import MaterialList from "@/components/MaterialList";
+import AddressAutocompleteInput from "@/components/AddressAutocompleteInput";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI, type AnagraficaSearchItem, type OrderHistoryItem } from "@/types";
 import type { Order } from "@/types";
@@ -39,6 +41,10 @@ export default function OrderWizard({ editingOrder }: Props) {
   const setQty = useOrderStore((s) => s.setQty);
   const setSconto = useOrderStore((s) => s.setSconto);
   const resetOrder = useOrderStore((s) => s.resetOrder);
+  const setSearchQuery = useOrderStore((s) => s.setSearchQuery);
+  const setShowObsolete = useOrderStore((s) => s.setShowObsolete);
+  const mobileCartOpen = useOrderStore((s) => s.mobileCartOpen);
+  const setMobileCartOpen = useOrderStore((s) => s.setMobileCartOpen);
 
   const exitDialogOpen = useOrderStore((s) => s.exitDialogOpen);
   const setExitDialogOpen = useOrderStore((s) => s.setExitDialogOpen);
@@ -54,6 +60,9 @@ export default function OrderWizard({ editingOrder }: Props) {
   const [recentDestinations, setRecentDestinations] = useState<string[]>([]);
   const [recentDestinationsLoading, setRecentDestinationsLoading] = useState(false);
   const [selectedRecentDestination, setSelectedRecentDestination] = useState("");
+  const [openArticleRequest, setOpenArticleRequest] = useState<{ codice: string; requestId: number } | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const openArticleRequestIdRef = useRef(0);
 
   const isEditing = !!editingOrder;
 
@@ -77,8 +86,8 @@ export default function OrderWizard({ editingOrder }: Props) {
       const normalizedSconto: 0 | 8 | 15 = item.sconto === 8 || item.sconto === 15 ? item.sconto : 0;
       if ((current?.sconto ?? 0) !== normalizedSconto) setSconto(item.codice, normalizedSconto);
     }
-    // Start at step 3 when editing (client + materials already set)
-    setStep(3);
+    // Start at step 1 when editing so user can review customer selection first
+    setStep(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -153,6 +162,13 @@ export default function OrderWizard({ editingOrder }: Props) {
     setCustomerDropdownOpen(false);
   }
 
+  const handleDeliveryAddressChange = useCallback((value: string) => {
+    setOrderInfo({ luogoConsegna: value });
+    if (selectedRecentDestination && value !== selectedRecentDestination) {
+      setSelectedRecentDestination("");
+    }
+  }, [selectedRecentDestination, setOrderInfo]);
+
   // Items derived from store
   const flaggedItems = materials.filter((m) => orderItems[m.codice]?.flagged);
   const flaggedCount = flaggedItems.length;
@@ -161,6 +177,135 @@ export default function OrderWizard({ editingOrder }: Props) {
   const canGoNextStep1 = orderInfo.cliente.trim() !== "";
   const canGoNextStep2 = flaggedCount > 0;
   const today = new Date().toISOString().split("T")[0];
+
+  const handleArticleConfirmed = useCallback(() => {
+    setSearchQuery("");
+
+    const focusSearch = () => {
+      const input = searchInputRef.current;
+      if (!input) return;
+      input.focus({ preventScroll: true });
+    };
+
+    focusSearch();
+    window.requestAnimationFrame(focusSearch);
+    window.setTimeout(focusSearch, 120);
+  }, [setSearchQuery]);
+
+  useEffect(() => {
+    if (currentStep !== 2 && mobileCartOpen) {
+      setMobileCartOpen(false);
+    }
+  }, [currentStep, mobileCartOpen, setMobileCartOpen]);
+
+  const handleEditItemInCatalog = useCallback((codice: string) => {
+    setMobileCartOpen(false);
+
+    const targetMaterial = materials.find((m) => m.codice === codice);
+    if (targetMaterial?.obsoleto) {
+      setShowObsolete(true);
+    }
+
+    setSearchQuery(codice);
+    openArticleRequestIdRef.current += 1;
+    setOpenArticleRequest({ codice, requestId: openArticleRequestIdRef.current });
+  }, [materials, setMobileCartOpen, setSearchQuery, setShowObsolete]);
+
+  const handleOpenArticleRequestHandled = useCallback((requestId: number) => {
+    setOpenArticleRequest((current) => {
+      if (!current || current.requestId !== requestId) return current;
+      return null;
+    });
+  }, []);
+
+  const handleRemoveItemFromCart = useCallback((codice: string, articoloLabel?: string) => {
+    const message = articoloLabel
+      ? `Vuoi rimuovere \"${articoloLabel}\" dal carrello?`
+      : `Vuoi rimuovere l'articolo ${codice} dal carrello?`;
+
+    if (!window.confirm(message)) return;
+
+    setQty(codice, 0);
+    setSconto(codice, 0);
+    setOpenArticleRequest((current) => (current?.codice === codice ? null : current));
+  }, [setQty, setSconto]);
+
+  const renderCartSummary = (itemsHeightClass: string) => (
+    <>
+      <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 rounded-full bg-primary/10 items-center justify-center shrink-0">
+            <User className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Cliente</p>
+            <p className="text-sm font-semibold truncate">{orderInfo.cliente}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <ShoppingCart className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground">
+            {flaggedCount > 0 ? (
+              <><strong className="text-foreground">{flaggedCount}</strong> articoli selezionati</>
+            ) : (
+              "Nessun articolo selezionato"
+            )}
+          </span>
+        </div>
+        {flaggedCount > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Totale: <strong className="text-foreground">{totalPz} pz</strong>
+          </div>
+        )}
+      </div>
+
+      {flaggedCount > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-3 flex flex-col gap-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Articoli inseriti</p>
+          <div className={`flex flex-col gap-2 ${itemsHeightClass} overflow-y-auto pr-1`}>
+            {flaggedItems.map((m) => {
+              const qty = orderItems[m.codice]?.qty ?? 0;
+              const sconto = orderItems[m.codice]?.sconto ?? 0;
+              return (
+                <div
+                  key={m.codice}
+                  className="rounded-xl border border-border/70 bg-background px-2.5 py-2"
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-bold font-mono truncate">{m.codice}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{m.descrizioneAI || m.descrizione}</p>
+                      <div className="mt-1 flex items-center gap-2 text-[11px]">
+                        <span className="font-semibold text-foreground">{qty} {m.um}</span>
+                        {sconto > 0 && <span className="font-semibold text-primary">-{sconto}%</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleEditItemInCatalog(m.codice)}
+                        className="h-7 px-2 rounded-lg border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Rimuovi ${m.codice} dal carrello`}
+                        onClick={() => handleRemoveItemFromCart(m.codice, m.descrizioneAI || m.descrizione)}
+                        className="h-7 w-7 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors flex items-center justify-center"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   const handleSaveDraftAndExit = useCallback(async () => {
     // If no meaningful data, just exit
@@ -390,7 +535,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         <div className="sticky top-14 z-30 bg-background/80 backdrop-blur-md border-b border-border">
           <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-3">
             <div className="flex-1">
-              <SearchBar />
+              <SearchBar ref={searchInputRef} autoFocus />
             </div>
           </div>
         </div>
@@ -399,37 +544,16 @@ export default function OrderWizard({ editingOrder }: Props) {
           {/* Materials catalog */}
           <main className="flex-1 px-4 py-5">
             <Stepper />
-            <MaterialList />
+            <MaterialList
+              onArticleConfirmed={handleArticleConfirmed}
+              openArticleRequest={openArticleRequest}
+              onOpenArticleRequestHandled={handleOpenArticleRequestHandled}
+            />
           </main>
 
           {/* Sticky sidebar */}
           <aside className="hidden md:flex w-64 shrink-0 flex-col gap-3 px-4 py-5 border-l border-border sticky top-[calc(3.5rem+49px)] self-start max-h-[calc(100dvh-3.5rem-49px)] overflow-y-auto">
-            <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 rounded-full bg-primary/10 items-center justify-center shrink-0">
-                  <User className="h-3.5 w-3.5 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Cliente</p>
-                  <p className="text-sm font-semibold truncate">{orderInfo.cliente}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <ShoppingCart className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-muted-foreground">
-                  {flaggedCount > 0 ? (
-                    <><strong className="text-foreground">{flaggedCount}</strong> articoli selezionati</>
-                  ) : (
-                    "Nessun articolo selezionato"
-                  )}
-                </span>
-              </div>
-              {flaggedCount > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  Totale: <strong className="text-foreground">{totalPz} pz</strong>
-                </div>
-              )}
-            </div>
+            {renderCartSummary("max-h-64")}
 
             <Button
               variant="outline"
@@ -451,9 +575,43 @@ export default function OrderWizard({ editingOrder }: Props) {
           </aside>
         </div>
 
+        {/* Mobile cart drawer */}
+        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen} direction="right">
+          <DrawerContent className="md:hidden w-[88%] p-0">
+            <DrawerHeader className="px-4 py-3 border-b border-border">
+              <div className="flex items-center justify-between gap-2">
+                <DrawerTitle className="text-sm flex items-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
+                  Carrello articoli
+                </DrawerTitle>
+                <DrawerClose asChild>
+                  <button
+                    type="button"
+                    className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex items-center justify-center"
+                    aria-label="Chiudi carrello"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </DrawerClose>
+              </div>
+            </DrawerHeader>
+            <div className="px-4 py-4 flex flex-col gap-3 overflow-y-auto">
+              {renderCartSummary("max-h-[52dvh]")}
+            </div>
+          </DrawerContent>
+        </Drawer>
+
         {/* Mobile sticky bottom bar */}
         <div className="md:hidden sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border px-4 py-3 flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setStep(1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              setMobileCartOpen(false);
+              setStep(1);
+            }}
+          >
             <ChevronLeft className="h-4 w-4" />
             Indietro
           </Button>
@@ -465,7 +623,10 @@ export default function OrderWizard({ editingOrder }: Props) {
             size="sm"
             className="gap-1.5 font-semibold"
             disabled={!canGoNextStep2}
-            onClick={() => setStep(3)}
+            onClick={() => {
+              setMobileCartOpen(false);
+              setStep(3);
+            }}
           >
             Avanti
             <ChevronRight className="h-4 w-4" />
@@ -543,17 +704,12 @@ export default function OrderWizard({ editingOrder }: Props) {
                 </option>
               ))}
             </select>
-            {/* Manual input */}
-            <Input
+            {/* Manual input with Google Places fallback */}
+            <AddressAutocompleteInput
               id="luogo"
               placeholder="Indirizzo di consegna (opzionale)"
               value={orderInfo.luogoConsegna}
-              onChange={(e) => {
-                setOrderInfo({ luogoConsegna: e.target.value });
-                if (selectedRecentDestination && e.target.value !== selectedRecentDestination) {
-                  setSelectedRecentDestination("");
-                }
-              }}
+              onChange={handleDeliveryAddressChange}
               className="h-11 rounded-xl text-base bg-background"
               style={{ fontSize: "16px" }}
             />

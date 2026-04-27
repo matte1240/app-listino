@@ -9,6 +9,8 @@ interface OrderStore {
   searchQuery: string;
   showObsolete: boolean;
   currentStep: 1 | 2 | 3 | 4;
+  mobileCartOpen: boolean;
+  setMobileCartOpen: (open: boolean) => void;
   exitDialogOpen: boolean;
   setExitDialogOpen: (open: boolean) => void;
   setStep: (step: 1 | 2 | 3 | 4) => void;
@@ -40,6 +42,8 @@ export const useOrderStore = create<OrderStore>()(
       searchQuery: "",
       showObsolete: true,
       currentStep: 1,
+      mobileCartOpen: false,
+      setMobileCartOpen: (mobileCartOpen) => set({ mobileCartOpen }),
       exitDialogOpen: false,
       setExitDialogOpen: (exitDialogOpen) => set({ exitDialogOpen }),
       setStep: (currentStep) => set({ currentStep }),
@@ -87,7 +91,7 @@ export const useOrderStore = create<OrderStore>()(
         }));
       },
 
-      resetOrder: () => set({ orderItems: {}, orderInfo: defaultOrderInfo, currentStep: 1 }),
+      resetOrder: () => set({ orderItems: {}, orderInfo: defaultOrderInfo, currentStep: 1, mobileCartOpen: false }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
 
