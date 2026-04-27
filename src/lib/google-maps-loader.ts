@@ -74,7 +74,6 @@ export function loadGoogleMapsPlacesApi(apiKey: string): Promise<void> {
       libraries: "places",
       language: "it",
       region: "IT",
-      loading: "async",
       v: "weekly",
     });
 
@@ -88,7 +87,18 @@ export function loadGoogleMapsPlacesApi(apiKey: string): Promise<void> {
       "load",
       () => {
         script.dataset.loaded = "true";
-        onLoad();
+        // With loading=async removed, places may still need a tick to populate
+        if (hasPlacesApi(win)) {
+          resolve();
+        } else {
+          setTimeout(() => {
+            if (hasPlacesApi(win)) {
+              resolve();
+            } else {
+              fail(new Error("Google Maps loaded without Places library"));
+            }
+          }, 0);
+        }
       },
       { once: true }
     );
