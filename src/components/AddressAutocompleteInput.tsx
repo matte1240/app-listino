@@ -88,8 +88,6 @@ type GMapsWindow = Window & {
   };
 };
 
-const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-
 const AddressAutocompleteInput = forwardRef<
   AddressAutocompleteInputHandle,
   AddressAutocompleteInputProps
@@ -116,10 +114,9 @@ const AddressAutocompleteInput = forwardRef<
   useEffect(() => { onAddressResolvedRef.current = onAddressResolved; }, [onAddressResolved]);
   useEffect(() => { onValidityChangeRef.current = onValidityChange; }, [onValidityChange]);
 
-  // Load Google Maps and create service instances
+  // Wait for the Google Maps script (loaded in layout.tsx) to be ready
   useEffect(() => {
-    if (!mapsApiKey) return;
-    loadGoogleMapsPlacesApi(mapsApiKey)
+    loadGoogleMapsPlacesApi()
       .then(() => {
         const win = window as GMapsWindow;
         if (win.google?.maps?.places && win.google?.maps?.Geocoder) {
@@ -127,8 +124,8 @@ const AddressAutocompleteInput = forwardRef<
           geocoderRef.current = new win.google.maps.Geocoder();
         }
       })
-      .catch(() => {
-        // Fallback: plain text input
+      .catch((err) => {
+        console.warn("[AddressAutocomplete] Google Maps not available:", err?.message);
       });
   }, []);
 
