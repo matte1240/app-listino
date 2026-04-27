@@ -15,7 +15,10 @@ import { Badge } from "@/components/ui/badge";
 import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import SearchBar from "@/components/SearchBar";
 import MaterialList from "@/components/MaterialList";
-import AddressAutocompleteInput from "@/components/AddressAutocompleteInput";
+import AddressAutocompleteInput, {
+  type AddressAutocompleteInputHandle,
+  type AddressData,
+} from "@/components/AddressAutocompleteInput";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI, type AnagraficaSearchItem, type OrderHistoryItem } from "@/types";
 import type { Order } from "@/types";
@@ -52,6 +55,11 @@ export default function OrderWizard({ editingOrder }: Props) {
   const [saving, setSaving] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Address state
+  const addressInputRef = useRef<AddressAutocompleteInputHandle>(null);
+  const addressDataRef = useRef<AddressData | null>(null);
+  const [isAddressValid, setIsAddressValid] = useState(true);
 
   // Customer search
   const [customerResults, setCustomerResults] = useState<AnagraficaSearchItem[]>([]);
@@ -168,6 +176,13 @@ export default function OrderWizard({ editingOrder }: Props) {
       setSelectedRecentDestination("");
     }
   }, [selectedRecentDestination, setOrderInfo]);
+
+  const handleAddressResolved = useCallback((data: AddressData) => {
+    addressDataRef.current = data;
+    if (data.address) {
+      setOrderInfo({ luogoConsegna: data.address });
+    }
+  }, [setOrderInfo]);
 
   // Items derived from store
   const flaggedItems = materials.filter((m) => orderItems[m.codice]?.flagged);
@@ -704,12 +719,18 @@ export default function OrderWizard({ editingOrder }: Props) {
                 </option>
               ))}
             </select>
-            {/* Manual input with Google Places fallback */}
+            {/* Manual input with Google Places autocomplete */}
             <AddressAutocompleteInput
+              ref={addressInputRef}
               id="luogo"
               placeholder="Indirizzo di consegna (opzionale)"
               value={orderInfo.luogoConsegna}
               onChange={handleDeliveryAddressChange}
+              onAddressResolved={handleAddressResolved}
+              onValidityChange={(valid) => {
+                setIsAddressValid(valid);
+                if (!valid) addressDataRef.current = null;
+              }}
               className="h-11 rounded-xl text-base bg-background"
               style={{ fontSize: "16px" }}
             />
@@ -760,7 +781,14 @@ export default function OrderWizard({ editingOrder }: Props) {
             </Button>
             <Button
               className="flex-1 h-11 gap-2 font-semibold"
-              onClick={() => setStep(4)}
+              onClick={async () => {
+                // If address field has text, validate it before proceeding
+                if (orderInfo.luogoConsegna.trim()) {
+                  const valid = isAddressValid || (await addressInputRef.current?.validateAddress()) === true;
+                  if (!valid) return;
+                }
+                setStep(4);
+              }}
             >
               Avanti — Riepilogo
               <ChevronRight className="h-4 w-4" />
