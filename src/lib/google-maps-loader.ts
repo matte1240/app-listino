@@ -3,7 +3,10 @@ const GOOGLE_MAPS_SCRIPT_ID = "google-maps-places-script";
 type GoogleWindow = Window & {
   google?: {
     maps?: {
-      places?: unknown;
+      places?: {
+        AutocompleteService?: unknown;
+      };
+      Geocoder?: unknown;
     };
   };
 };
@@ -11,7 +14,24 @@ type GoogleWindow = Window & {
 let loaderPromise: Promise<void> | null = null;
 
 function hasPlacesApi(win: GoogleWindow): boolean {
-  return Boolean(win.google?.maps?.places);
+  return (
+    typeof win.google?.maps?.places?.AutocompleteService === "function" &&
+    typeof win.google?.maps?.Geocoder === "function"
+  );
+}
+
+// Poll until Places is ready, up to ~2 seconds
+function waitForPlaces(win: GoogleWindow, resolve: () => void, reject: (e: Error) => void, attempts = 0): void {
+  if (hasPlacesApi(win)) {
+    resolve();
+    return;
+  }
+  if (attempts >= 20) {
+    loaderPromise = null;
+    reject(new Error("Google Maps loaded without Places library"));
+    return;
+  }
+  setTimeout(() => waitForPlaces(win, resolve, reject, attempts + 1), 100);
 }
 
 export function loadGoogleMapsPlacesApi(apiKey: string): Promise<void> {
@@ -36,21 +56,16 @@ export function loadGoogleMapsPlacesApi(apiKey: string): Promise<void> {
   loaderPromise = new Promise<void>((resolve, reject) => {
     const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
 
-    const fail = (error: Error) => {
-      loaderPromise = null;
-      reject(error);
-    };
-
-    const onLoad = () => {
-      if (hasPlacesApi(win)) {
-        resolve();
-        return;
+    const onScriptLoad = () => {
+      if (existingScript) {
+        (existingScript as HTMLScriptElement).dataset.loaded = "true";
       }
-      fail(new Error("Google Maps loaded without Places library"));
+      waitForPlaces(win, resolve, reject);
     };
 
-    const onError = () => {
-      fail(new Error("Failed to load Google Maps Places API"));
+    const onScriptError = () => {
+      loaderPromise = null;
+      reject(new Error("Failed to load Google Maps Places API"));
     };
 
     if (existingScript) {
@@ -58,14 +73,14 @@ export function loadGoogleMapsPlacesApi(apiKey: string): Promise<void> {
         resolve();
         return;
       }
-
+      // Script tag exists but may still be loading
       if (existingScript.dataset.loaded === "true") {
-        fail(new Error("Google Maps script already loaded without Places API"));
+        // Script done loading but Places not ready yet — poll
+        waitForPlaces(win, resolve, reject);
         return;
       }
-
-      existingScript.addEventListener("load", onLoad, { once: true });
-      existingScript.addEventListener("error", onError, { once: true });
+      existingScript.addEventListener("load", onScriptLoad, { once: true });
+      existingScript.addEventListener("error", onScriptError, { once: true });
       return;
     }
 
@@ -74,7 +89,6 @@ export function loadGoogleMapsPlacesApi(apiKey: string): Promise<void> {
       libraries: "places",
       language: "it",
       region: "IT",
-      v: "weekly",
     });
 
     const script = document.createElement("script");
@@ -83,26 +97,8 @@ export function loadGoogleMapsPlacesApi(apiKey: string): Promise<void> {
     script.async = true;
     script.defer = true;
 
-    script.addEventListener(
-      "load",
-      () => {
-        script.dataset.loaded = "true";
-        // With loading=async removed, places may still need a tick to populate
-        if (hasPlacesApi(win)) {
-          resolve();
-        } else {
-          setTimeout(() => {
-            if (hasPlacesApi(win)) {
-              resolve();
-            } else {
-              fail(new Error("Google Maps loaded without Places library"));
-            }
-          }, 0);
-        }
-      },
-      { once: true }
-    );
-    script.addEventListener("error", onError, { once: true });
+    script.addEventListener("load", () => { script.dataset.loaded = "true"; waitForPlaces(win, resolve, reject); }, { once: true });
+    script.addEventListener("error", onScriptError, { once: true });
 
     document.head.appendChild(script);
   });
