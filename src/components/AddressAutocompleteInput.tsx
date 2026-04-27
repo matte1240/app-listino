@@ -61,6 +61,7 @@ const AddressAutocompleteInput = forwardRef<
     setValue: setInputValue,
     suggestions: { status, data: suggestions, loading: suggestionsLoading },
     clearSuggestions,
+    init,
   } = usePlacesAutocomplete({
     requestOptions: {
       componentRestrictions: { country: "it" },
@@ -68,9 +69,15 @@ const AddressAutocompleteInput = forwardRef<
     },
     debounce: 300,
     defaultValue: value,
-    // Don't attempt until the script has loaded
-    initOnMount: apiReady,
+    initOnMount: false,
   });
+
+  // Initialize the Places service once the API script has loaded
+  useEffect(() => {
+    if (apiReady) {
+      init();
+    }
+  }, [apiReady, init]);
 
   // Track validation state
   const [isAddressValid, setIsAddressValid] = useState(value === "");
