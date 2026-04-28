@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Sparkles, Mail, Building2, ArrowRight } from "lucide-react";
+import { Users, Sparkles, Mail, Building2, ArrowRight, Database } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import UploadExcel from "@/components/UploadExcel";
 
@@ -31,6 +31,12 @@ const adminSections = [
     title: "Email",
     description: "Configura i destinatari email per filiale.",
     icon: Mail,
+  },
+  {
+    href: "/admin/backup",
+    title: "Backup DB",
+    description: "Crea e scarica backup del database SQLite.",
+    icon: Database,
   },
 ];
 

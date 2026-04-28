@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { hashSync } from "bcryptjs";
 
-const DB_PATH = path.join(process.cwd(), "data", "listino.db");
+export const DB_PATH = path.join(process.cwd(), "data", "listino.db");
 
 function createDb() {
   const dir = path.dirname(DB_PATH);
@@ -167,10 +167,34 @@ function createDb() {
 }
 
 let _db: Database.Database | null = null;
+let _backupSchedulerStarted = false;
+
+function ensureBackupSchedulerStarted() {
+  if (_backupSchedulerStarted) return;
+  _backupSchedulerStarted = true;
+
+  void import("@/lib/db-backup-scheduler")
+    .then(({ ensureDatabaseBackupSchedulerStarted }) => {
+      ensureDatabaseBackupSchedulerStarted();
+    })
+    .catch((error) => {
+      console.error("[db-backup] Impossibile inizializzare lo scheduler:", error);
+    });
+}
 
 export function getDb(): Database.Database {
-  if (!_db) _db = createDb();
+  if (!_db) {
+    _db = createDb();
+    ensureBackupSchedulerStarted();
+  }
+
   return _db;
+}
+
+export function closeDbConnection() {
+  if (!_db) return;
+  _db.close();
+  _db = null;
 }
 
 export interface DbUser {
