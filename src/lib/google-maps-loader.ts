@@ -16,9 +16,9 @@ function hasPlacesApi(win: GoogleWindow): boolean {
   );
 }
 
-// Poll until the Google Maps script (loaded by Next.js Script in layout) is ready.
+// Poll until the Google Maps script (loaded by Next.js Script in app/orders/layout.tsx) is ready.
 // Waits up to 10 seconds to account for slow connections.
-export function loadGoogleMapsPlacesApi(_apiKey?: string): Promise<void> {
+export function loadGoogleMapsPlacesApi(): Promise<void> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Server side"));
   }

@@ -49,6 +49,7 @@ interface GMapsGeocoderResult {
   geometry: { location: { lat(): number; lng(): number } };
 }
 
+type GMapsAutocompleteSessionToken = object;
 type GMapsPlacesStatus = string;
 
 interface GMapsAutocompleteService {
@@ -57,6 +58,7 @@ interface GMapsAutocompleteService {
       input: string;
       componentRestrictions?: { country: string };
       types?: string[];
+      sessionToken?: GMapsAutocompleteSessionToken;
     },
     callback: (
       predictions: GMapsPrediction[] | null,
@@ -80,6 +82,7 @@ type GMapsWindow = Window & {
     maps?: {
       places?: {
         AutocompleteService: new () => GMapsAutocompleteService;
+          AutocompleteSessionToken?: new () => GMapsAutocompleteSessionToken;
         PlacesServiceStatus: { OK: string };
       };
       Geocoder: new () => GMapsGeocoder;
@@ -87,6 +90,10 @@ type GMapsWindow = Window & {
     };
   };
 };
+
+const MIN_QUERY_LENGTH = 3;
+const DEBOUNCE_MS = 300;
+const MAX_CACHE_ENTRIES = 50;
 
 const AddressAutocompleteInput = forwardRef<
   AddressAutocompleteInputHandle,
@@ -106,6 +113,9 @@ const AddressAutocompleteInput = forwardRef<
   const autocompleteRef = useRef<GMapsAutocompleteService | null>(null);
   const geocoderRef = useRef<GMapsGeocoder | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionTokenRef = useRef<GMapsAutocompleteSessionToken | null>(null);
+  const predictionCacheRef = useRef<Map<string, GMapsPrediction[]>>(new Map());
+  const latestRequestRef = useRef(0);
 
   const onChangeRef = useRef(onChange);
   const onAddressResolvedRef = useRef(onAddressResolved);
@@ -114,7 +124,24 @@ const AddressAutocompleteInput = forwardRef<
   useEffect(() => { onAddressResolvedRef.current = onAddressResolved; }, [onAddressResolved]);
   useEffect(() => { onValidityChangeRef.current = onValidityChange; }, [onValidityChange]);
 
-  // Wait for the Google Maps script (loaded in layout.tsx) to be ready
+  const resetAutocompleteSession = useCallback(() => {
+    sessionTokenRef.current = null;
+    latestRequestRef.current += 1;
+  }, []);
+
+  const getAutocompleteSessionToken = useCallback((): GMapsAutocompleteSessionToken | undefined => {
+    const win = window as GMapsWindow;
+    const SessionTokenCtor = win.google?.maps?.places?.AutocompleteSessionToken;
+    if (!SessionTokenCtor) return undefined;
+
+    if (!sessionTokenRef.current) {
+      sessionTokenRef.current = new SessionTokenCtor();
+    }
+
+    return sessionTokenRef.current;
+  }, []);
+
+  // Wait for the Google Maps script (loaded in app/orders/layout.tsx) to be ready
   useEffect(() => {
     loadGoogleMapsPlacesApi()
       .then(() => {
@@ -129,6 +156,13 @@ const AddressAutocompleteInput = forwardRef<
       });
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      resetAutocompleteSession();
+    };
+  }, [resetAutocompleteSession]);
+
   // Sync parent value when reset externally (e.g. switching recent destinations)
   const prevValueRef = useRef(value);
   useEffect(() => {
@@ -136,6 +170,7 @@ const AddressAutocompleteInput = forwardRef<
       setInputValue(value);
       setSuggestions([]);
       setDropdownOpen(false);
+      resetAutocompleteSession();
       const valid = value === "";
       setIsAddressValid(valid);
       setAddressError(null);
@@ -144,7 +179,7 @@ const AddressAutocompleteInput = forwardRef<
     } else {
       prevValueRef.current = value;
     }
-  }, [value, inputValue]);
+  }, [value, inputValue, resetAutocompleteSession]);
 
   const markValid = useCallback((data: AddressData) => {
     setIsAddressValid(true);
@@ -160,35 +195,83 @@ const AddressAutocompleteInput = forwardRef<
   }, []);
 
   const fetchSuggestions = useCallback((input: string) => {
-    if (!autocompleteRef.current || !input.trim()) {
+    const normalizedInput = input.trim();
+
+    if (!autocompleteRef.current || normalizedInput.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
       setSuggestionsLoading(false);
       return;
     }
+
+    const cacheKey = normalizedInput.toLocaleLowerCase("it-IT");
+    const cachedSuggestions = predictionCacheRef.current.get(cacheKey);
+    if (cachedSuggestions) {
+      setSuggestions(cachedSuggestions);
+      setSuggestionsLoading(false);
+      return;
+    }
+
     setSuggestionsLoading(true);
+    const requestId = ++latestRequestRef.current;
+    const sessionToken = getAutocompleteSessionToken();
+
     autocompleteRef.current.getPlacePredictions(
-      { input, componentRestrictions: { country: "it" }, types: ["address"] },
+      {
+        input: normalizedInput,
+        componentRestrictions: { country: "it" },
+        types: ["address"],
+        sessionToken,
+      },
       (predictions, status) => {
+        if (requestId !== latestRequestRef.current) return;
+
         setSuggestionsLoading(false);
         const win = window as GMapsWindow;
         const OK = win.google?.maps?.places?.PlacesServiceStatus.OK ?? "OK";
-        setSuggestions(status === OK && predictions ? predictions : []);
+
+        const nextSuggestions = status === OK && predictions ? predictions : [];
+        setSuggestions(nextSuggestions);
+        predictionCacheRef.current.set(cacheKey, nextSuggestions);
+
+        if (predictionCacheRef.current.size > MAX_CACHE_ENTRIES) {
+          const firstKey = predictionCacheRef.current.keys().next().value;
+          if (typeof firstKey === "string") {
+            predictionCacheRef.current.delete(firstKey);
+          }
+        }
       }
     );
-  }, []);
+  }, [getAutocompleteSessionToken]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newVal = e.target.value;
+      const normalizedInput = newVal.trim();
+
       setInputValue(newVal);
       onChangeRef.current(newVal);
       setIsAddressValid(false);
       setAddressError(null);
       setDropdownOpen(true);
+
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => fetchSuggestions(newVal), 300);
+
+      if (!normalizedInput) {
+        setSuggestions([]);
+        setSuggestionsLoading(false);
+        resetAutocompleteSession();
+        return;
+      }
+
+      if (normalizedInput.length < MIN_QUERY_LENGTH) {
+        setSuggestions([]);
+        setSuggestionsLoading(false);
+        return;
+      }
+
+      debounceRef.current = setTimeout(() => fetchSuggestions(newVal), DEBOUNCE_MS);
     },
-    [fetchSuggestions]
+    [fetchSuggestions, resetAutocompleteSession]
   );
 
   const geocodeRequest = useCallback(
@@ -206,6 +289,7 @@ const AddressAutocompleteInput = forwardRef<
 
   const handleSelectSuggestion = useCallback(
     async (suggestion: GMapsPrediction) => {
+      resetAutocompleteSession();
       setSuggestions([]);
       setDropdownOpen(false);
       setInputValue(suggestion.description);
@@ -233,11 +317,13 @@ const AddressAutocompleteInput = forwardRef<
         setIsGeocoding(false);
       }
     },
-    [geocodeRequest, markValid, markInvalid]
+    [geocodeRequest, markValid, markInvalid, resetAutocompleteSession]
   );
 
   const geocodeManual = useCallback(
     async (address: string): Promise<boolean> => {
+      resetAutocompleteSession();
+
       if (!address.trim()) {
         setIsAddressValid(true);
         setAddressError(null);
@@ -245,6 +331,22 @@ const AddressAutocompleteInput = forwardRef<
         onValidityChangeRef.current?.(true);
         return true;
       }
+
+      // Fallback: if Google Maps is not available, keep manual text input valid.
+      if (!geocoderRef.current) {
+        const manualAddress = address.trim();
+        setInputValue(manualAddress);
+        onChangeRef.current(manualAddress);
+        markValid({
+          address: manualAddress,
+          lat: null,
+          lng: null,
+          placeId: null,
+          source: "manual",
+        });
+        return true;
+      }
+
       try {
         setIsGeocoding(true);
         setAddressError(null);
@@ -271,7 +373,7 @@ const AddressAutocompleteInput = forwardRef<
         setIsGeocoding(false);
       }
     },
-    [geocodeRequest, markValid, markInvalid]
+    [geocodeRequest, markValid, markInvalid, resetAutocompleteSession]
   );
 
   useImperativeHandle(
@@ -296,7 +398,7 @@ const AddressAutocompleteInput = forwardRef<
           onChange={handleInputChange}
           onFocus={() => {
             setDropdownOpen(true);
-            if (inputValue && suggestions.length === 0 && !suggestionsLoading) {
+            if (inputValue.trim().length >= MIN_QUERY_LENGTH && suggestions.length === 0 && !suggestionsLoading) {
               fetchSuggestions(inputValue);
             }
           }}
