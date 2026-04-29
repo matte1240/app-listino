@@ -6,7 +6,6 @@ import { Package, Truck, CheckCircle, XCircle, Users, TrendingUp } from "lucide-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
-import { formatDate } from "@/lib/datetime";
 
 interface DashboardStats {
   totalOrders: number;
