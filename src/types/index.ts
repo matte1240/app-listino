@@ -28,7 +28,7 @@ export interface OrderHistoryItem {
   sconto?: number; // 0 | 8 | 15
 }
 
-export type OrderStatus = 'bozza' | 'confermato';
+export type OrderStatus = 'bozza' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
 
 export interface Order {
   id: number;
@@ -43,6 +43,7 @@ export interface Order {
   items: OrderHistoryItem[];
   status: OrderStatus;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface OrderItem {

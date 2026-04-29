@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search } from "lucide-react";
+import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search, Truck, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
-import type { Order } from "@/types";
+import type { Order, OrderStatus } from "@/types";
 
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
@@ -243,14 +243,7 @@ export default function OrdersPage() {
                       {order.luogoConsegna && (
                         <Badge variant="secondary" className="text-xs px-2 py-0 h-5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700">{order.luogoConsegna}</Badge>
                       )}
-                      {isDraft && (
-                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20">{linkedDraftLabel}</Badge>
-                      )}
-                      {isSent && (
-                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-700">
-                          Inviato
-                        </Badge>
-                      )}
+                      {getStatusBadge(order.status)}
                       {hasLinkedDraft && (
                         <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-blue-700 border-blue-300 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-700">Bozza aperta</Badge>
                       )}
@@ -413,3 +406,40 @@ export default function OrdersPage() {
     </div>
   );
 }
+
+// Helper to render status badge with appropriate icon and color
+  function getStatusBadge(status: OrderStatus) {
+    const styles = {
+      bozza: "bg-amber-100 text-amber-700 border-amber-200",
+      confermato: "bg-blue-100 text-blue-700 border-blue-200",
+      in_lavorazione: "bg-purple-100 text-purple-700 border-purple-200",
+      spedito: "bg-indigo-100 text-indigo-700 border-indigo-200",
+      consegnato: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      annullato: "bg-red-100 text-red-700 border-red-200",
+    } as const;
+
+    const icons = {
+      bozza: <ClipboardList className="h-3.5 w-3.5" />,
+      confermato: <CheckCircle className="h-3.5 w-3.5" />,
+      in_lavorazione: <Package className="h-3.5 w-3.5" />,
+      spedito: <Truck className="h-3.5 w-3.5" />,
+      consegnato: <CheckCircle className="h-3.5 w-3.5" />,
+      annullato: <XCircle className="h-3.5 w-3.5" />,
+    };
+
+    const labels: Record<OrderStatus, string> = {
+      bozza: "Bozza",
+      confermato: "Confermato",
+      in_lavorazione: "In Lavorazione",
+      spedito: "Spedito",
+      consegnato: "Consegnato",
+      annullato: "Annullato",
+    };
+
+    return (
+      <Badge variant="outline" className={`font-medium ${styles[status] || ""}`}>
+        {icons[status]}
+        <span className="ml-1">{labels[status]}</span>
+      </Badge>
+    );
+  }
