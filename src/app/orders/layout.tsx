@@ -1,15 +1,14 @@
 import Script from "next/script";
-import { getGoogleMapsPublicKey } from "@/lib/google-maps-key";
 
-export default async function OrdersLayout({ children }: { children: React.ReactNode }) {
-  const googleMapsKey = await getGoogleMapsPublicKey();
+const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
+export default function OrdersLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      {googleMapsKey && (
+      {GMAPS_KEY && (
         <Script
           id="google-maps-places"
-          src={`https://maps.googleapis.com/maps/api/js?key=${googleMapsKey}&libraries=places&language=it&region=IT`}
+          src={`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places&language=it&region=IT`}
           strategy="afterInteractive"
         />
       )}
