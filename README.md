@@ -1,95 +1,130 @@
 # App Listino
 
-Applicazione Next.js per consultazione listino, creazione ordini e invio notifiche email.
+**Applicazione web moderna per la consultazione del listino materiali, creazione ordini e gestione del flusso commerciale.**
 
-## Setup locale
+Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e **shadcn/ui**. Ottimizzata per tablet e desktop, con supporto **PWA** per l’uso offline.
 
-1. Installa le dipendenze:
+---
+
+## ✨ Funzionalità principali
+
+- **Listino** — Ricerca veloce e consultazione materiali (con flag "obsoleto")
+- **Ordini** — Wizard multi-step, bozze, modifica, duplicazione, anteprima PDF
+- **Luogo di consegna** — Autocomplete intelligente con Google Places
+- **Email** — Invio automatico ordini con configurazione per filiale/magazzino
+- **AI Enrichment** — Arricchimento automatico descrizioni tramite OpenAI
+- **Anagrafiche** — Importazione massiva da Excel
+- **Amministrazione** — Gestione utenti, backup/restore DB, configurazione email
+- **Backup Automatici** — Scheduler + upload su Hetzner Object Storage (S3)
+
+---
+
+## 🚀 Primo Avvio
+
+### Credenziali di default
+- **Username**: `admin`
+- **Password**: `admin123`
+
+**Importante**: Cambia immediatamente la password dopo il primo accesso dal pannello Admin → Utenti.
+
+### Sviluppo locale
 
 ```bash
+# 1. Installa le dipendenze
 npm install
-```
 
-2. Crea il file ambiente partendo dal template:
+# 2. Configura le variabili d'ambiente (copia il template)
+cp .env.example .env.local
 
-```bash
-cp .env.example .env
-```
-
-3. Avvia in sviluppo:
-
-```bash
+# 3. Avvia in sviluppo
 npm run dev
 ```
 
-L'app e disponibile su http://localhost:3000.
+L’app sarà disponibile su **http://localhost:3000**
 
-## Variabili ambiente
-
-Variabili principali (vedi anche `.env.example`):
-
-- `JWT_SECRET`: chiave JWT per autenticazione.
-- `COOKIE_SECURE`: `true` in produzione HTTPS, `false` in locale.
-- `GMAIL_USER` / `GMAIL_APP_PASSWORD`: credenziali SMTP Gmail per invio email ordini.
-- `ORDER_EMAIL_TO`: fallback destinatario email se non configurato per magazzino.
-- `OPENAI_API_KEY`: chiave per funzionalita enrich AI.
-- `AI_MODEL`: modello OpenAI usato dall'enrich (default `gpt-4o-mini`).
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`: chiave Google Maps JS usata nel campo "Luogo di consegna" con compilazione guidata.
-- `DB_BACKUP_MAX_FILES`: numero massimo di backup DB mantenuti in `data/backups` (default `30`).
-- `DB_BACKUP_AUTO_ENABLED`: abilita scheduler backup automatico (default `true`).
-- `DB_BACKUP_AUTO_INTERVAL_MINUTES`: frequenza backup automatico in minuti (default `360`).
-- `DB_BACKUP_AUTO_RUN_ON_START`: esegue un ciclo backup all'avvio processo (default `true`).
-- `DB_BACKUP_AUTO_UPLOAD_TO_S3`: durante il ciclo automatico carica anche su S3 se configurato (default `true`).
-- `DB_BACKUP_S3_ENDPOINT`: endpoint S3 compatibile Hetzner Object Storage.
-- `DB_BACKUP_S3_REGION`: regione S3 (default `us-east-1`).
-- `DB_BACKUP_S3_BUCKET`: bucket remoto dei backup.
-- `DB_BACKUP_S3_PREFIX`: prefisso cartella oggetti backup (default `db-backups`).
-- `DB_BACKUP_S3_ACCESS_KEY_ID` / `DB_BACKUP_S3_SECRET_ACCESS_KEY`: credenziali accesso bucket.
-- `DB_BACKUP_S3_FORCE_PATH_STYLE`: path style per provider S3 compatibili (default `true`).
-- `DB_BACKUP_S3_MAX_FILES`: massimo backup mantenuti su bucket (default `120`).
-
-## Google Places Autocomplete (Luogo di consegna)
-
-Per abilitare la compilazione guidata indirizzi nello step Dettagli ordine:
-
-1. Crea una key in Google Cloud.
-2. Abilita `Maps JavaScript API` e `Places API` sul progetto Google Cloud.
-3. Inserisci la key in `.env` con `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...`.
-4. Applica restrizioni consigliate alla key:
-- Restrizione applicazione: HTTP referrers (domini dell'app).
-- Restrizione API: solo Maps JavaScript API e Places API.
-
-Se la variabile non e presente o la API non e raggiungibile, il campo resta utilizzabile come input manuale (fallback automatico).
-
-## Deploy Docker
-
-Con `docker-compose.yml`:
+### Docker (produzione consigliata)
 
 ```bash
 docker compose up -d
 ```
 
-Il servizio legge le variabili da `.env` e monta i dati persistenti nella cartella `data/`.
+I dati (database SQLite, backup e anagrafiche) vengono persistiti nella cartella `./data`.
 
-## Backup database (SQLite)
+---
 
-Dal pannello admin e disponibile la pagina `Admin > Backup DB` (`/admin/backup`) per:
+## 🔑 Variabili d’Ambiente
 
-- creare un nuovo backup consistente del file SQLite;
-- creare un backup locale e upload immediato su S3;
-- visualizzare lo storico backup disponibili;
-- scaricare o eliminare un backup specifico;
-- ripristinare il database da backup locale o da backup remoto S3.
+È stato creato il file **`.env.example`** (committato su git) con tutti i valori di esempio e commenti.
 
-I backup vengono salvati in `data/backups/` con nome `listino-YYYYMMDD-HHMMSS-xxxxxx.db`.
-La retention automatica mantiene al massimo `DB_BACKUP_MAX_FILES` file locali e `DB_BACKUP_S3_MAX_FILES` file remoti.
+**Per iniziare:**
 
-### Restore DB
+```bash
+cp .env.example .env.local
+```
 
-Ogni restore crea automaticamente un backup di sicurezza prima della sostituzione del database attivo.
-In caso di errore durante il restore, viene tentato rollback automatico al database precedente.
+Poi modifica `.env.local` con i tuoi valori reali (chiavi, password, endpoint S3, ecc.).
 
-### Backup automatico su Hetzner S3
+> **Nota**: `.env.local` è ignorato da git per motivi di sicurezza. Non committare mai credenziali reali.
 
-Lo scheduler parte automaticamente al primo accesso al DB e lancia un ciclo ogni `DB_BACKUP_AUTO_INTERVAL_MINUTES` minuti.
-Ogni ciclo crea un backup locale e, se la configurazione S3 e presente e `DB_BACKUP_AUTO_UPLOAD_TO_S3=true`, esegue upload su Hetzner Object Storage.
+---
+
+## 🔐 Sicurezza e Produzione
+
+- Cambia subito la password dell’utente `admin`
+- Usa un `JWT_SECRET` lungo e casuale in produzione
+- Imposta `COOKIE_SECURE=true` quando usi HTTPS
+- Non esporre mai le chiavi segrete (`.env*` è ignorato da git)
+- In produzione si consiglia l’uso di Docker + reverse proxy (Nginx/Traefik)
+
+---
+
+## 📍 Come usare l’applicazione
+
+1. Accedi con `admin` / `admin123`
+2. **Listino** → cerca e aggiungi materiali all’ordine
+3. **Nuovo Ordine** → compila il wizard (cliente, magazzino, luogo consegna, data, note)
+4. Anteprima PDF → Invia email
+5. Vai su **/admin** per gestire utenti, anagrafiche, AI enrichment e backup
+
+**Pannello Admin**: `http://localhost:3000/admin`
+
+---
+
+## 🛠️ Tecnologie
+
+- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
+- **Styling**: Tailwind CSS + shadcn/ui + Radix
+- **Database**: SQLite + better-sqlite3 (con WAL)
+- **Auth**: JOSE (JWT) + httpOnly cookies
+- **AI**: OpenAI SDK
+- **Email**: Nodemailer + Gmail
+- **Storage**: AWS SDK S3 (compatibile Hetzner)
+- **Excel**: xlsx
+- **Mappe**: Google Places Autocomplete
+- **Stato**: Zustand
+- **PWA**: Service Worker + Web Manifest
+
+---
+
+## 📁 Struttura principale
+
+- `/app` — Pagine e API routes
+- `/components` — Componenti UI e business
+- `/lib` — Database, auth, AI, email, backup, utils
+- `/types` — Definizioni TypeScript
+- `/admin/*` — Pannello amministrazione
+
+---
+
+## 🐛 Troubleshooting
+
+- **"Failed to load materials"**: Controlla che `data/listino.db` sia creato
+- **Google Maps non funziona**: Verifica la chiave `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+- **Email non inviate**: Controlla `GMAIL_USER` e `GMAIL_APP_PASSWORD`
+- **Backup S3 fallisce**: Verifica le credenziali e l’endpoint Hetzner
+
+---
+
+**Sviluppato con ❤️ per semplificare il processo di vendita e gestione ordini.**
+
+
