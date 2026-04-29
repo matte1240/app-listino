@@ -3,6 +3,7 @@ type GoogleWindow = Window & {
     maps?: {
       places?: {
         AutocompleteService?: unknown;
+        AutocompleteSuggestion?: { fetchAutocompleteSuggestions?: unknown };
       };
       Geocoder?: unknown;
     };
@@ -10,10 +11,12 @@ type GoogleWindow = Window & {
 };
 
 function hasPlacesApi(win: GoogleWindow): boolean {
-  return (
-    typeof win.google?.maps?.places?.AutocompleteService === "function" &&
-    typeof win.google?.maps?.Geocoder === "function"
-  );
+  const places = win.google?.maps?.places;
+  if (!places || typeof win.google?.maps?.Geocoder !== "function") return false;
+  const hasLegacy = typeof places.AutocompleteService === "function";
+  const hasNew =
+    typeof places.AutocompleteSuggestion?.fetchAutocompleteSuggestions === "function";
+  return hasLegacy || hasNew;
 }
 
 // Poll until the Google Maps script (loaded by Next.js Script in app/orders/layout.tsx) is ready.

@@ -77,13 +77,39 @@ interface GMapsGeocoder {
   ): void;
 }
 
+interface GMapsPlaceInstance {
+  fetchFields(options: { fields: string[] }): Promise<{ place: GMapsPlaceInstance }>;
+  formattedAddress?: string;
+  location?: { lat(): number; lng(): number };
+  id?: string;
+}
+
 type GMapsWindow = Window & {
   google?: {
     maps?: {
       places?: {
-        AutocompleteService: new () => GMapsAutocompleteService;
-          AutocompleteSessionToken?: new () => GMapsAutocompleteSessionToken;
-        PlacesServiceStatus: { OK: string };
+        AutocompleteService?: new () => GMapsAutocompleteService;
+        AutocompleteSessionToken?: new () => GMapsAutocompleteSessionToken;
+        PlacesServiceStatus?: { OK: string };
+        /** New Places API (2025) */
+        AutocompleteSuggestion?: {
+          fetchAutocompleteSuggestions(request: {
+            input: string;
+            includedRegionCodes?: string[];
+            sessionToken?: GMapsAutocompleteSessionToken;
+          }): Promise<{
+            suggestions: Array<{
+              placePrediction: {
+                text: { toString(): string };
+                mainText: { toString(): string };
+                secondaryText: { toString(): string };
+                placeId: string;
+              };
+            }>;
+          }>;
+        };
+        /** New Places API (2025) */
+        Place?: new (options: { id: string }) => GMapsPlaceInstance;
       };
       Geocoder: new () => GMapsGeocoder;
       GeocoderStatus: { OK: string };
@@ -146,9 +172,13 @@ const AddressAutocompleteInput = forwardRef<
     loadGoogleMapsPlacesApi()
       .then(() => {
         const win = window as GMapsWindow;
-        if (win.google?.maps?.places && win.google?.maps?.Geocoder) {
-          autocompleteRef.current = new win.google.maps.places.AutocompleteService();
-          geocoderRef.current = new win.google.maps.Geocoder();
+        const maps = win.google?.maps;
+        if (!maps) return;
+        if (maps.places?.AutocompleteService) {
+          autocompleteRef.current = new maps.places.AutocompleteService();
+        }
+        if (maps.Geocoder) {
+          geocoderRef.current = new maps.Geocoder();
         }
       })
       .catch(() => {
@@ -197,7 +227,18 @@ const AddressAutocompleteInput = forwardRef<
   const fetchSuggestions = useCallback((input: string) => {
     const normalizedInput = input.trim();
 
-    if (!autocompleteRef.current || normalizedInput.length < MIN_QUERY_LENGTH) {
+    const win = window as GMapsWindow;
+    const canUseNewApi =
+      typeof win.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions === "function";
+    const canUseLegacyApi = !!autocompleteRef.current;
+
+    if (!canUseNewApi && !canUseLegacyApi) {
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+
+    if (normalizedInput.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
       setSuggestionsLoading(false);
       return;
@@ -215,32 +256,59 @@ const AddressAutocompleteInput = forwardRef<
     const requestId = ++latestRequestRef.current;
     const sessionToken = getAutocompleteSessionToken();
 
-    autocompleteRef.current.getPlacePredictions(
-      {
-        input: normalizedInput,
-        componentRestrictions: { country: "it" },
-        types: ["address"],
-        sessionToken,
-      },
-      (predictions, status) => {
-        if (requestId !== latestRequestRef.current) return;
-
-        setSuggestionsLoading(false);
-        const win = window as GMapsWindow;
-        const OK = win.google?.maps?.places?.PlacesServiceStatus.OK ?? "OK";
-
-        const nextSuggestions = status === OK && predictions ? predictions : [];
-        setSuggestions(nextSuggestions);
-        predictionCacheRef.current.set(cacheKey, nextSuggestions);
-
-        if (predictionCacheRef.current.size > MAX_CACHE_ENTRIES) {
-          const firstKey = predictionCacheRef.current.keys().next().value;
-          if (typeof firstKey === "string") {
-            predictionCacheRef.current.delete(firstKey);
-          }
+    const storeSuggestions = (next: GMapsPrediction[]) => {
+      if (requestId !== latestRequestRef.current) return;
+      setSuggestionsLoading(false);
+      setSuggestions(next);
+      predictionCacheRef.current.set(cacheKey, next);
+      if (predictionCacheRef.current.size > MAX_CACHE_ENTRIES) {
+        const firstKey = predictionCacheRef.current.keys().next().value;
+        if (typeof firstKey === "string") {
+          predictionCacheRef.current.delete(firstKey);
         }
       }
-    );
+    };
+
+    if (canUseNewApi) {
+      // New Places API (2025): promise-based AutocompleteSuggestion
+      const autocompleteService = win.google!.maps!.places!.AutocompleteSuggestion!;
+      autocompleteService
+        .fetchAutocompleteSuggestions({
+          input: normalizedInput,
+          includedRegionCodes: ["it"],
+          sessionToken,
+        })
+        .then(({ suggestions }) => {
+          const mapped: GMapsPrediction[] = suggestions.map((s) => ({
+            place_id: s.placePrediction.placeId,
+            description: s.placePrediction.text.toString(),
+            structured_formatting: {
+              main_text: s.placePrediction.mainText.toString(),
+              secondary_text: s.placePrediction.secondaryText.toString(),
+            },
+          }));
+          storeSuggestions(mapped);
+        })
+        .catch(() => {
+          storeSuggestions([]);
+        });
+    } else {
+      // Legacy Places API: callback-based AutocompleteService
+      autocompleteRef.current!.getPlacePredictions(
+        {
+          input: normalizedInput,
+          componentRestrictions: { country: "it" },
+          types: ["address"],
+          sessionToken,
+        },
+        (predictions, status) => {
+          // Note: PlacesServiceStatus may be absent in newer library versions
+          const OK = win.google?.maps?.places?.PlacesServiceStatus?.OK ?? "OK";
+          const next = status === OK && predictions ? predictions : [];
+          storeSuggestions(next);
+        }
+      );
+    }
   }, [getAutocompleteSessionToken]);
 
   const handleInputChange = useCallback(
@@ -296,20 +364,54 @@ const AddressAutocompleteInput = forwardRef<
       onChangeRef.current(suggestion.description);
       try {
         setIsGeocoding(true);
-        const result = await geocodeRequest({ placeId: suggestion.place_id });
-        if (result) {
-          const addr = result.formatted_address;
-          setInputValue(addr);
-          onChangeRef.current(addr);
-          markValid({
-            address: addr,
-            lat: result.geometry.location.lat(),
-            lng: result.geometry.location.lng(),
-            placeId: suggestion.place_id,
-            source: "google",
-          });
+        const win = window as GMapsWindow;
+        const PlaceClass = win.google?.maps?.places?.Place;
+
+        if (typeof PlaceClass === "function") {
+          // New Places API (2025): use Place.fetchFields()
+          const place = new PlaceClass({ id: suggestion.place_id });
+          await place.fetchFields({ fields: ["formattedAddress", "location", "id"] });
+          const addr = place.formattedAddress;
+          if (addr && place.location) {
+            setInputValue(addr);
+            onChangeRef.current(addr);
+            markValid({
+              address: addr,
+              lat: place.location.lat(),
+              lng: place.location.lng(),
+              placeId: place.id ?? suggestion.place_id,
+              source: "google",
+            });
+          } else if (addr) {
+            setInputValue(addr);
+            onChangeRef.current(addr);
+            markValid({
+              address: addr,
+              lat: null,
+              lng: null,
+              placeId: place.id ?? suggestion.place_id,
+              source: "google",
+            });
+          } else {
+            markInvalid();
+          }
         } else {
-          markInvalid();
+          // Legacy: use Geocoder
+          const result = await geocodeRequest({ placeId: suggestion.place_id });
+          if (result) {
+            const addr = result.formatted_address;
+            setInputValue(addr);
+            onChangeRef.current(addr);
+            markValid({
+              address: addr,
+              lat: result.geometry.location.lat(),
+              lng: result.geometry.location.lng(),
+              placeId: suggestion.place_id,
+              source: "google",
+            });
+          } else {
+            markInvalid();
+          }
         }
       } catch {
         markInvalid();
