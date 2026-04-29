@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
+import { cookies } from "next/headers";
 
 const secret = new TextEncoder().encode(
   process.env.JWT_SECRET || "dev-secret-change-me-in-production"
@@ -28,4 +29,14 @@ export async function verifyToken(token: string): Promise<JwtPayload | null> {
   } catch {
     return null;
   }
+}
+
+export async function getServerSession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+
+  if (!token) return null;
+
+  const payload = await verifyToken(token);
+  return payload;
 }
