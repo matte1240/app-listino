@@ -4,6 +4,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import Navbar from "@/components/Navbar";
 import PwaRegister from "@/components/PwaRegister";
 import "./globals.css";
+import { Toaster } from "sonner";
 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -57,6 +58,7 @@ export default function RootLayout({
             {children}
           </AuthProvider>
         </div>
+        <Toaster position="top-right" richColors closeButton />
       </body>
     </html>
   );
