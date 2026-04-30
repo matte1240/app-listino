@@ -49,7 +49,7 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
     return googleMapsPlacesApiPromise;
   }
 
-  googleMapsPlacesApiPromise = new Promise<void>((resolve, reject) => {
+  const nextPromise = new Promise<void>((resolve, reject) => {
     let resolved = false;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
@@ -100,7 +100,9 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
       attempts++;
       if (attempts >= MAX_ATTEMPTS) {
         cleanup();
-        googleMapsPlacesApiPromise = null;
+        if (googleMapsPlacesApiPromise === nextPromise) {
+          googleMapsPlacesApiPromise = null;
+        }
         reject(new Error("Google Maps Places API not available after 15s"));
         return;
       }
@@ -113,6 +115,8 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
 
     poll();
   });
+
+  googleMapsPlacesApiPromise = nextPromise;
 
   return googleMapsPlacesApiPromise;
 }

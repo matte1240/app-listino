@@ -266,7 +266,6 @@ const AddressAutocompleteInput = forwardRef<
             setSuggestionsLoading(false);
             return;
           }
-          initGoogleMapsRefs();
 
           const refreshedWin = window as GMapsWindow;
           const nowCanUseNewApi =
@@ -355,7 +354,7 @@ const AddressAutocompleteInput = forwardRef<
         }
       );
     }
-  }, [getAutocompleteSessionToken, ensureGoogleMapsReady, initGoogleMapsRefs]);
+  }, [getAutocompleteSessionToken, ensureGoogleMapsReady]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
