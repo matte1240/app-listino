@@ -120,6 +120,8 @@ type GMapsWindow = Window & {
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 300;
 const MAX_CACHE_ENTRIES = 50;
+const MAX_GOOGLE_MAPS_RETRIES = 2;
+const GOOGLE_MAPS_RETRY_DELAY_MS = 150;
 
 const AddressAutocompleteInput = forwardRef<
   AddressAutocompleteInputHandle,
@@ -185,7 +187,7 @@ const AddressAutocompleteInput = forwardRef<
         initGoogleMapsRefs();
       })
       .catch(() => {
-        // Google Maps non disponibile: il campo resta in modalità testo libero
+        // Google Maps unavailable: keep field as free text input
       });
   }, [initGoogleMapsRefs]);
 
@@ -244,7 +246,7 @@ const AddressAutocompleteInput = forwardRef<
     onValidityChangeRef.current?.(false);
   }, []);
 
-  const fetchSuggestions = useCallback((input: string, retriesLeft = 2) => {
+  const fetchSuggestions = useCallback((input: string, retriesLeft = MAX_GOOGLE_MAPS_RETRIES) => {
     const normalizedInput = input.trim();
 
     const win = window as GMapsWindow;
@@ -259,7 +261,7 @@ const AddressAutocompleteInput = forwardRef<
         void ensureGoogleMapsReady().then(() => {
           setTimeout(() => {
             fetchSuggestions(input, retriesLeft - 1);
-          }, 150);
+          }, GOOGLE_MAPS_RETRY_DELAY_MS);
         });
       }
       return;
