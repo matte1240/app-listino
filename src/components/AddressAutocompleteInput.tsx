@@ -142,6 +142,7 @@ const AddressAutocompleteInput = forwardRef<
   const geocoderRef = useRef<GMapsGeocoder | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryChainIdRef = useRef(0);
   const sessionTokenRef = useRef<GMapsAutocompleteSessionToken | null>(null);
   const predictionCacheRef = useRef<Map<string, GMapsPrediction[]>>(new Map());
   const latestRequestRef = useRef(0);
@@ -249,6 +250,8 @@ const AddressAutocompleteInput = forwardRef<
   }, []);
 
   const fetchSuggestions = useCallback((input: string, retriesLeft = MAX_GOOGLE_MAPS_RETRIES) => {
+    const retryChainId = ++retryChainIdRef.current;
+
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
@@ -265,18 +268,23 @@ const AddressAutocompleteInput = forwardRef<
       setSuggestions([]);
       setSuggestionsLoading(false);
       if (retriesLeft > 0) {
-        void ensureGoogleMapsReady().then(() => {
-          const refreshedWin = window as GMapsWindow;
-          const nowCanUseNewApi =
-            typeof refreshedWin.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions ===
-            "function";
-          const nowCanUseLegacyApi = !!autocompleteRef.current;
-          if (!nowCanUseNewApi && !nowCanUseLegacyApi) return;
+        void ensureGoogleMapsReady()
+          .then(() => {
+            if (retryChainId !== retryChainIdRef.current) return;
+            const refreshedWin = window as GMapsWindow;
+            const nowCanUseNewApi =
+              typeof refreshedWin.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions ===
+              "function";
+            const nowCanUseLegacyApi = !!autocompleteRef.current;
+            if (!nowCanUseNewApi && !nowCanUseLegacyApi) return;
 
-          retryTimerRef.current = setTimeout(() => {
-            fetchSuggestions(input, retriesLeft - 1);
-          }, GOOGLE_MAPS_RETRY_DELAY_MS);
-        });
+            retryTimerRef.current = setTimeout(() => {
+              fetchSuggestions(input, retriesLeft - 1);
+            }, GOOGLE_MAPS_RETRY_DELAY_MS);
+          })
+          .catch(() => {
+            // Unexpected rejection: keep free text behavior without crashing
+          });
       }
       return;
     }
