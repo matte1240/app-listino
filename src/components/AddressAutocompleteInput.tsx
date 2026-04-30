@@ -184,11 +184,6 @@ const AddressAutocompleteInput = forwardRef<
     return loadGoogleMapsPlacesApi()
       .then(() => {
         initGoogleMapsRefs();
-        return true;
-      })
-      .catch(() => {
-        // Google Maps unavailable: keep field as free text input
-        return false;
       });
   }, [initGoogleMapsRefs]);
 
@@ -260,12 +255,8 @@ const AddressAutocompleteInput = forwardRef<
       setSuggestions([]);
       setSuggestionsLoading(normalizedInput.length >= MIN_QUERY_LENGTH);
       void ensureGoogleMapsReady()
-        .then((ready) => {
+        .then(() => {
           if (retryChainId !== retryChainIdRef.current) return;
-          if (!ready) {
-            setSuggestionsLoading(false);
-            return;
-          }
 
           const refreshedWin = window as GMapsWindow;
           const nowCanUseNewApi =
@@ -279,6 +270,11 @@ const AddressAutocompleteInput = forwardRef<
           }
 
           fetchSuggestions(input);
+        })
+        .catch(() => {
+          if (retryChainId === retryChainIdRef.current) {
+            setSuggestionsLoading(false);
+          }
         });
       return;
     }

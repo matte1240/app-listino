@@ -77,8 +77,8 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
       importing = true;
 
       void importRequiredLibraries(win)
-        .catch(() => {
-          // Fall back to polling below if dynamic import is unavailable/transiently fails.
+        .catch((error) => {
+          console.warn("Google Maps library import failed, retrying...", error);
         })
         .finally(() => {
           importing = false;
