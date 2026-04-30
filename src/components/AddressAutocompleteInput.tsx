@@ -141,6 +141,7 @@ const AddressAutocompleteInput = forwardRef<
   const autocompleteRef = useRef<GMapsAutocompleteService | null>(null);
   const geocoderRef = useRef<GMapsGeocoder | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionTokenRef = useRef<GMapsAutocompleteSessionToken | null>(null);
   const predictionCacheRef = useRef<Map<string, GMapsPrediction[]>>(new Map());
   const latestRequestRef = useRef(0);
@@ -211,6 +212,7 @@ const AddressAutocompleteInput = forwardRef<
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       resetAutocompleteSession();
     };
   }, [resetAutocompleteSession]);
@@ -247,6 +249,11 @@ const AddressAutocompleteInput = forwardRef<
   }, []);
 
   const fetchSuggestions = useCallback((input: string, retriesLeft = MAX_GOOGLE_MAPS_RETRIES) => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
     const normalizedInput = input.trim();
 
     const win = window as GMapsWindow;
@@ -259,7 +266,14 @@ const AddressAutocompleteInput = forwardRef<
       setSuggestionsLoading(false);
       if (retriesLeft > 0) {
         void ensureGoogleMapsReady().then(() => {
-          setTimeout(() => {
+          const refreshedWin = window as GMapsWindow;
+          const nowCanUseNewApi =
+            typeof refreshedWin.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions ===
+            "function";
+          const nowCanUseLegacyApi = !!autocompleteRef.current;
+          if (!nowCanUseNewApi && !nowCanUseLegacyApi) return;
+
+          retryTimerRef.current = setTimeout(() => {
             fetchSuggestions(input, retriesLeft - 1);
           }, GOOGLE_MAPS_RETRY_DELAY_MS);
         });
