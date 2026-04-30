@@ -1,8 +1,8 @@
 import GoogleMapsScript from "@/components/GoogleMapsScript";
-import { readEnvValue } from "@/lib/read-env-file";
+import { getGoogleMapsPublicKey } from "@/lib/google-maps-key";
 
-export default function OrdersLayout({ children }: { children: React.ReactNode }) {
-  const gmapsKey = readEnvValue("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY");
+export default async function OrdersLayout({ children }: { children: React.ReactNode }) {
+  const gmapsKey = (await getGoogleMapsPublicKey()) ?? "";
   return (
     <>
       <GoogleMapsScript apiKey={gmapsKey} />

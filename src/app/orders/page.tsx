@@ -211,14 +211,11 @@ export default function OrdersPage() {
             const isOpen = expanded === order.id;
             const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
             const isDraft = order.status === "bozza";
-            const isSent = order.status === "confermato";
-            const isLinkedDraft = isDraft && order.parentOrderId !== null;
             const hasLinkedDraft = order.status === "confermato" && linkedDraftByParentId.has(order.id);
             const linkedDraft = order.status === "confermato" ? linkedDraftByParentId.get(order.id) : undefined;
             const draftToSend = isDraft ? order : linkedDraft;
             const canSendDraft = !!draftToSend;
             const isSendingThisDraft = !!draftToSend && submittingDraftId === draftToSend.id;
-            const linkedDraftLabel = isLinkedDraft ? `Bozza modifica #${order.parentOrderId}` : "Bozza";
             const deleteTitle = isDraft ? "Conferma eliminazione bozza" : "Conferma cancellazione";
             const deleteMessage = isDraft
               ? `La bozza #${order.id} per ${order.cliente} verrà eliminata. Non sarà inviata alcuna email al magazzino.`

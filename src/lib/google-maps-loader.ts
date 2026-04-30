@@ -1,4 +1,5 @@
 type GoogleWindow = Window & {
+  __googleMapsScriptState?: "loaded" | "error";
   google?: {
     maps?: {
       importLibrary?: (libraryName: string) => Promise<unknown>;
@@ -21,6 +22,27 @@ function hasPlacesApi(win: GoogleWindow): boolean {
 }
 
 let googleMapsPlacesApiPromise: Promise<void> | null = null;
+const MAX_ATTEMPTS = 180; // 180 × 100ms = 18s
+const POLL_INTERVAL_MS = 100;
+const IMPORT_TIMEOUT_MS = 4000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
 
 async function importRequiredLibraries(win: GoogleWindow): Promise<void> {
   const importLibrary = win.google?.maps?.importLibrary;
@@ -29,8 +51,8 @@ async function importRequiredLibraries(win: GoogleWindow): Promise<void> {
   if (typeof importLibrary !== "function") return;
 
   await Promise.all([
-    importLibrary("places"),
-    importLibrary("geocoding"),
+    withTimeout(importLibrary("places"), IMPORT_TIMEOUT_MS),
+    withTimeout(importLibrary("geocoding"), IMPORT_TIMEOUT_MS),
   ]);
 }
 
@@ -52,21 +74,31 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
   }
 
   const nextPromise = new Promise<void>((resolve, reject) => {
-    let resolved = false;
+    let settled = false;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
     let importing = false;
-    const MAX_ATTEMPTS = 150; // 150 × 100ms = 15s
 
     const cleanup = () => {
       window.removeEventListener("google-maps-loaded", onScriptLoad);
+      window.removeEventListener("google-maps-error", onScriptError);
       if (pollTimer !== null) clearTimeout(pollTimer);
     };
 
+    const finishReject = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (googleMapsPlacesApiPromise === nextPromise) {
+        googleMapsPlacesApiPromise = null;
+      }
+      reject(error);
+    };
+
     const tryResolve = (): boolean => {
-      if (resolved) return true;
+      if (settled) return true;
       if (hasPlacesApi(win)) {
-        resolved = true;
+        settled = true;
         cleanup();
         resolve();
         return true;
@@ -75,7 +107,7 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
     };
 
     const ensureLibrariesReady = () => {
-      if (importing || !win.google?.maps) return;
+      if (settled || importing || !win.google?.maps) return;
       importing = true;
 
       importRequiredLibraries(win)
@@ -84,37 +116,49 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
         })
         .finally(() => {
           importing = false;
+          if (settled) return;
           if (!tryResolve()) {
-            pollTimer = setTimeout(poll, 100);
+            pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
           }
         });
     };
 
     const onScriptLoad = () => {
+      if (settled) return;
       if (tryResolve()) return;
       ensureLibrariesReady();
     };
 
+    const onScriptError = () => {
+      finishReject(new Error("Google Maps script failed to load"));
+    };
+
     window.addEventListener("google-maps-loaded", onScriptLoad);
+    window.addEventListener("google-maps-error", onScriptError);
+
+    if (win.__googleMapsScriptState === "error") {
+      onScriptError();
+      return;
+    }
 
     const poll = () => {
+      if (settled) return;
       if (tryResolve()) return;
+
       attempts++;
       if (attempts >= MAX_ATTEMPTS) {
-        cleanup();
-        if (googleMapsPlacesApiPromise === nextPromise) {
-          googleMapsPlacesApiPromise = null;
-        }
-        reject(new Error("Google Maps Places API not available after 15s"));
+        finishReject(new Error("Google Maps Places API not available after 18s"));
         return;
       }
+
       if (win.google?.maps && !importing) {
         // Skip scheduling another timer here because ensureLibrariesReady()
         // schedules the next poll itself after the import attempt finishes.
         ensureLibrariesReady();
         return;
       }
-      pollTimer = setTimeout(poll, 100);
+
+      pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
     };
 
     poll();

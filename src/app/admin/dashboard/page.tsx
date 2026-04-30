@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Package, Truck, CheckCircle, XCircle, Users, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 
 interface DashboardStats {
@@ -110,7 +109,7 @@ export default function AdminDashboard() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-2">
-          Panoramica dell'attività commerciale
+          Panoramica dell&apos;attivita commerciale
         </p>
       </div>
 

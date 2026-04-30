@@ -120,6 +120,26 @@ type GMapsWindow = Window & {
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 300;
 const MAX_CACHE_ENTRIES = 50;
+const GOOGLE_MAPS_READY_TIMEOUT_MS = 12000;
+const AUTOCOMPLETE_REQUEST_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
 
 const AddressAutocompleteInput = forwardRef<
   AddressAutocompleteInputHandle,
@@ -154,6 +174,7 @@ const AddressAutocompleteInput = forwardRef<
   const resetAutocompleteSession = useCallback(() => {
     sessionTokenRef.current = null;
     latestRequestRef.current += 1;
+    setSuggestionsLoading(false);
   }, []);
 
   const getAutocompleteSessionToken = useCallback((): GMapsAutocompleteSessionToken | undefined => {
@@ -181,7 +202,7 @@ const AddressAutocompleteInput = forwardRef<
   }, []);
 
   const ensureGoogleMapsReady = useCallback(() => {
-    return loadGoogleMapsPlacesApi()
+    return withTimeout(loadGoogleMapsPlacesApi(), GOOGLE_MAPS_READY_TIMEOUT_MS)
       .then(() => {
         initGoogleMapsRefs();
       });
@@ -191,8 +212,7 @@ const AddressAutocompleteInput = forwardRef<
   // Also listen for the "google-maps-loaded" event in case the script loads after
   // the initial polling window has already expired (e.g. very slow connections).
   useEffect(() => {
-    loadGoogleMapsPlacesApi()
-      .then(initGoogleMapsRefs)
+    void ensureGoogleMapsReady()
       .catch(() => {
         // Google Maps non disponibile: il campo funziona come testo libero
       });
@@ -202,7 +222,7 @@ const AddressAutocompleteInput = forwardRef<
     return () => {
       window.removeEventListener("google-maps-loaded", onLateLoad);
     };
-  }, [initGoogleMapsRefs]);
+  }, [ensureGoogleMapsReady, initGoogleMapsRefs]);
 
   useEffect(() => {
     return () => {
@@ -313,6 +333,16 @@ const AddressAutocompleteInput = forwardRef<
     if (canUseNewApi) {
       // New Places API (2025): promise-based AutocompleteSuggestion
       const autocompleteService = win.google!.maps!.places!.AutocompleteSuggestion!;
+      let settled = false;
+      const finish = (action: () => void) => {
+        if (settled) return;
+        settled = true;
+        action();
+      };
+      const timeoutId = setTimeout(() => {
+        finish(() => storeSuggestions([]));
+      }, AUTOCOMPLETE_REQUEST_TIMEOUT_MS);
+
       autocompleteService
         .fetchAutocompleteSuggestions({
           input: normalizedInput,
@@ -320,6 +350,7 @@ const AddressAutocompleteInput = forwardRef<
           sessionToken,
         })
         .then(({ suggestions }) => {
+          clearTimeout(timeoutId);
           const mapped: GMapsPrediction[] = suggestions.map((s) => ({
             place_id: s.placePrediction.placeId,
             description: s.placePrediction.text.toString(),
@@ -328,13 +359,21 @@ const AddressAutocompleteInput = forwardRef<
               secondary_text: s.placePrediction.secondaryText.toString(),
             },
           }));
-          storeSuggestions(mapped);
+          finish(() => storeSuggestions(mapped));
         })
         .catch(() => {
-          storeSuggestions([]);
+          clearTimeout(timeoutId);
+          finish(() => storeSuggestions([]));
         });
     } else {
       // Legacy Places API: callback-based AutocompleteService
+      let settled = false;
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        storeSuggestions([]);
+      }, AUTOCOMPLETE_REQUEST_TIMEOUT_MS);
+
       autocompleteRef.current!.getPlacePredictions(
         {
           input: normalizedInput,
@@ -343,6 +382,10 @@ const AddressAutocompleteInput = forwardRef<
           sessionToken,
         },
         (predictions, status) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+
           // Note: PlacesServiceStatus may be absent in newer library versions
           const OK = win.google?.maps?.places?.PlacesServiceStatus?.OK ?? "OK";
           const next = status === OK && predictions ? predictions : [];
