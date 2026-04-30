@@ -14,7 +14,7 @@ type GoogleWindow = Window & {
 
 function hasPlacesApi(win: GoogleWindow): boolean {
   const places = win.google?.maps?.places;
-  if (!places || typeof win.google?.maps?.Geocoder !== "function") return false;
+  if (!places) return false;
   const hasLegacy = typeof places.AutocompleteService === "function";
   const hasNew =
     typeof places.AutocompleteSuggestion?.fetchAutocompleteSuggestions === "function";
@@ -22,9 +22,9 @@ function hasPlacesApi(win: GoogleWindow): boolean {
 }
 
 let googleMapsPlacesApiPromise: Promise<void> | null = null;
-const MAX_ATTEMPTS = 180; // 180 × 100ms = 18s
+const MAX_ATTEMPTS = 100; // 100 × 100ms = 10s
 const POLL_INTERVAL_MS = 100;
-const IMPORT_TIMEOUT_MS = 4000;
+const IMPORT_TIMEOUT_MS = 6000;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -50,10 +50,14 @@ async function importRequiredLibraries(win: GoogleWindow): Promise<void> {
   // modular importLibrary API may not be exposed yet.
   if (typeof importLibrary !== "function") return;
 
-  await Promise.all([
-    withTimeout(importLibrary("places"), IMPORT_TIMEOUT_MS),
-    withTimeout(importLibrary("geocoding"), IMPORT_TIMEOUT_MS),
-  ]);
+  // Only `places` is required for autocomplete. `geocoding` is best-effort:
+  // the new Places API uses Place.fetchFields() and does not need Geocoder,
+  // and the manual-text fallback works without it too. A failure to import
+  // geocoding (slow network, restricted key, etc.) must not block autocomplete.
+  await withTimeout(importLibrary("places"), IMPORT_TIMEOUT_MS);
+  void withTimeout(importLibrary("geocoding"), IMPORT_TIMEOUT_MS).catch(() => {
+    // Geocoder optional; ignore failures.
+  });
 }
 
 // Resolves when the Google Maps Places + Geocoding APIs (loaded by Next.js Script
@@ -78,6 +82,7 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
     let importing = false;
+    let importAttempted = false;
 
     const cleanup = () => {
       window.removeEventListener("google-maps-loaded", onScriptLoad);
@@ -107,8 +112,9 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
     };
 
     const ensureLibrariesReady = () => {
-      if (settled || importing || !win.google?.maps) return;
+      if (settled || importing || importAttempted || !win.google?.maps) return;
       importing = true;
+      importAttempted = true;
 
       importRequiredLibraries(win)
         .catch((error) => {
@@ -147,11 +153,11 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
 
       attempts++;
       if (attempts >= MAX_ATTEMPTS) {
-        finishReject(new Error("Google Maps Places API not available after 18s"));
+        finishReject(new Error("Google Maps Places API not available after 10s"));
         return;
       }
 
-      if (win.google?.maps && !importing) {
+      if (win.google?.maps && !importing && !importAttempted) {
         // Skip scheduling another timer here because ensureLibrariesReady()
         // schedules the next poll itself after the import attempt finishes.
         ensureLibrariesReady();
