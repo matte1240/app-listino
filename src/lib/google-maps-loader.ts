@@ -1,6 +1,7 @@
 type GoogleWindow = Window & {
   google?: {
     maps?: {
+      importLibrary?: (libraryName: string) => Promise<unknown>;
       places?: {
         AutocompleteService?: unknown;
         AutocompleteSuggestion?: { fetchAutocompleteSuggestions?: unknown };
@@ -19,10 +20,22 @@ function hasPlacesApi(win: GoogleWindow): boolean {
   return hasLegacy || hasNew;
 }
 
-// Resolves when the Google Maps Places API (loaded by Next.js Script in app/orders/layout.tsx) is ready.
-// Uses two complementary mechanisms:
-//   1. A "google-maps-loaded" DOM event dispatched by GoogleMapsScript's onLoad callback.
-//   2. A 100 ms polling fallback (up to 10 s) in case the event fires before this function is called.
+let googleMapsPlacesApiPromise: Promise<void> | null = null;
+
+async function importRequiredLibraries(win: GoogleWindow): Promise<void> {
+  const importLibrary = win.google?.maps?.importLibrary;
+  // Gracefully support the legacy `libraries=places` loader path where the
+  // modular importLibrary API may not be exposed yet.
+  if (typeof importLibrary !== "function") return;
+
+  await Promise.all([
+    importLibrary("places"),
+    importLibrary("geocoding"),
+  ]);
+}
+
+// Resolves when the Google Maps Places + Geocoding APIs (loaded by Next.js Script
+// in app/orders/layout.tsx) are actually ready to be used.
 export function loadGoogleMapsPlacesApi(): Promise<void> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Server side"));
@@ -34,11 +47,16 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
     return Promise.resolve();
   }
 
-  return new Promise<void>((resolve, reject) => {
+  if (googleMapsPlacesApiPromise) {
+    return googleMapsPlacesApiPromise;
+  }
+
+  const nextPromise = new Promise<void>((resolve, reject) => {
     let resolved = false;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
-    const MAX_ATTEMPTS = 100; // 100 × 100ms = 10s
+    let importing = false;
+    const MAX_ATTEMPTS = 150; // 150 × 100ms = 15s
 
     const cleanup = () => {
       window.removeEventListener("google-maps-loaded", onScriptLoad);
@@ -56,12 +74,25 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
       return false;
     };
 
-    // Fired by GoogleMapsScript's onLoad — poll briefly after the event to let
-    // the async bootstrap finish setting up window.google.maps.places.
+    const ensureLibrariesReady = () => {
+      if (importing || !win.google?.maps) return;
+      importing = true;
+
+      importRequiredLibraries(win)
+        .catch((error) => {
+          console.warn("Google Maps library import failed, will continue polling...", error);
+        })
+        .finally(() => {
+          importing = false;
+          if (!tryResolve()) {
+            pollTimer = setTimeout(poll, 100);
+          }
+        });
+    };
+
     const onScriptLoad = () => {
       if (tryResolve()) return;
-      // The "loading=async" bootstrap may need a few more ticks after the script
-      // executes, so keep polling if the API isn't ready yet.
+      ensureLibrariesReady();
     };
 
     window.addEventListener("google-maps-loaded", onScriptLoad);
@@ -71,7 +102,16 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
       attempts++;
       if (attempts >= MAX_ATTEMPTS) {
         cleanup();
-        reject(new Error("Google Maps Places API not available after 10s"));
+        if (googleMapsPlacesApiPromise === nextPromise) {
+          googleMapsPlacesApiPromise = null;
+        }
+        reject(new Error("Google Maps Places API not available after 15s"));
+        return;
+      }
+      if (win.google?.maps && !importing) {
+        // Skip scheduling another timer here because ensureLibrariesReady()
+        // schedules the next poll itself after the import attempt finishes.
+        ensureLibrariesReady();
         return;
       }
       pollTimer = setTimeout(poll, 100);
@@ -79,4 +119,8 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
 
     poll();
   });
+
+  googleMapsPlacesApiPromise = nextPromise;
+
+  return googleMapsPlacesApiPromise;
 }
