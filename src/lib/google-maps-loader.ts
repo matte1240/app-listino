@@ -78,7 +78,7 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
       if (importing || !win.google?.maps) return;
       importing = true;
 
-      void importRequiredLibraries(win)
+      importRequiredLibraries(win)
         .catch((error) => {
           console.warn("Google Maps library import failed, will continue polling...", error);
         })
@@ -109,6 +109,8 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
         return;
       }
       if (win.google?.maps && !importing) {
+        // Skip scheduling another timer here because ensureLibrariesReady()
+        // schedules the next poll itself after the import attempt finishes.
         ensureLibrariesReady();
         return;
       }
