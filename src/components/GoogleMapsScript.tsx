@@ -13,6 +13,9 @@ export default function GoogleMapsScript({ apiKey }: Props) {
       id="google-maps-places"
       src={`https://maps.googleapis.com/maps/api/js?key=${apiKey}&loading=async&libraries=places&language=it&region=IT`}
       strategy="afterInteractive"
+      onLoad={() => {
+        window.dispatchEvent(new Event("google-maps-loaded"));
+      }}
     />
   );
 }

@@ -167,24 +167,34 @@ const AddressAutocompleteInput = forwardRef<
     return sessionTokenRef.current;
   }, []);
 
-  // Wait for the Google Maps script (loaded in app/orders/layout.tsx) to be ready
+  const initGoogleMapsRefs = useCallback(() => {
+    const win = window as GMapsWindow;
+    const maps = win.google?.maps;
+    if (!maps) return;
+    if (maps.places?.AutocompleteService && !autocompleteRef.current) {
+      autocompleteRef.current = new maps.places.AutocompleteService();
+    }
+    if (maps.Geocoder && !geocoderRef.current) {
+      geocoderRef.current = new maps.Geocoder();
+    }
+  }, []);
+
+  // Wait for the Google Maps script (loaded in app/orders/layout.tsx) to be ready.
+  // Also listen for the "google-maps-loaded" event in case the script loads after
+  // the initial polling window has already expired (e.g. very slow connections).
   useEffect(() => {
     loadGoogleMapsPlacesApi()
-      .then(() => {
-        const win = window as GMapsWindow;
-        const maps = win.google?.maps;
-        if (!maps) return;
-        if (maps.places?.AutocompleteService) {
-          autocompleteRef.current = new maps.places.AutocompleteService();
-        }
-        if (maps.Geocoder) {
-          geocoderRef.current = new maps.Geocoder();
-        }
-      })
+      .then(initGoogleMapsRefs)
       .catch(() => {
         // Google Maps non disponibile: il campo funziona come testo libero
       });
-  }, []);
+
+    const onLateLoad = () => initGoogleMapsRefs();
+    window.addEventListener("google-maps-loaded", onLateLoad);
+    return () => {
+      window.removeEventListener("google-maps-loaded", onLateLoad);
+    };
+  }, [initGoogleMapsRefs]);
 
   useEffect(() => {
     return () => {
