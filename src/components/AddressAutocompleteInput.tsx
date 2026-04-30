@@ -251,9 +251,15 @@ const AddressAutocompleteInput = forwardRef<
       typeof win.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions === "function";
     const canUseLegacyApi = !!autocompleteRef.current;
 
+    if (normalizedInput.length < MIN_QUERY_LENGTH) {
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+
     if (!canUseNewApi && !canUseLegacyApi) {
       setSuggestions([]);
-      setSuggestionsLoading(normalizedInput.length >= MIN_QUERY_LENGTH);
+      setSuggestionsLoading(true);
       void ensureGoogleMapsReady()
         .then(() => {
           if (retryChainId !== retryChainIdRef.current) return;
@@ -276,12 +282,6 @@ const AddressAutocompleteInput = forwardRef<
             setSuggestionsLoading(false);
           }
         });
-      return;
-    }
-
-    if (normalizedInput.length < MIN_QUERY_LENGTH) {
-      setSuggestions([]);
-      setSuggestionsLoading(false);
       return;
     }
 

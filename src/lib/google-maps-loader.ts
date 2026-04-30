@@ -24,6 +24,8 @@ let googleMapsPlacesApiPromise: Promise<void> | null = null;
 
 async function importRequiredLibraries(win: GoogleWindow): Promise<void> {
   const importLibrary = win.google?.maps?.importLibrary;
+  // Gracefully support the legacy `libraries=places` loader path where the
+  // modular importLibrary API may not be exposed yet.
   if (typeof importLibrary !== "function") return;
 
   await Promise.all([
@@ -78,7 +80,7 @@ export function loadGoogleMapsPlacesApi(): Promise<void> {
 
       void importRequiredLibraries(win)
         .catch((error) => {
-          console.warn("Google Maps library import failed, retrying...", error);
+          console.warn("Google Maps library import failed, will continue polling...", error);
         })
         .finally(() => {
           importing = false;
