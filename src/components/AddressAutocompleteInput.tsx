@@ -120,8 +120,6 @@ type GMapsWindow = Window & {
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 300;
 const MAX_CACHE_ENTRIES = 50;
-const MAX_GOOGLE_MAPS_RETRIES = 2;
-const GOOGLE_MAPS_RETRY_DELAY_MS = 150;
 
 const AddressAutocompleteInput = forwardRef<
   AddressAutocompleteInputHandle,
@@ -141,7 +139,6 @@ const AddressAutocompleteInput = forwardRef<
   const autocompleteRef = useRef<GMapsAutocompleteService | null>(null);
   const geocoderRef = useRef<GMapsGeocoder | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryChainIdRef = useRef(0);
   const sessionTokenRef = useRef<GMapsAutocompleteSessionToken | null>(null);
   const predictionCacheRef = useRef<Map<string, GMapsPrediction[]>>(new Map());
@@ -187,9 +184,11 @@ const AddressAutocompleteInput = forwardRef<
     return loadGoogleMapsPlacesApi()
       .then(() => {
         initGoogleMapsRefs();
+        return true;
       })
       .catch(() => {
         // Google Maps unavailable: keep field as free text input
+        return false;
       });
   }, [initGoogleMapsRefs]);
 
@@ -213,7 +212,6 @@ const AddressAutocompleteInput = forwardRef<
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       resetAutocompleteSession();
     };
   }, [resetAutocompleteSession]);
@@ -249,14 +247,8 @@ const AddressAutocompleteInput = forwardRef<
     onValidityChangeRef.current?.(false);
   }, []);
 
-  const fetchSuggestions = useCallback((input: string, retriesLeft = MAX_GOOGLE_MAPS_RETRIES) => {
+  const fetchSuggestions = useCallback((input: string) => {
     const retryChainId = ++retryChainIdRef.current;
-
-    if (retryTimerRef.current) {
-      clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = null;
-    }
-
     const normalizedInput = input.trim();
 
     const win = window as GMapsWindow;
@@ -266,26 +258,29 @@ const AddressAutocompleteInput = forwardRef<
 
     if (!canUseNewApi && !canUseLegacyApi) {
       setSuggestions([]);
-      setSuggestionsLoading(false);
-      if (retriesLeft > 0) {
-        void ensureGoogleMapsReady()
-          .then(() => {
-            if (retryChainId !== retryChainIdRef.current) return;
-            const refreshedWin = window as GMapsWindow;
-            const nowCanUseNewApi =
-              typeof refreshedWin.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions ===
-              "function";
-            const nowCanUseLegacyApi = !!autocompleteRef.current;
-            if (!nowCanUseNewApi && !nowCanUseLegacyApi) return;
+      setSuggestionsLoading(normalizedInput.length >= MIN_QUERY_LENGTH);
+      void ensureGoogleMapsReady()
+        .then((ready) => {
+          if (retryChainId !== retryChainIdRef.current) return;
+          if (!ready) {
+            setSuggestionsLoading(false);
+            return;
+          }
+          initGoogleMapsRefs();
 
-            retryTimerRef.current = setTimeout(() => {
-              fetchSuggestions(input, retriesLeft - 1);
-            }, GOOGLE_MAPS_RETRY_DELAY_MS);
-          })
-          .catch(() => {
-            // Unexpected rejection: keep free text behavior without crashing
-          });
-      }
+          const refreshedWin = window as GMapsWindow;
+          const nowCanUseNewApi =
+            typeof refreshedWin.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions ===
+            "function";
+          const nowCanUseLegacyApi = !!autocompleteRef.current;
+
+          if (!nowCanUseNewApi && !nowCanUseLegacyApi) {
+            setSuggestionsLoading(false);
+            return;
+          }
+
+          fetchSuggestions(input);
+        });
       return;
     }
 
@@ -360,7 +355,7 @@ const AddressAutocompleteInput = forwardRef<
         }
       );
     }
-  }, [getAutocompleteSessionToken, ensureGoogleMapsReady]);
+  }, [getAutocompleteSessionToken, ensureGoogleMapsReady, initGoogleMapsRefs]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
