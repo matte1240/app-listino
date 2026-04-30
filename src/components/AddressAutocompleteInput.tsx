@@ -179,6 +179,16 @@ const AddressAutocompleteInput = forwardRef<
     }
   }, []);
 
+  const ensureGoogleMapsReady = useCallback(() => {
+    return loadGoogleMapsPlacesApi()
+      .then(() => {
+        initGoogleMapsRefs();
+      })
+      .catch(() => {
+        // Google Maps non disponibile: il campo resta in modalità testo libero
+      });
+  }, [initGoogleMapsRefs]);
+
   // Wait for the Google Maps script (loaded in app/orders/layout.tsx) to be ready.
   // Also listen for the "google-maps-loaded" event in case the script loads after
   // the initial polling window has already expired (e.g. very slow connections).
@@ -234,7 +244,7 @@ const AddressAutocompleteInput = forwardRef<
     onValidityChangeRef.current?.(false);
   }, []);
 
-  const fetchSuggestions = useCallback((input: string) => {
+  const fetchSuggestions = useCallback((input: string, allowRetry = true) => {
     const normalizedInput = input.trim();
 
     const win = window as GMapsWindow;
@@ -245,6 +255,11 @@ const AddressAutocompleteInput = forwardRef<
     if (!canUseNewApi && !canUseLegacyApi) {
       setSuggestions([]);
       setSuggestionsLoading(false);
+      if (allowRetry) {
+        void ensureGoogleMapsReady().then(() => {
+          fetchSuggestions(input, false);
+        });
+      }
       return;
     }
 
@@ -319,7 +334,7 @@ const AddressAutocompleteInput = forwardRef<
         }
       );
     }
-  }, [getAutocompleteSessionToken]);
+  }, [getAutocompleteSessionToken, ensureGoogleMapsReady]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
