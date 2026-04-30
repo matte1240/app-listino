@@ -244,7 +244,7 @@ const AddressAutocompleteInput = forwardRef<
     onValidityChangeRef.current?.(false);
   }, []);
 
-  const fetchSuggestions = useCallback((input: string, allowRetry = true) => {
+  const fetchSuggestions = useCallback((input: string, retriesLeft = 2) => {
     const normalizedInput = input.trim();
 
     const win = window as GMapsWindow;
@@ -255,9 +255,11 @@ const AddressAutocompleteInput = forwardRef<
     if (!canUseNewApi && !canUseLegacyApi) {
       setSuggestions([]);
       setSuggestionsLoading(false);
-      if (allowRetry) {
+      if (retriesLeft > 0) {
         void ensureGoogleMapsReady().then(() => {
-          fetchSuggestions(input, false);
+          setTimeout(() => {
+            fetchSuggestions(input, retriesLeft - 1);
+          }, 150);
         });
       }
       return;
