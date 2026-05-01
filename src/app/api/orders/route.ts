@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { sendOrderEmail } from "@/lib/mail";
-import { normalizeUtcTimestamp } from "@/lib/datetime";
+import { dbOrderToOrder, getOrderDraftMap, type DbOrder } from "@/lib/orders";
 import type { Order, OrderHistoryItem } from "@/types";
 
 /** GET /api/orders — list orders (admin sees all, agente sees own) */
@@ -15,12 +15,22 @@ export async function GET(req: NextRequest) {
   const db = getDb();
   const rows =
     payload.role === "admin"
-      ? (db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all() as DbOrder[])
+      ? (db
+          .prepare(
+            "SELECT * FROM orders WHERE NOT (status = 'bozza' AND parent_order_id IS NOT NULL) ORDER BY created_at DESC"
+          )
+          .all() as DbOrder[])
       : (db
-          .prepare("SELECT * FROM orders WHERE agente = ? ORDER BY created_at DESC")
+          .prepare(
+            "SELECT * FROM orders WHERE agente = ? AND NOT (status = 'bozza' AND parent_order_id IS NOT NULL) ORDER BY created_at DESC"
+          )
           .all(payload.username) as DbOrder[]);
 
-  const orders: Order[] = rows.map(dbToOrder);
+  const draftMap = getOrderDraftMap(db, rows.map((row) => row.id));
+  const orders: Order[] = rows.map((row) =>
+    dbOrderToOrder(row, { draftRow: draftMap.get(row.id) ?? null })
+  );
+
   return NextResponse.json({ orders });
 }
 
@@ -42,10 +52,10 @@ export async function POST(req: NextRequest) {
     dataConsegna: string;
     note: string;
     items: OrderHistoryItem[];
-    status?: 'bozza' | 'confermato';
+    status?: "bozza" | "confermato";
   };
 
-  const resolvedStatus: 'bozza' | 'confermato' = status === 'bozza' ? 'bozza' : 'confermato';
+  const resolvedStatus: "bozza" | "confermato" = status === "bozza" ? "bozza" : "confermato";
 
   const db = getDb();
   const normalizedClienteId = Number(clienteId);
@@ -91,7 +101,6 @@ export async function POST(req: NextRequest) {
 
   const orderId = result.lastInsertRowid as number;
 
-  // Send email notification only for confirmed orders (fire-and-forget)
   const order: Order = {
     id: orderId,
     parentOrderId: null,
@@ -105,42 +114,14 @@ export async function POST(req: NextRequest) {
     items,
     status: resolvedStatus,
     createdAt: new Date().toISOString(),
+    hasDraft: false,
+    draftUpdatedAt: null,
+    draft: null,
   };
-  if (resolvedStatus === 'confermato') {
+
+  if (resolvedStatus === "confermato") {
     sendOrderEmail(order, payload.email).catch((err) => console.error("[mail] Errore invio email ordine:", err));
   }
 
   return NextResponse.json({ id: orderId }, { status: 201 });
-}
-
-interface DbOrder {
-  id: number;
-  parent_order_id: number | null;
-  cliente: string;
-  cliente_id: number | null;
-  magazzino: string;
-  luogo_consegna: string;
-  data_consegna: string;
-  note: string;
-  agente: string;
-  items: string;
-  status: string;
-  created_at: string;
-}
-
-function dbToOrder(r: DbOrder): Order {
-  return {
-    id: r.id,
-    parentOrderId: r.parent_order_id ?? null,
-    clienteId: r.cliente_id ?? null,
-    cliente: r.cliente,
-    magazzino: r.magazzino,
-    luogoConsegna: r.luogo_consegna,
-    dataConsegna: r.data_consegna,
-    note: r.note,
-    agente: r.agente,
-    items: JSON.parse(r.items) as OrderHistoryItem[],
-    status: (r.status === 'bozza' ? 'bozza' : 'confermato') as Order['status'],
-    createdAt: normalizeUtcTimestamp(r.created_at),
-  };
 }

@@ -55,6 +55,7 @@ export default function OrderWizard({ editingOrder }: Props) {
   const [saving, setSaving] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedMessage, setSavedMessage] = useState("Ordine salvato!");
 
   // Address state
   const addressInputRef = useRef<AddressAutocompleteInputHandle>(null);
@@ -73,21 +74,25 @@ export default function OrderWizard({ editingOrder }: Props) {
   const openArticleRequestIdRef = useRef(0);
 
   const isEditing = !!editingOrder;
+  const editingSource = editingOrder?.draft ?? editingOrder;
+  const isStandaloneDraft = editingOrder?.status === "bozza" && editingOrder.parentOrderId === null;
+  const isModificationEditing = !!editingOrder && !isStandaloneDraft;
+  const hasOpenModificationDraft = !!editingOrder?.draft;
 
   // On mount: if editing, populate store with order data
   useEffect(() => {
-    if (!editingOrder) return;
+    if (!editingSource) return;
     // Populate orderInfo
     setOrderInfo({
-      clienteId: editingOrder.clienteId ?? null,
-      cliente: editingOrder.cliente,
-      magazzino: editingOrder.magazzino as typeof orderInfo.magazzino,
-      luogoConsegna: editingOrder.luogoConsegna,
-      dataConsegna: editingOrder.dataConsegna,
-      note: editingOrder.note,
+      clienteId: editingSource.clienteId ?? null,
+      cliente: editingSource.cliente,
+      magazzino: editingSource.magazzino as typeof orderInfo.magazzino,
+      luogoConsegna: editingSource.luogoConsegna,
+      dataConsegna: editingSource.dataConsegna,
+      note: editingSource.note,
     });
     // Populate orderItems from order
-    for (const item of editingOrder.items) {
+    for (const item of editingSource.items) {
       const current = useOrderStore.getState().orderItems[item.codice];
       if (!current?.flagged) toggleFlag(item.codice);
       if ((current?.qty ?? 0) !== item.qty) setQty(item.codice, item.qty);
@@ -97,7 +102,7 @@ export default function OrderWizard({ editingOrder }: Props) {
     // Start at step 1 when editing so user can review customer selection first
     setStep(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [editingSource]);
 
   // Customer autocomplete
   useEffect(() => {
@@ -233,6 +238,50 @@ export default function OrderWizard({ editingOrder }: Props) {
     });
   }, []);
 
+  const buildOrderItems = useCallback((): OrderHistoryItem[] => {
+    return flaggedItems.map((m) => ({
+      codice: m.codice,
+      descrizione: m.descrizioneAI || m.descrizione,
+      qty: orderItems[m.codice]?.qty ?? 0,
+      um: m.um,
+      prezzoListino: m.prezzoListino,
+      sconto: orderItems[m.codice]?.sconto ?? 0,
+    }));
+  }, [flaggedItems, orderItems]);
+
+  const getRequestConfig = useCallback((status: "bozza" | "confermato") => {
+    const items = buildOrderItems();
+
+    if (!isEditing || !editingOrder) {
+      return {
+        url: "/api/orders",
+        method: "POST" as const,
+        body: { ...orderInfo, items, status },
+      };
+    }
+
+    if (status === "bozza" && !isStandaloneDraft) {
+      return {
+        url: `/api/orders/${editingOrder.id}/draft`,
+        method: "PUT" as const,
+        body: { ...orderInfo, items },
+      };
+    }
+
+    return {
+      url: `/api/orders/${editingOrder.id}`,
+      method: "PUT" as const,
+      body: { ...orderInfo, items, status },
+    };
+  }, [buildOrderItems, editingOrder, isEditing, isStandaloneDraft, orderInfo]);
+
+  const getSuccessMessage = useCallback((status: "bozza" | "confermato") => {
+    if (status === "bozza") return "Bozza salvata!";
+    if (!isEditing) return "Ordine salvato!";
+    if (isStandaloneDraft) return "Ordine inviato!";
+    return "Modifica inviata!";
+  }, [isEditing, isStandaloneDraft]);
+
   const handleRemoveItemFromCart = useCallback((codice: string, articoloLabel?: string) => {
     const message = articoloLabel
       ? `Vuoi rimuovere \"${articoloLabel}\" dal carrello?`
@@ -332,20 +381,11 @@ export default function OrderWizard({ editingOrder }: Props) {
     }
     setSavingDraft(true);
     try {
-      const items: OrderHistoryItem[] = flaggedItems.map((m) => ({
-        codice: m.codice,
-        descrizione: m.descrizioneAI || m.descrizione,
-        qty: orderItems[m.codice]?.qty ?? 0,
-        um: m.um,
-        prezzoListino: m.prezzoListino,
-        sconto: orderItems[m.codice]?.sconto ?? 0,
-      }));
-      const url = isEditing ? `/api/orders/${editingOrder!.id}` : "/api/orders";
-      const method = isEditing ? "PUT" : "POST";
-      await fetch(url, {
-        method,
+      const request = getRequestConfig("bozza");
+      await fetch(request.url, {
+        method: request.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...orderInfo, items, status: "bozza" }),
+        body: JSON.stringify(request.body),
       });
     } catch {
       // Ignore errors on auto-save draft, just exit
@@ -355,31 +395,22 @@ export default function OrderWizard({ editingOrder }: Props) {
       setExitDialogOpen(false);
       router.push("/orders");
     }
-  }, [orderInfo, flaggedItems, orderItems, isEditing, editingOrder, resetOrder, setExitDialogOpen, router]);
+  }, [orderInfo, flaggedItems.length, getRequestConfig, resetOrder, router, setExitDialogOpen]);
 
   const handleSave = useCallback(async (status: "bozza" | "confermato") => {
     if (saving) return;
     setSaving(true);
     try {
-      const items: OrderHistoryItem[] = flaggedItems.map((m) => ({
-        codice: m.codice,
-        descrizione: m.descrizioneAI || m.descrizione,
-        qty: orderItems[m.codice]?.qty ?? 0,
-        um: m.um,
-        prezzoListino: m.prezzoListino,
-        sconto: orderItems[m.codice]?.sconto ?? 0,
-      }));
+      const request = getRequestConfig(status);
 
-      const url = isEditing ? `/api/orders/${editingOrder!.id}` : "/api/orders";
-      const method = isEditing ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
+      const res = await fetch(request.url, {
+        method: request.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...orderInfo, items, status }),
+        body: JSON.stringify(request.body),
       });
       if (!res.ok) throw new Error("Errore salvataggio");
 
+      setSavedMessage(getSuccessMessage(status));
       setSaved(true);
       resetOrder();
       setTimeout(() => {
@@ -391,7 +422,7 @@ export default function OrderWizard({ editingOrder }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [saving, flaggedItems, orderItems, orderInfo, isEditing, editingOrder, resetOrder, router]);
+  }, [getRequestConfig, getSuccessMessage, resetOrder, router, saving]);
 
   // ────────────────────────────────────────────
   // Stepper header
@@ -809,7 +840,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <CheckCircle2 className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="text-xl font-bold">{isEditing ? "Ordine aggiornato!" : "Ordine salvato!"}</h2>
+        <h2 className="text-xl font-bold">{savedMessage}</h2>
         <p className="text-sm text-muted-foreground">Reindirizzamento agli ordini…</p>
       </div>
     );
@@ -822,7 +853,11 @@ export default function OrderWizard({ editingOrder }: Props) {
       <div className="flex flex-col gap-5">
         <div>
           <h2 className="text-lg font-bold text-foreground mb-0.5">Riepilogo ordine</h2>
-          <p className="text-sm text-muted-foreground">Controlla i dati prima di salvare o inviare.</p>
+          <p className="text-sm text-muted-foreground">
+            {isModificationEditing
+              ? "Controlla i dati prima di salvare la bozza o inviare la modifica."
+              : "Controlla i dati prima di salvare o inviare."}
+          </p>
         </div>
 
         {/* Cliente + dettagli */}
@@ -933,7 +968,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             disabled={saving}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Salva bozza
+            {isModificationEditing && hasOpenModificationDraft ? "Aggiorna bozza" : "Salva bozza"}
           </Button>
           <Button
             className="flex-1 h-11 gap-2 font-semibold"
@@ -941,7 +976,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             disabled={saving}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Invia a magazzino
+            {isModificationEditing ? "Invia modifica" : "Invia a magazzino"}
           </Button>
         </div>
       </div>

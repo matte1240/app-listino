@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search, Truck, CheckCircle, XCircle } from "lucide-react";
+import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search, Truck, CheckCircle, XCircle, Flag, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
@@ -17,6 +17,7 @@ export default function OrdersPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [submittingDraftId, setSubmittingDraftId] = useState<number | null>(null);
+  const [discardingDraftId, setDiscardingDraftId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -26,13 +27,6 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!authLoading && user) loadOrders();
   }, [authLoading, user]);
-
-  const linkedDraftByParentId = new Map<number, Order>();
-  for (const order of orders) {
-    if (order.status === "bozza" && order.parentOrderId !== null && !linkedDraftByParentId.has(order.parentOrderId)) {
-      linkedDraftByParentId.set(order.parentOrderId, order);
-    }
-  }
 
   async function loadOrders() {
     setLoading(true);
@@ -52,14 +46,6 @@ export default function OrdersPage() {
   }
 
   function handleEdit(order: Order) {
-    if (order.status === "confermato") {
-      const linkedDraft = linkedDraftByParentId.get(order.id);
-      if (linkedDraft) {
-        router.push(`/orders/${linkedDraft.id}/edit`);
-        return;
-      }
-    }
-
     router.push(`/orders/${order.id}/edit`);
   }
 
@@ -79,31 +65,37 @@ export default function OrdersPage() {
     }
   }
 
-  async function handleSendDraft(draft: Order) {
-    if (draft.status !== "bozza") return;
+  async function handleSendDraft(order: Order) {
+    const isStandaloneDraft = order.status === "bozza";
+    const hasAttachedDraft = !!order.hasDraft;
+    if (!isStandaloneDraft && !hasAttachedDraft) return;
 
-    const confirmMessage = draft.parentOrderId !== null
-      ? `Vuoi inviare la bozza di modifica per l'ordine #${draft.parentOrderId}?`
-      : `Vuoi inviare la bozza ordine #${draft.id}?`;
+    const confirmMessage = isStandaloneDraft
+      ? `Vuoi inviare la bozza ordine #${order.id}?`
+      : `Vuoi inviare la bozza di modifica per l'ordine #${order.id}?`;
 
     if (!window.confirm(confirmMessage)) return;
 
-    setSubmittingDraftId(draft.id);
+    setSubmittingDraftId(order.id);
     try {
-      const res = await fetch(`/api/orders/${draft.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clienteId: draft.clienteId,
-          cliente: draft.cliente,
-          magazzino: draft.magazzino,
-          luogoConsegna: draft.luogoConsegna,
-          dataConsegna: draft.dataConsegna,
-          note: draft.note,
-          items: draft.items,
-          status: "confermato",
-        }),
-      });
+      const res = isStandaloneDraft
+        ? await fetch(`/api/orders/${order.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              clienteId: order.clienteId,
+              cliente: order.cliente,
+              magazzino: order.magazzino,
+              luogoConsegna: order.luogoConsegna,
+              dataConsegna: order.dataConsegna,
+              note: order.note,
+              items: order.items,
+              status: "confermato",
+            }),
+          })
+        : await fetch(`/api/orders/${order.id}/draft`, {
+            method: "POST",
+          });
 
       if (!res.ok) {
         alert("Errore durante l'invio della bozza");
@@ -114,6 +106,27 @@ export default function OrdersPage() {
       await loadOrders();
     } finally {
       setSubmittingDraftId(null);
+    }
+  }
+
+  async function handleDiscardDraft(order: Order) {
+    if (!order.hasDraft) return;
+
+    if (!window.confirm(`Vuoi scartare la bozza di modifica dell'ordine #${order.id}?`)) {
+      return;
+    }
+
+    setDiscardingDraftId(order.id);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/draft`, { method: "DELETE" });
+      if (!res.ok) {
+        alert("Errore durante lo scarto della bozza");
+        return;
+      }
+
+      await loadOrders();
+    } finally {
+      setDiscardingDraftId(null);
     }
   }
 
@@ -211,16 +224,15 @@ export default function OrdersPage() {
             const isOpen = expanded === order.id;
             const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
             const isDraft = order.status === "bozza";
-            const hasLinkedDraft = order.status === "confermato" && linkedDraftByParentId.has(order.id);
-            const linkedDraft = order.status === "confermato" ? linkedDraftByParentId.get(order.id) : undefined;
-            const draftToSend = isDraft ? order : linkedDraft;
-            const canSendDraft = !!draftToSend;
-            const isSendingThisDraft = !!draftToSend && submittingDraftId === draftToSend.id;
+            const hasAttachedDraft = !!order.hasDraft;
+            const canSendDraft = isDraft || hasAttachedDraft;
+            const isSendingThisDraft = submittingDraftId === order.id;
+            const isDiscardingThisDraft = discardingDraftId === order.id;
             const deleteTitle = isDraft ? "Conferma eliminazione bozza" : "Conferma cancellazione";
             const deleteMessage = isDraft
               ? `La bozza #${order.id} per ${order.cliente} verrà eliminata. Non sarà inviata alcuna email al magazzino.`
-              : `L'ordine #${order.id} per ${order.cliente} verrà eliminato e sarà inviata una email di cancellazione.${hasLinkedDraft ? " L'eventuale bozza di modifica collegata verrà eliminata automaticamente." : ""} Questa azione non è reversibile.`;
-            const editActionLabel = hasLinkedDraft ? "Apri bozza" : isDraft ? "Modifica bozza" : "Modifica ordine";
+              : `L'ordine #${order.id} per ${order.cliente} verrà eliminato e sarà inviata una email di cancellazione.${hasAttachedDraft ? " L'eventuale bozza di modifica collegata verrà eliminata automaticamente." : ""} Questa azione non è reversibile.`;
+            const editActionLabel = hasAttachedDraft ? "Apri bozza" : isDraft ? "Modifica bozza" : "Modifica ordine";
             const deleteActionLabel = isDraft ? "Elimina bozza" : "Elimina ordine";
             const showDeleteConfirm = deleteConfirm === order.id;
             return (
@@ -235,14 +247,17 @@ export default function OrdersPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-foreground">{order.cliente}</span>
+                      <span className="font-bold text-sm text-foreground leading-tight">
+                        {order.cliente}{" "}
+                        <span className="whitespace-nowrap text-xs font-semibold text-muted-foreground/80">#{order.id}</span>
+                      </span>
                       <Badge variant="outline" className="text-xs px-2 py-0 h-5">{order.magazzino}</Badge>
                       {order.luogoConsegna && (
                         <Badge variant="secondary" className="text-xs px-2 py-0 h-5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700">{order.luogoConsegna}</Badge>
                       )}
                       {getStatusBadge(order.status)}
-                      {hasLinkedDraft && (
-                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-blue-700 border-blue-300 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-700">Bozza aperta</Badge>
+                      {hasAttachedDraft && (
+                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700">Bozza aperta</Badge>
                       )}
                       {user?.role === "admin" && (
                         <span className="text-xs text-muted-foreground/70">{order.agente}</span>
@@ -356,12 +371,27 @@ export default function OrdersPage() {
                     {/* Actions */}
                     {canEditOrder(order) && !showDeleteConfirm && (
                       <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
-                        {canSendDraft && draftToSend && (
+                        {hasAttachedDraft && !isDraft && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleSendDraft(draftToSend)}
-                            disabled={isSendingThisDraft || deleting}
+                            onClick={() => handleDiscardDraft(order)}
+                            disabled={isSendingThisDraft || isDiscardingThisDraft || deleting}
+                            className="text-amber-700 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/20 text-xs"
+                          >
+                            {isDiscardingThisDraft ? (
+                              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Scarto bozza…</>
+                            ) : (
+                              <><Undo2 className="h-3.5 w-3.5 mr-1.5" /> Scarta bozza</>
+                            )}
+                          </Button>
+                        )}
+                        {canSendDraft && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSendDraft(order)}
+                            disabled={isSendingThisDraft || isDiscardingThisDraft || deleting}
                             className="text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20 text-xs"
                           >
                             {isSendingThisDraft ? (
@@ -375,7 +405,7 @@ export default function OrdersPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(order)}
-                          disabled={isSendingThisDraft}
+                          disabled={isSendingThisDraft || isDiscardingThisDraft}
                           className="text-primary hover:bg-primary/10 hover:text-primary text-xs"
                         >
                           <Pencil className="h-3.5 w-3.5 mr-1.5" />
@@ -385,7 +415,7 @@ export default function OrdersPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteConfirm(order.id)}
-                          disabled={isSendingThisDraft}
+                          disabled={isSendingThisDraft || isDiscardingThisDraft}
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1.5" />
@@ -406,27 +436,39 @@ export default function OrdersPage() {
 
 // Helper to render status badge with appropriate icon and color
   function getStatusBadge(status: OrderStatus) {
-    const styles = {
+    if (status === "confermato") {
+      return (
+        <span
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600"
+          aria-label="Ordine inviato"
+          title="Ordine inviato"
+        >
+          <Flag className="h-3 w-3" />
+          <span className="sr-only">Ordine inviato</span>
+        </span>
+      );
+    }
+
+    const nonConfirmedStatus: Exclude<OrderStatus, "confermato"> = status;
+
+    const styles: Record<Exclude<OrderStatus, "confermato">, string> = {
       bozza: "bg-amber-100 text-amber-700 border-amber-200",
-      confermato: "bg-blue-100 text-blue-700 border-blue-200",
       in_lavorazione: "bg-purple-100 text-purple-700 border-purple-200",
       spedito: "bg-indigo-100 text-indigo-700 border-indigo-200",
       consegnato: "bg-emerald-100 text-emerald-700 border-emerald-200",
       annullato: "bg-red-100 text-red-700 border-red-200",
-    } as const;
+    };
 
     const icons = {
       bozza: <ClipboardList className="h-3.5 w-3.5" />,
-      confermato: <CheckCircle className="h-3.5 w-3.5" />,
       in_lavorazione: <Package className="h-3.5 w-3.5" />,
       spedito: <Truck className="h-3.5 w-3.5" />,
       consegnato: <CheckCircle className="h-3.5 w-3.5" />,
       annullato: <XCircle className="h-3.5 w-3.5" />,
-    };
+    } satisfies Record<Exclude<OrderStatus, "confermato">, ReactNode>;
 
-    const labels: Record<OrderStatus, string> = {
+    const labels: Record<Exclude<OrderStatus, "confermato">, string> = {
       bozza: "Bozza",
-      confermato: "Confermato",
       in_lavorazione: "In Lavorazione",
       spedito: "Spedito",
       consegnato: "Consegnato",
@@ -434,9 +476,9 @@ export default function OrdersPage() {
     };
 
     return (
-      <Badge variant="outline" className={`font-medium ${styles[status] || ""}`}>
-        {icons[status]}
-        <span className="ml-1">{labels[status]}</span>
+      <Badge variant="outline" className={`font-medium ${styles[nonConfirmedStatus]}`}>
+        {icons[nonConfirmedStatus]}
+        <span className="ml-1">{labels[nonConfirmedStatus]}</span>
       </Badge>
     );
   }

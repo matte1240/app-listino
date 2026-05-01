@@ -99,6 +99,84 @@ function createDb() {
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id)");
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS order_drafts (
+      order_id INTEGER PRIMARY KEY,
+      cliente TEXT NOT NULL,
+      cliente_id INTEGER,
+      magazzino TEXT NOT NULL,
+      luogo_consegna TEXT NOT NULL DEFAULT '',
+      data_consegna TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      items TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_order_drafts_updated_at ON order_drafts(updated_at)");
+
+  type LegacyLinkedDraftRow = {
+    id: number;
+    parent_order_id: number;
+    cliente: string;
+    cliente_id: number | null;
+    magazzino: string;
+    luogo_consegna: string;
+    data_consegna: string;
+    note: string;
+    items: string;
+    created_at: string;
+  };
+
+  const legacyLinkedDrafts = db.prepare(
+    `SELECT d.id, d.parent_order_id, d.cliente, d.cliente_id, d.magazzino, d.luogo_consegna, d.data_consegna, d.note, d.items, d.created_at
+     FROM orders d
+     INNER JOIN orders p ON p.id = d.parent_order_id
+     WHERE d.status = 'bozza' AND d.parent_order_id IS NOT NULL
+     ORDER BY d.parent_order_id, datetime(d.created_at) DESC, d.id DESC`
+  ).all() as LegacyLinkedDraftRow[];
+
+  if (legacyLinkedDrafts.length > 0) {
+    const seenParentIds = new Set<number>();
+    const upsertDraft = db.prepare(
+      `INSERT INTO order_drafts (order_id, cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, items, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(order_id) DO UPDATE SET
+         cliente = excluded.cliente,
+         cliente_id = excluded.cliente_id,
+         magazzino = excluded.magazzino,
+         luogo_consegna = excluded.luogo_consegna,
+         data_consegna = excluded.data_consegna,
+         note = excluded.note,
+         items = excluded.items,
+         updated_at = excluded.updated_at`
+    );
+    const deleteLegacyDraft = db.prepare("DELETE FROM orders WHERE id = ?");
+
+    db.transaction(() => {
+      for (const draft of legacyLinkedDrafts) {
+        if (!seenParentIds.has(draft.parent_order_id)) {
+          const timestamp = draft.created_at || new Date().toISOString();
+          upsertDraft.run(
+            draft.parent_order_id,
+            draft.cliente,
+            draft.cliente_id,
+            draft.magazzino,
+            draft.luogo_consegna,
+            draft.data_consegna,
+            draft.note,
+            draft.items,
+            timestamp,
+            timestamp
+          );
+          seenParentIds.add(draft.parent_order_id);
+        }
+
+        deleteLegacyDraft.run(draft.id);
+      }
+    })();
+  }
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS anagrafiche (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       codice TEXT NOT NULL DEFAULT '',

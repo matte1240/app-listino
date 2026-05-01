@@ -30,6 +30,19 @@ export interface OrderHistoryItem {
 
 export type OrderStatus = 'bozza' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
 
+export interface OrderDraft {
+  orderId: number;
+  clienteId: number | null;
+  cliente: string;
+  magazzino: string;
+  luogoConsegna: string;
+  dataConsegna: string;
+  note: string;
+  items: OrderHistoryItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Order {
   id: number;
   parentOrderId: number | null;
@@ -44,6 +57,9 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   updatedAt?: string;
+  hasDraft?: boolean;
+  draftUpdatedAt?: string | null;
+  draft?: OrderDraft | null;
 }
 
 export interface OrderItem {

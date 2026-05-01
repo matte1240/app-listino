@@ -10,7 +10,7 @@ const COOKIE_NAME = "listino-token";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health", "/manifest.webmanifest"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths, static assets, Next.js internals
