@@ -333,7 +333,7 @@ export default function AdminBackupPage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-5">
+      <main className="max-w-5xl mx-auto px-4 sm:px-5 pt-5 pb-6 flex flex-col gap-5">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/admin" className="hover:text-foreground transition-colors">
             Admin
@@ -342,27 +342,28 @@ export default function AdminBackupPage() {
           <span className="text-foreground font-medium">Backup DB</span>
         </div>
 
-        <div className="flex items-start justify-between gap-3">
-          <div>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
             <h1 className="font-bold text-lg">Backup database</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Crea snapshot consistenti del database SQLite e scaricali per conservazione esterna.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => void fetchBackups(true)}
               disabled={refreshing || creating || creatingS3}
+              className="w-full justify-center sm:w-auto"
             >
               {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Aggiorna
             </Button>
 
-            <Button type="button" size="sm" onClick={handleCreateBackup} disabled={creating || creatingS3 || refreshing}>
+            <Button type="button" size="sm" onClick={handleCreateBackup} disabled={creating || creatingS3 || refreshing} className="w-full justify-center sm:w-auto">
               {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
               Nuovo backup
             </Button>
@@ -373,6 +374,7 @@ export default function AdminBackupPage() {
               size="sm"
               onClick={handleCreateAndUploadS3Backup}
               disabled={!s3Configured || creating || creatingS3 || refreshing}
+              className="w-full justify-center sm:w-auto"
             >
               {creatingS3 ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
               Backup + S3
@@ -380,7 +382,7 @@ export default function AdminBackupPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <div className="rounded-2xl border border-border bg-card p-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Database className="h-4 w-4" />
             <span>Backup presenti: <strong className="text-foreground">{backups.length}</strong></span>
@@ -416,7 +418,7 @@ export default function AdminBackupPage() {
         )}
 
         <div className="rounded-2xl border border-border bg-card divide-y">
-          <div className="p-4 flex items-center justify-between gap-3">
+          <div className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-semibold text-sm">Backup locali</h2>
               {backups.length > DEFAULT_VISIBLE_BACKUPS && !showAllLocalBackups && (
@@ -431,6 +433,7 @@ export default function AdminBackupPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowAllLocalBackups((prev) => !prev)}
+                className="w-full justify-center sm:w-auto"
               >
                 {showAllLocalBackups ? "Mostra meno" : "Mostra tutti"}
               </Button>
@@ -449,7 +452,7 @@ export default function AdminBackupPage() {
               >
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{backup.fileName}</p>
-                  <div className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-3">
+                  <div className="mt-1 text-xs text-muted-foreground flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                     <span className="inline-flex items-center gap-1">
                       <Clock3 className="h-3.5 w-3.5" />
                       {formatDate(backup.createdAt)}
@@ -461,8 +464,8 @@ export default function AdminBackupPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button asChild variant="outline" size="sm">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end shrink-0">
+                  <Button asChild variant="outline" size="sm" className="w-full justify-center sm:w-auto">
                     <a href={`/api/admin/db-backups/${encodeURIComponent(backup.fileName)}`}>
                       <Download className="h-4 w-4" />
                       Scarica
@@ -474,6 +477,7 @@ export default function AdminBackupPage() {
                     size="sm"
                     onClick={() => void handleRestoreLocalBackup(backup.fileName)}
                     disabled={restoringLocalFile === backup.fileName || restoringS3Key !== null}
+                    className="w-full justify-center sm:w-auto"
                   >
                     {restoringLocalFile === backup.fileName ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -488,6 +492,7 @@ export default function AdminBackupPage() {
                     size="sm"
                     onClick={() => void handleDeleteBackup(backup.fileName)}
                     disabled={deletingFile === backup.fileName || restoringLocalFile !== null || restoringS3Key !== null}
+                    className="w-full justify-center sm:w-auto"
                   >
                     {deletingFile === backup.fileName ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -503,7 +508,7 @@ export default function AdminBackupPage() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card divide-y">
-          <div className="p-4 flex items-center justify-between gap-3">
+          <div className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-semibold text-sm">Backup remoti S3</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -516,6 +521,7 @@ export default function AdminBackupPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowAllS3Backups((prev) => !prev)}
+                className="w-full justify-center sm:w-auto"
               >
                 {showAllS3Backups ? "Mostra meno" : "Mostra tutti"}
               </Button>
@@ -538,7 +544,7 @@ export default function AdminBackupPage() {
               >
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{backup.fileName}</p>
-                  <div className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-3">
+                  <div className="mt-1 text-xs text-muted-foreground flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                     <span className="inline-flex items-center gap-1">
                       <Clock3 className="h-3.5 w-3.5" />
                       {formatDate(backup.lastModified)}
@@ -551,13 +557,14 @@ export default function AdminBackupPage() {
                   <p className="mt-1 text-[11px] text-muted-foreground truncate">{backup.key}</p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end shrink-0">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => void handleRestoreS3Backup(backup)}
                     disabled={restoringS3Key === backup.key || restoringLocalFile !== null}
+                    className="w-full justify-center sm:w-auto"
                   >
                     {restoringS3Key === backup.key ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

@@ -160,15 +160,15 @@ export default function AdminUsersPage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <main className="max-w-2xl mx-auto w-full px-4 pt-5 pb-5 space-y-4">
+      <main className="max-w-4xl mx-auto w-full px-4 sm:px-5 pt-5 pb-5 space-y-4">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
           <ChevronRight className="h-3.5 w-3.5" />
           <span className="text-foreground font-medium">Utenti</span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="font-bold text-lg">Gestione Utenti</h1>
-          <Button size="sm" onClick={openCreate} className="gap-1.5 h-9">
+          <Button size="sm" onClick={openCreate} className="gap-1.5 h-9 w-full justify-center sm:w-auto">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Nuovo utente</span>
           </Button>
@@ -241,11 +241,11 @@ export default function AdminUsersPage() {
 
               {formError && <p className="text-sm text-destructive">{formError}</p>}
 
-              <div className="flex gap-2 pt-1">
-                <Button type="submit" size="sm" disabled={saving}>
+              <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
+                <Button type="submit" size="sm" disabled={saving} className="w-full justify-center sm:w-auto">
                   {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Crea utente"}
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={closeForm}>
+                <Button type="button" variant="outline" size="sm" onClick={closeForm} className="w-full justify-center sm:w-auto">
                   Annulla
                 </Button>
               </div>
@@ -258,10 +258,10 @@ export default function AdminUsersPage() {
           {users.map((u) => (
             <div
               key={u.id}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card shadow-sm p-3"
+              className="flex flex-col gap-3 rounded-2xl border border-border bg-card shadow-sm p-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-sm truncate">{u.username}</span>
                   <Badge variant={u.role === "admin" ? "default" : "secondary"} className="text-xs">
                     {u.role}
@@ -272,7 +272,7 @@ export default function AdminUsersPage() {
                   Creato: {new Date(u.created_at).toLocaleDateString("it-IT")}
                 </p>
               </div>
-              <div className="flex gap-1 shrink-0">
+              <div className="flex w-full gap-1 shrink-0 sm:w-auto sm:justify-end">
                 <Button
                   variant="ghost"
                   size="icon"

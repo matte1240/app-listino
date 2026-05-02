@@ -62,7 +62,7 @@ export default function AdminDashboard() {
   }
 
   if (!stats) {
-    return <div className="p-8">Errore nel caricamento delle statistiche.</div>;
+    return <div className="px-4 py-8 sm:px-6">Errore nel caricamento delle statistiche.</div>;
   }
 
   const statCards = [
@@ -105,25 +105,25 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6 space-y-5 sm:space-y-6 lg:space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-2">
           Panoramica dell&apos;attivita commerciale
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
         {statCards.map((stat, index) => (
           <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {stat.title}
               </CardTitle>
               <stat.icon className={`h-5 w-5 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{stat.value}</div>
+              <div className="text-3xl sm:text-4xl font-bold">{stat.value}</div>
               {stat.title === "Totale Ordini" && (
                 <p className="text-xs text-emerald-600 flex items-center gap-1 mt-2">
                   <TrendingUp className="h-3 w-3" />

@@ -147,4 +147,12 @@
     box-shadow: none !important;
     border: 0 !important;
   }
+
+  .listino-mobile-cards {
+    display: none !important;
+  }
+
+  .listino-table-desktop {
+    display: block !important;
+  }
 }

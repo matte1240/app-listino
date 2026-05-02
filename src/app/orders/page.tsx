@@ -263,16 +263,16 @@ export default function OrdersPage() {
                         <span className="text-xs text-muted-foreground/70">{order.agente}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                    <div className="flex flex-col gap-1.5 mt-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                       <span className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</span>
-                      <span className="text-xs text-muted-foreground/60">·</span>
+                      <span className="hidden text-xs text-muted-foreground/60 sm:inline">·</span>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Package className="h-3 w-3" />
                         {order.items.length} art. — {totalQty} pz
                       </span>
                       {order.dataConsegna && (
                         <>
-                          <span className="text-xs text-muted-foreground/60">·</span>
+                          <span className="hidden text-xs text-muted-foreground/60 sm:inline">·</span>
                           <span className="text-xs text-muted-foreground">
                             Consegna: {formatDelivery(order.dataConsegna)}
                           </span>
@@ -305,16 +305,16 @@ export default function OrdersPage() {
                     {/* Items */}
                     <div className="divide-y divide-border/60">
                       {order.items.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-3 px-4 py-2.5">
+                        <div key={idx} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-bold font-mono text-foreground">{item.codice}</p>
                             <p className="text-xs text-muted-foreground truncate mt-0.5">{item.descrizione}</p>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0 text-xs">
+                          <div className="flex flex-wrap items-center gap-2 text-xs sm:shrink-0 sm:justify-end">
                             <span className="font-bold text-foreground">{item.qty}</span>
                             <span className="text-muted-foreground">{item.um}</span>
                             {item.sconto && item.sconto > 0 ? (
-                              <span className="flex items-center gap-1">
+                              <span className="flex flex-wrap items-center gap-1 sm:justify-end">
                                 <span className="line-through text-muted-foreground/50">€{item.prezzoListino.toFixed(3)}</span>
                                 <span className="font-semibold text-primary">€{(item.prezzoListino * (1 - item.sconto / 100)).toFixed(3)}</span>
                                 <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{item.sconto}%</span>
@@ -339,13 +339,13 @@ export default function OrdersPage() {
                             <p className="text-xs text-muted-foreground mt-1">
                               {deleteMessage}
                             </p>
-                            <div className="flex gap-2 mt-3">
+                            <div className="flex flex-col gap-2 mt-3 sm:flex-row">
                               <Button
                                 size="sm"
                                 variant="destructive"
                                 onClick={() => handleDelete(order.id)}
                                 disabled={deleting}
-                                className="text-xs h-8"
+                                className="text-xs h-8 w-full justify-center sm:w-auto"
                               >
                                 {deleting ? (
                                   <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Cancellazione…</>
@@ -358,7 +358,7 @@ export default function OrdersPage() {
                                 variant="outline"
                                 onClick={() => setDeleteConfirm(null)}
                                 disabled={deleting}
-                                className="text-xs h-8"
+                                className="text-xs h-8 w-full justify-center sm:w-auto"
                               >
                                 Annulla
                               </Button>
@@ -370,14 +370,14 @@ export default function OrdersPage() {
 
                     {/* Actions */}
                     {canEditOrder(order) && !showDeleteConfirm && (
-                      <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
+                      <div className="px-4 py-3 border-t border-border flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
                         {hasAttachedDraft && !isDraft && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDiscardDraft(order)}
                             disabled={isSendingThisDraft || isDiscardingThisDraft || deleting}
-                            className="text-amber-700 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/20 text-xs"
+                            className="text-amber-700 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/20 text-xs w-full justify-center sm:w-auto"
                           >
                             {isDiscardingThisDraft ? (
                               <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Scarto bozza…</>
@@ -392,7 +392,7 @@ export default function OrdersPage() {
                             size="sm"
                             onClick={() => handleSendDraft(order)}
                             disabled={isSendingThisDraft || isDiscardingThisDraft || deleting}
-                            className="text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20 text-xs"
+                            className="text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20 text-xs w-full justify-center sm:w-auto"
                           >
                             {isSendingThisDraft ? (
                               <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Invio bozza…</>
@@ -406,7 +406,7 @@ export default function OrdersPage() {
                           size="sm"
                           onClick={() => handleEdit(order)}
                           disabled={isSendingThisDraft || isDiscardingThisDraft}
-                          className="text-primary hover:bg-primary/10 hover:text-primary text-xs"
+                          className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto"
                         >
                           <Pencil className="h-3.5 w-3.5 mr-1.5" />
                           {editActionLabel}
@@ -416,7 +416,7 @@ export default function OrdersPage() {
                           size="sm"
                           onClick={() => setDeleteConfirm(order.id)}
                           disabled={isSendingThisDraft || isDiscardingThisDraft}
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs w-full justify-center sm:w-auto"
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                           {deleteActionLabel}

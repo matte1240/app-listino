@@ -60,7 +60,7 @@ export default function AdminHomePage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-5">
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 pt-5 pb-6 flex flex-col gap-5">
         <div>
           <h1 className="font-bold text-lg">Pannello Admin</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -69,8 +69,8 @@ export default function AdminHomePage() {
         </div>
 
         {/* Upload listino */}
-        <div className="rounded-2xl border border-border bg-card p-4 flex items-center justify-between gap-3">
-          <div>
+        <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <p className="font-semibold text-sm">Importa listino</p>
             <p className="text-xs text-muted-foreground mt-0.5">Carica un file Excel per aggiornare il catalogo materiali.</p>
           </div>

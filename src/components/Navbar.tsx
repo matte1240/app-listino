@@ -56,14 +56,14 @@ export default function Navbar() {
     <>
       {/* Top bar */}
       <nav className="sticky top-0 z-40 h-14 bg-primary flex items-center">
-        <div className="w-full px-4 flex items-center justify-between">
+        <div className="w-full px-3 sm:px-4 flex items-center justify-between gap-2 sm:gap-3">
 
           {/* Left section: Logo + hamburger */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3 shrink-0">
             {/* Mobile: hamburger (only outside wizard) */}
             {!isWizardMode && (
               <button
-                className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg text-white hover:bg-white/10 transition-colors shrink-0"
+                className="lg:hidden flex items-center justify-center h-8 w-8 rounded-lg text-white hover:bg-white/10 transition-colors shrink-0"
                 onClick={() => setOpen(true)}
                 aria-label="Apri menu"
               >
@@ -87,15 +87,15 @@ export default function Navbar() {
 
             {/* Wizard mode: context label */}
             {isWizardMode && (
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex min-w-0 items-center gap-2">
                 <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isEditOrder ? "bg-amber-400" : "bg-white/20"} text-white`}>
                   {isEditOrder ? <FileText className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                 </div>
-                <span className="font-bold text-sm text-white">
+                <span className="font-bold text-sm text-white truncate max-w-[48vw] sm:max-w-none">
                   {isEditOrder ? `Modifica ordine #${editOrderId}` : "Nuovo ordine"}
                 </span>
                 {orderInfo.cliente && (
-                  <span className="hidden sm:inline text-xs text-white/60">— {orderInfo.cliente}</span>
+                  <span className="hidden lg:inline truncate max-w-[24vw] text-xs text-white/60">— {orderInfo.cliente}</span>
                 )}
               </div>
             )}
@@ -103,7 +103,7 @@ export default function Navbar() {
 
           {/* Center section: nav links (outside wizard) */}
           {!isWizardMode && (
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden lg:flex items-center gap-1">
               {items.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href;
                 return (
@@ -126,7 +126,7 @@ export default function Navbar() {
           )}
 
           {/* Right section: tools + badge */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
 
 
             {/* New order button (outside wizard) */}
@@ -148,7 +148,7 @@ export default function Navbar() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="md:hidden gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
+                    className="lg:hidden gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
                     onClick={() => setMobileCartOpen(true)}
                   >
                     <ShoppingCart className="h-4 w-4" />
@@ -190,10 +190,10 @@ export default function Navbar() {
                     className="fixed inset-0 z-40"
                     onClick={() => setIsUserMenuOpen(false)}
                   />
-                  <div className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                  <div className="absolute right-0 top-10 z-50 w-48 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-card shadow-lg overflow-hidden">
                     <div className="px-4 py-3 border-b border-border text-sm">
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">Utente</p>
-                      <p className="font-semibold text-foreground">{user.username}</p>
+                      <p className="font-semibold text-foreground truncate">{user.username}</p>
                     </div>
                     <button
                       onClick={() => {
@@ -217,10 +217,10 @@ export default function Navbar() {
       {!isWizardMode && open && (
         <>
           <div
-            className="fixed inset-0 z-50 bg-black/40 md:hidden"
+            className="fixed inset-0 z-50 bg-black/40 lg:hidden"
             onClick={() => { setOpen(false); setIsUserMenuOpen(false); }}
           />
-          <div className="fixed top-0 left-0 z-50 h-full w-60 bg-background border-r border-border shadow-xl md:hidden flex flex-col">
+          <div className="fixed top-0 left-0 z-50 h-full w-[min(15rem,85vw)] bg-background border-r border-border shadow-xl lg:hidden flex flex-col">
             <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
               <span className="font-bold text-sm text-foreground">{user.username}</span>
               <button

@@ -27,13 +27,19 @@ export default function AdminAnagrafichePage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-5">
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 pt-5 pb-6 flex flex-col gap-5">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
           <ChevronRight className="h-3.5 w-3.5" />
           <span className="text-foreground font-medium">Anagrafiche</span>
         </div>
-        <h1 className="font-bold text-lg">Anagrafiche clienti</h1>
+
+        <div>
+          <h1 className="font-bold text-lg">Anagrafiche clienti</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Importa e aggiorna il catalogo clienti da Excel con un layout leggibile anche su mobile.
+          </p>
+        </div>
 
         <div className="rounded-2xl border bg-card p-4 flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">

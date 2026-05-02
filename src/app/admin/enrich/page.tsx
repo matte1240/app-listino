@@ -151,7 +151,7 @@ export default function EnrichPage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-6">
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 pt-5 pb-6 flex flex-col gap-6">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
           <ChevronRight className="h-3.5 w-3.5" />
@@ -171,8 +171,8 @@ export default function EnrichPage() {
         </div>
 
         {/* Stats */}
-        <div className="rounded-2xl border bg-card p-5 flex items-center gap-4">
-          <div className="flex items-center gap-3 flex-1">
+        <div className="rounded-2xl border bg-card p-4 sm:p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-primary/10">
               <Package className="h-5 w-5 text-primary" />
             </div>
@@ -186,22 +186,22 @@ export default function EnrichPage() {
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => pollStatus()} disabled={isRunning}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 self-start sm:self-auto" onClick={() => pollStatus()} disabled={isRunning}>
             <RotateCw className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Actions */}
-        <div className="rounded-2xl border bg-card p-5 flex flex-col gap-3">
+        <div className="rounded-2xl border bg-card p-4 sm:p-5 flex flex-col gap-3">
           <h2 className="font-bold text-sm">Avvia arricchimento</h2>
           <p className="text-sm text-muted-foreground">
             Richiede che <code className="bg-muted rounded px-1.5 py-0.5 text-xs">OPENAI_API_KEY</code> sia configurata nelle variabili d&apos;ambiente.
           </p>
-          <div className="flex gap-3 mt-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 mt-2">
             <Button
               onClick={() => handleEnrich(true)}
               disabled={isRunning}
-              className="flex-1"
+              className="w-full sm:flex-1"
             >
               {isRunning ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -214,7 +214,7 @@ export default function EnrichPage() {
               variant="outline"
               onClick={() => handleEnrich(false)}
               disabled={isRunning}
-              className="flex-1"
+              className="w-full sm:flex-1"
             >
               {isRunning ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -228,8 +228,8 @@ export default function EnrichPage() {
 
         {/* Progress section */}
         {progress.status !== "idle" && (
-          <div className="rounded-2xl border bg-card p-5 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
+          <div className="rounded-2xl border bg-card p-4 sm:p-5 flex flex-col gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="font-bold text-sm">Avanzamento</h2>
               <span className="text-sm font-bold text-primary tabular-nums">
                 {progress.progress}%
@@ -255,7 +255,7 @@ export default function EnrichPage() {
             </div>
 
             {/* Stats row */}
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex flex-col gap-1.5 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
               {progress.totalItems > 0 && (
                 <span className="tabular-nums">
                   {progress.enrichedTotal}/{progress.totalItems} articoli

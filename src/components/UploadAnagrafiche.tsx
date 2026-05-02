@@ -69,7 +69,7 @@ export default function UploadAnagrafiche() {
         variant="outline"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
-        className="gap-2 h-10 rounded-xl"
+        className="gap-2 h-10 rounded-xl w-full justify-center sm:w-auto"
       >
         <Upload className="h-4 w-4" />
         {uploading ? "Importazione..." : "Carica anagrafiche"}

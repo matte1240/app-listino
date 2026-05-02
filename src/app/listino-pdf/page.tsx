@@ -73,19 +73,19 @@ export default function ListinoPdfPage() {
 
   return (
     <div className="listino-pdf-page min-h-dvh bg-background">
-      <main className="max-w-6xl mx-auto px-4 py-5 md:py-8">
-        <div className="no-print mb-4 flex items-center justify-between gap-3">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-5 md:py-8">
+        <div className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-lg font-bold">Listino PDF</h1>
             <p className="text-sm text-muted-foreground">Vista stampabile per consultazione in cantiere.</p>
           </div>
-          <Button onClick={() => window.print()} className="gap-2">
+          <Button onClick={() => window.print()} className="gap-2 w-full justify-center sm:w-auto">
             <Printer className="h-4 w-4" />
             Esporta PDF
           </Button>
         </div>
 
-        <section className="listino-sheet rounded-xl border bg-white text-black p-4 md:p-6">
+        <section className="listino-sheet rounded-xl border bg-white text-black p-3 sm:p-4 md:p-6">
           <div className="flex justify-center mb-4">
             <Image
               src="/IVICOLORS_marchio.png"
@@ -103,7 +103,46 @@ export default function ListinoPdfPage() {
                 <div className="bg-sky-200 border border-black border-b-0 px-3 py-1.5 text-center font-bold text-sm tracking-wide uppercase">
                   {categoria}
                 </div>
-                <div className="overflow-x-auto">
+                <div className="listino-mobile-cards md:hidden no-print border border-black border-t-0 divide-y divide-black">
+                  {items.map((item) => {
+                    const prezzo = item.prezzoListino || 0;
+                    const sconto8 = prezzo * DISCOUNT_8_MULTIPLIER;
+                    const sconto15 = prezzo * DISCOUNT_15_MULTIPLIER;
+
+                    return (
+                      <article key={item.codice} className="p-3 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] uppercase tracking-wide text-slate-600">Codice</p>
+                            <p className="font-semibold break-all">{item.codice}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[11px] uppercase tracking-wide text-slate-600">Listino</p>
+                            <p className="font-semibold">{formatPrice(prezzo)}</p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-slate-600">Descrizione</p>
+                          <p className="text-sm leading-snug">{item.descrizioneAI || item.descrizione}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-red-700">Sconto 8%</p>
+                            <p className="font-semibold text-red-700">{formatPrice(sconto8)}</p>
+                          </div>
+                          <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-red-700">Sconto 15%</p>
+                            <p className="font-semibold text-red-700">{formatPrice(sconto15)}</p>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                <div className="listino-table-desktop hidden md:block overflow-x-auto">
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-100">

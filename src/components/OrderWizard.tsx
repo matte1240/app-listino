@@ -579,16 +579,16 @@ export default function OrderWizard({ editingOrder }: Props) {
           {exitDialog}
         {/* Sticky search */}
         <div className="sticky top-14 z-30 bg-background/80 backdrop-blur-md border-b border-border">
-          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-3">
+          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 sm:gap-3">
             <div className="flex-1">
               <SearchBar ref={searchInputRef} autoFocus />
             </div>
           </div>
         </div>
 
-        <div className="flex flex-1 max-w-5xl mx-auto w-full">
+        <div className="flex flex-1 flex-col lg:flex-row max-w-5xl mx-auto w-full">
           {/* Materials catalog */}
-          <main className="flex-1 px-4 py-5">
+          <main className="flex-1 min-w-0 px-4 py-5">
             <Stepper />
             <MaterialList
               onArticleConfirmed={handleArticleConfirmed}
@@ -598,7 +598,7 @@ export default function OrderWizard({ editingOrder }: Props) {
           </main>
 
           {/* Sticky sidebar */}
-          <aside className="hidden md:flex w-64 shrink-0 flex-col gap-3 px-4 py-5 border-l border-border sticky top-[calc(3.5rem+49px)] self-start max-h-[calc(100dvh-3.5rem-49px)] overflow-y-auto">
+          <aside className="hidden lg:flex w-72 shrink-0 flex-col gap-3 px-4 py-5 border-l border-border sticky top-[calc(3.5rem+49px)] self-start max-h-[calc(100dvh-3.5rem-49px)] overflow-y-auto">
             {renderCartSummary("max-h-64")}
 
             <Button
@@ -623,7 +623,7 @@ export default function OrderWizard({ editingOrder }: Props) {
 
         {/* Mobile cart drawer */}
         <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen} direction="right">
-          <DrawerContent className="md:hidden w-[88%] p-0">
+          <DrawerContent className="lg:hidden w-[88%] p-0">
             <DrawerHeader className="px-4 py-3 border-b border-border">
               <div className="flex items-center justify-between gap-2">
                 <DrawerTitle className="text-sm flex items-center gap-2">
@@ -648,7 +648,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         </Drawer>
 
         {/* Mobile sticky bottom bar */}
-        <div className="md:hidden sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border px-4 py-3 flex items-center gap-3">
+        <div className="lg:hidden sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border px-4 py-3 flex items-center gap-3">
           <Button
             variant="outline"
             size="sm"
@@ -801,17 +801,17 @@ export default function OrderWizard({ editingOrder }: Props) {
             />
           </div>
 
-          <div className="flex gap-3 mt-2">
+          <div className="flex flex-col-reverse gap-3 mt-2 sm:flex-row">
             <Button
               variant="outline"
-              className="flex-1 h-11 gap-2"
+              className="w-full h-11 gap-2 sm:flex-1"
               onClick={() => setStep(2)}
             >
               <ChevronLeft className="h-4 w-4" />
               Indietro
             </Button>
             <Button
-              className="flex-1 h-11 gap-2 font-semibold"
+              className="w-full h-11 gap-2 font-semibold sm:flex-1"
               onClick={async () => {
                 // If address field has text, validate it before proceeding
                 if (orderInfo.luogoConsegna.trim()) {
@@ -922,16 +922,16 @@ export default function OrderWizard({ editingOrder }: Props) {
               const sconto = orderItems[m.codice]?.sconto ?? 0;
               const prezzoScontato = sconto > 0 ? m.prezzoListino * (1 - sconto / 100) : null;
               return (
-                <div key={m.codice} className="flex items-center gap-3 px-4 py-2.5">
+                <div key={m.codice} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold font-mono">{m.codice}</p>
                     <p className="text-xs text-muted-foreground truncate">{m.descrizioneAI || m.descrizione}</p>
                   </div>
-                  <div className="flex items-center gap-2 text-xs shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs sm:shrink-0 sm:justify-end">
                     <span className="font-bold">{qty}</span>
                     <span className="text-muted-foreground">{m.um}</span>
                     {sconto > 0 ? (
-                      <span className="flex items-center gap-1">
+                      <span className="flex flex-wrap items-center gap-1 sm:justify-end">
                         <span className="line-through text-muted-foreground/50">€{m.prezzoListino.toFixed(3)}</span>
                         <span className="font-semibold text-primary">€{prezzoScontato!.toFixed(3)}</span>
                         <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{sconto}%</span>
@@ -951,10 +951,10 @@ export default function OrderWizard({ editingOrder }: Props) {
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-3 mt-2">
+        <div className="flex flex-col-reverse gap-3 mt-2 sm:flex-row">
           <Button
             variant="outline"
-            className="h-11 gap-2 px-4"
+            className="h-11 gap-2 px-4 w-full justify-center sm:w-auto"
             onClick={() => setStep(3)}
             disabled={saving}
           >
@@ -963,7 +963,7 @@ export default function OrderWizard({ editingOrder }: Props) {
           </Button>
           <Button
             variant="outline"
-            className="flex-1 h-11 gap-2 font-semibold border-dashed"
+            className="w-full h-11 gap-2 font-semibold border-dashed sm:flex-1"
             onClick={() => handleSave("bozza")}
             disabled={saving}
           >
@@ -971,7 +971,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             {isModificationEditing && hasOpenModificationDraft ? "Aggiorna bozza" : "Salva bozza"}
           </Button>
           <Button
-            className="flex-1 h-11 gap-2 font-semibold"
+            className="w-full h-11 gap-2 font-semibold sm:flex-1"
             onClick={() => handleSave("confermato")}
             disabled={saving}
           >
