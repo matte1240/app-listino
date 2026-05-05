@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { dbOrderToOrder, type DbOrder } from "@/lib/orders";
-import { buildMetodoOrderXml } from "@/lib/metodo-xml";
+import { buildMetodoOrderXmlForOrder } from "@/lib/metodo-xml";
 
 export const dynamic = "force-dynamic";
 
@@ -26,32 +26,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!row) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   const order = dbOrderToOrder(row);
+  const result = buildMetodoOrderXmlForOrder(order);
 
-  if (!order.clienteId) {
-    return NextResponse.json(
-      { error: "L'ordine non è collegato a un'anagrafica: codice cliente Metodo non disponibile." },
-      { status: 422 }
-    );
+  if (!result.ok) {
+    const error =
+      result.reason === "no_cliente"
+        ? "L'ordine non è collegato a un'anagrafica: codice cliente Metodo non disponibile."
+        : "Anagrafica del cliente senza codice: impossibile generare numana.";
+    return NextResponse.json({ error }, { status: 422 });
   }
 
-  const anagrafica = db
-    .prepare("SELECT codice FROM anagrafiche WHERE id = ?")
-    .get(order.clienteId) as { codice: string | null } | undefined;
-
-  if (!anagrafica?.codice) {
-    return NextResponse.json(
-      { error: "Anagrafica del cliente senza codice: impossibile generare numana." },
-      { status: 422 }
-    );
-  }
-
-  const xml = buildMetodoOrderXml({ order, codiceCliente: anagrafica.codice });
-
-  return new NextResponse(xml, {
+  return new NextResponse(result.xml, {
     status: 200,
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
-      "Content-Disposition": `attachment; filename="ordine-metodo-${order.id}.xml"`,
+      "Content-Disposition": `attachment; filename="${result.filename}"`,
       "Cache-Control": "no-store",
     },
   });

@@ -85,7 +85,7 @@ const ANAGRAFICA_FIELD_LABELS: Record<AnagraficaField, string> = {
 };
 
 const ANAGRAFICA_COLUMN_ALIASES: Record<AnagraficaField, string[]> = {
-  codice: ["Codice Cliente", "Codice", "Cod.", "Codice Anagrafica", "ID Cliente"],
+  codice: ["Codice Cliente", "Codice", "Cod.", "Codice Anagrafica", "ID Cliente", "N.Cli.", "N. Cli.", "N Cli", "N. Cliente", "Numero Cliente", "Num. Cliente"],
   ragioneSociale: ["Ragione Sociale", "Rag. Sociale", "Cliente", "Denominazione", "Nome Cliente"],
   indirizzo: ["Indirizzo", "Via", "Indirizzo Sede"],
   capCitta: ["CAP Citta", "CAP/Citta", "Cap Citta", "CAP - Citta", "Comune", "Citta"],
@@ -320,7 +320,8 @@ export function parseAnagraficheExcel(buffer: ArrayBuffer): ParsedAnagrafica[] {
 
     const partitaIva = readTextCell(row, indexes.partitaIva);
     const pivaNorm = normalizeIdentifier(partitaIva);
-    const key = `${normalizeIdentifier(codice)}|${pivaNorm}`;
+    const key = normalizeIdentifier(codice);
+    if (!key) continue;
 
     const item: ParsedAnagrafica = {
       codice,

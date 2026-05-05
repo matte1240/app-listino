@@ -134,7 +134,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
     }
 
-    const oldItems = JSON.parse(parent.items) as OrderHistoryItem[];
+    const previousSnapshot = {
+      cliente: parent.cliente,
+      magazzino: parent.magazzino,
+      luogoConsegna: parent.luogo_consegna,
+      dataConsegna: parent.data_consegna,
+      note: parent.note,
+      items: JSON.parse(parent.items) as OrderHistoryItem[],
+    };
 
     db.transaction(() => {
       db.prepare(
@@ -163,14 +170,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const order = dbOrderToOrder(updatedParent);
-    sendOrderUpdatedEmail(order, oldItems, payload.email).catch((err) =>
+    sendOrderUpdatedEmail(order, previousSnapshot, payload.email).catch((err) =>
       console.error("[mail] Errore invio email modifica ordine:", err)
     );
 
     return NextResponse.json({ order, appliedDraftId: orderId });
   }
 
-  const oldItems = JSON.parse(existing.items) as OrderHistoryItem[];
+  const previousSnapshot = {
+    cliente: existing.cliente,
+    magazzino: existing.magazzino,
+    luogoConsegna: existing.luogo_consegna,
+    dataConsegna: existing.data_consegna,
+    note: existing.note,
+    items: JSON.parse(existing.items) as OrderHistoryItem[],
+  };
   const nextParentOrderId = isLinkedDraft ? existingParentOrderId : null;
   const nextStatus = isStandaloneDraft || isLinkedDraft ? resolvedStatus : existing.status;
 
@@ -211,7 +225,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         console.error("[mail] Errore invio email ordine:", err)
       );
     } else if (!isLinkedDraft) {
-      sendOrderUpdatedEmail(order, oldItems, payload.email).catch((err) =>
+      sendOrderUpdatedEmail(order, previousSnapshot, payload.email).catch((err) =>
         console.error("[mail] Errore invio email modifica ordine:", err)
       );
     }

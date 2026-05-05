@@ -14,7 +14,6 @@ const ANAGRAFICHE_PATH = path.join(process.cwd(), "data", "anagrafiche.xlsx");
 interface ExistingAnagrafica {
   id: number;
   codice: string;
-  piva_norm: string;
 }
 
 function normalizeIdentifier(value: string): string {
@@ -22,10 +21,6 @@ function normalizeIdentifier(value: string): string {
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "")
     .trim();
-}
-
-function buildKey(codice: string, pivaNorm: string): string {
-  return `${normalizeIdentifier(codice)}|${pivaNorm}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -71,12 +66,12 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   const existingRows = db
-    .prepare("SELECT id, codice, piva_norm FROM anagrafiche")
+    .prepare("SELECT id, codice FROM anagrafiche")
     .all() as ExistingAnagrafica[];
 
-  const existingByKey = new Map<string, number>();
+  const existingByCodice = new Map<string, number>();
   for (const row of existingRows) {
-    existingByKey.set(buildKey(row.codice, row.piva_norm ?? ""), row.id);
+    existingByCodice.set(normalizeIdentifier(row.codice), row.id);
   }
 
   const insertStmt = db.prepare(`
@@ -102,8 +97,8 @@ export async function POST(req: NextRequest) {
 
   const syncAll = db.transaction((rows: ParsedAnagrafica[]) => {
     for (const row of rows) {
-      const key = buildKey(row.codice, row.pivaNorm);
-      const existingId = existingByKey.get(key);
+      const key = normalizeIdentifier(row.codice);
+      const existingId = existingByCodice.get(key);
 
       if (existingId !== undefined) {
         updateStmt.run(

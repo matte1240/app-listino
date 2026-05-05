@@ -44,7 +44,8 @@ export default function AdminAnagrafichePage() {
         <div className="rounded-2xl border bg-card p-4 flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
             Carica il file anagrafiche clienti in formato Excel. Le righe esistenti vengono aggiornate
-            usando la chiave combinata <strong>Codice + Partita IVA</strong>.
+            usando il <strong>Codice</strong> come chiave; gli altri campi (Ragione Sociale, Indirizzo,
+            CAP/Città, Partita IVA) vengono sovrascritti con i valori del file.
           </p>
           <UploadAnagrafiche />
           <p className="text-xs text-muted-foreground">

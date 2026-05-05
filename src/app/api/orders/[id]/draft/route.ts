@@ -127,7 +127,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Bozza di modifica non trovata" }, { status: 404 });
   }
 
-  const oldItems = JSON.parse(order.items) as OrderHistoryItem[];
+  const previousSnapshot = {
+    cliente: order.cliente,
+    magazzino: order.magazzino,
+    luogoConsegna: order.luogo_consegna,
+    dataConsegna: order.data_consegna,
+    note: order.note,
+    items: JSON.parse(order.items) as OrderHistoryItem[],
+  };
 
   db.transaction(() => {
     db.prepare(
@@ -155,7 +162,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const responseOrder = dbOrderToOrder(updatedOrder);
-  sendOrderUpdatedEmail(responseOrder, oldItems, payload.email).catch((err) =>
+  sendOrderUpdatedEmail(responseOrder, previousSnapshot, payload.email).catch((err) =>
     console.error("[mail] Errore invio email modifica ordine:", err)
   );
 

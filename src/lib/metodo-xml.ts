@@ -1,4 +1,5 @@
 import type { Order } from "@/types";
+import { getDb } from "@/lib/db";
 
 function escapeXmlAttr(s: string): string {
   return s
@@ -71,4 +72,44 @@ export function buildMetodoOrderXml({ order, codiceCliente }: BuildMetodoOrderXm
   lines.push("  </righe>");
   lines.push("</dati>");
   return lines.join("\n");
+}
+
+export type MetodoXmlResult =
+  | { ok: true; xml: string; filename: string }
+  | { ok: false; reason: "no_cliente" | "no_codice_anagrafica" };
+
+export function buildMetodoOrderXmlForOrder(order: Order): MetodoXmlResult {
+  if (!order.clienteId) {
+    return { ok: false, reason: "no_cliente" };
+  }
+
+  const db = getDb();
+  const anagrafica = db
+    .prepare("SELECT codice FROM anagrafiche WHERE id = ?")
+    .get(order.clienteId) as { codice: string | null } | undefined;
+
+  if (!anagrafica?.codice) {
+    return { ok: false, reason: "no_codice_anagrafica" };
+  }
+
+  const codici = Array.from(new Set(order.items.map((i) => i.codice).filter(Boolean)));
+  let itemsForXml = order.items;
+  if (codici.length > 0) {
+    const placeholders = codici.map(() => "?").join(",");
+    const rows = db
+      .prepare(`SELECT codice, descrizione FROM materials WHERE codice IN (${placeholders})`)
+      .all(...codici) as Array<{ codice: string; descrizione: string }>;
+    const descrByCodice = new Map(rows.map((r) => [r.codice, r.descrizione]));
+    itemsForXml = order.items.map((item) => {
+      const original = descrByCodice.get(item.codice);
+      return original ? { ...item, descrizione: original } : item;
+    });
+  }
+
+  const xml = buildMetodoOrderXml({
+    order: { ...order, items: itemsForXml },
+    codiceCliente: anagrafica.codice,
+  });
+
+  return { ok: true, xml, filename: `ordine-metodo-${order.id}.xml` };
 }
