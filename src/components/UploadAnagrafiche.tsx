@@ -8,6 +8,7 @@ interface ImportResponse {
   total: number;
   imported: number;
   updated: number;
+  unchanged?: number;
 }
 
 export default function UploadAnagrafiche() {
@@ -38,8 +39,9 @@ export default function UploadAnagrafiche() {
       }
 
       const payload = data as ImportResponse;
+      const unchangedText = payload.unchanged ? `, ${payload.unchanged} invariate` : "";
       setFileName(file.name);
-      setMessage(`${payload.total} anagrafiche (${payload.imported} nuove, ${payload.updated} aggiornate)`);
+      setMessage(`${payload.total} anagrafiche (${payload.imported} nuove, ${payload.updated} aggiornate${unchangedText})`);
     } catch {
       setError("Errore nella lettura del file. Assicurati che sia un file Excel valido.");
     } finally {

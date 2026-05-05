@@ -14,6 +14,12 @@ const ANAGRAFICHE_PATH = path.join(process.cwd(), "data", "anagrafiche.xlsx");
 interface ExistingAnagrafica {
   id: number;
   codice: string;
+  ragione_sociale: string;
+  indirizzo: string;
+  cap_citta: string;
+  piva: string;
+  piva_norm: string;
+  search_text: string;
 }
 
 function normalizeIdentifier(value: string): string {
@@ -21,6 +27,18 @@ function normalizeIdentifier(value: string): string {
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "")
     .trim();
+}
+
+function isSameAnagrafica(existing: ExistingAnagrafica, imported: ParsedAnagrafica) {
+  return (
+    existing.codice === imported.codice &&
+    existing.ragione_sociale === imported.ragioneSociale &&
+    existing.indirizzo === imported.indirizzo &&
+    existing.cap_citta === imported.capCitta &&
+    existing.piva === imported.partitaIva &&
+    existing.piva_norm === imported.pivaNorm &&
+    existing.search_text === imported.searchText
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -66,12 +84,12 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   const existingRows = db
-    .prepare("SELECT id, codice FROM anagrafiche")
+    .prepare("SELECT id, codice, ragione_sociale, indirizzo, cap_citta, piva, piva_norm, search_text FROM anagrafiche")
     .all() as ExistingAnagrafica[];
 
-  const existingByCodice = new Map<string, number>();
+  const existingByCodice = new Map<string, ExistingAnagrafica>();
   for (const row of existingRows) {
-    existingByCodice.set(normalizeIdentifier(row.codice), row.id);
+    existingByCodice.set(normalizeIdentifier(row.codice), row);
   }
 
   const insertStmt = db.prepare(`
@@ -94,13 +112,19 @@ export async function POST(req: NextRequest) {
 
   let imported = 0;
   let updated = 0;
+  let unchanged = 0;
 
   const syncAll = db.transaction((rows: ParsedAnagrafica[]) => {
     for (const row of rows) {
       const key = normalizeIdentifier(row.codice);
-      const existingId = existingByCodice.get(key);
+      const existing = existingByCodice.get(key);
 
-      if (existingId !== undefined) {
+      if (existing !== undefined) {
+        if (isSameAnagrafica(existing, row)) {
+          unchanged += 1;
+          continue;
+        }
+
         updateStmt.run(
           row.codice,
           row.ragioneSociale,
@@ -109,8 +133,18 @@ export async function POST(req: NextRequest) {
           row.partitaIva,
           row.pivaNorm,
           row.searchText,
-          existingId
+          existing.id
         );
+        existingByCodice.set(key, {
+          id: existing.id,
+          codice: row.codice,
+          ragione_sociale: row.ragioneSociale,
+          indirizzo: row.indirizzo,
+          cap_citta: row.capCitta,
+          piva: row.partitaIva,
+          piva_norm: row.pivaNorm,
+          search_text: row.searchText,
+        });
         updated += 1;
         continue;
       }
@@ -135,5 +169,6 @@ export async function POST(req: NextRequest) {
     total: anagrafiche.length,
     imported,
     updated,
+    unchanged,
   });
 }

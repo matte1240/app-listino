@@ -5,8 +5,55 @@ import { verifyToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth";
 import { parseExcel, ExcelColumnMappingError } from "@/lib/excel";
 import { getDb } from "@/lib/db";
+import type { Material } from "@/types";
 
 const EXCEL_PATH = path.join(process.cwd(), "data", "listino.xlsx");
+
+interface ExistingMaterialRow {
+  codice: string;
+  descrizione: string;
+  categoria: string;
+  raggr: string;
+  um: string;
+  prezzo_listino: number;
+  prezzo_riservato: number;
+  prezzo_pubblico: number;
+  pz_confezione: number;
+  nota: string;
+  obsoleto: number;
+}
+
+function toMaterialSnapshot(row: ExistingMaterialRow): Material {
+  return {
+    codice: row.codice,
+    descrizione: row.descrizione,
+    categoria: row.categoria,
+    raggr: row.raggr,
+    um: row.um,
+    prezzoListino: row.prezzo_listino,
+    prezzoRiservato: row.prezzo_riservato,
+    prezzoPublico: row.prezzo_pubblico,
+    pzConfezione: row.pz_confezione,
+    nota: row.nota,
+    obsoleto: row.obsoleto === 1,
+  };
+}
+
+function isSameMaterial(a: Material, b: Material) {
+  return (
+    a.codice === b.codice &&
+    a.descrizione === b.descrizione &&
+    a.categoria === b.categoria &&
+    a.raggr === b.raggr &&
+    a.um === b.um &&
+    a.prezzoListino === b.prezzoListino &&
+    a.prezzoRiservato === b.prezzoRiservato &&
+    a.prezzoPublico === b.prezzoPublico &&
+    a.pzConfezione === b.pzConfezione &&
+    a.nota === b.nota &&
+    Boolean(a.obsoleto) === Boolean(b.obsoleto)
+  );
+}
 
 export async function GET() {
   if (!fs.existsSync(EXCEL_PATH)) {
@@ -62,29 +109,63 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getDb();
-  const upsert = db.prepare(`
+  const existingRows = db.prepare(`
+    SELECT codice, descrizione, categoria, raggr, um, prezzo_listino, prezzo_riservato,
+           prezzo_pubblico, pz_confezione, nota, obsoleto
+    FROM materials
+  `).all() as ExistingMaterialRow[];
+
+  const existingByCode = new Map(existingRows.map((row) => [row.codice, toMaterialSnapshot(row)]));
+
+  const insert = db.prepare(`
     INSERT INTO materials (codice, descrizione, categoria, raggr, um, prezzo_listino, prezzo_riservato, prezzo_pubblico, pz_confezione, nota, obsoleto, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    ON CONFLICT(codice) DO UPDATE SET
-      descrizione = excluded.descrizione,
-      categoria = excluded.categoria,
-      raggr = excluded.raggr,
-      um = excluded.um,
-      prezzo_listino = excluded.prezzo_listino,
-      prezzo_riservato = excluded.prezzo_riservato,
-      prezzo_pubblico = excluded.prezzo_pubblico,
-      pz_confezione = excluded.pz_confezione,
-      nota = excluded.nota,
-      obsoleto = excluded.obsoleto,
-      updated_at = excluded.updated_at
   `);
+
+  const update = db.prepare(`
+    UPDATE materials
+    SET descrizione = ?,
+        categoria = ?,
+        raggr = ?,
+        um = ?,
+        prezzo_listino = ?,
+        prezzo_riservato = ?,
+        prezzo_pubblico = ?,
+        pz_confezione = ?,
+        nota = ?,
+        obsoleto = ?,
+        updated_at = datetime('now')
+    WHERE codice = ?
+  `);
+
+  let imported = 0;
+  let updated = 0;
+  let unchanged = 0;
+
   const upsertAll = db.transaction((rows: typeof materials) => {
     for (const m of rows) {
-      upsert.run(m.codice, m.descrizione, m.categoria, m.raggr, m.um,
-        m.prezzoListino, m.prezzoRiservato, m.prezzoPublico, m.pzConfezione, m.nota, m.obsoleto ? 1 : 0);
+      const existing = existingByCode.get(m.codice);
+
+      if (!existing) {
+        insert.run(m.codice, m.descrizione, m.categoria, m.raggr, m.um,
+          m.prezzoListino, m.prezzoRiservato, m.prezzoPublico, m.pzConfezione, m.nota, m.obsoleto ? 1 : 0);
+        existingByCode.set(m.codice, m);
+        imported += 1;
+        continue;
+      }
+
+      if (isSameMaterial(existing, m)) {
+        unchanged += 1;
+        continue;
+      }
+
+      update.run(m.descrizione, m.categoria, m.raggr, m.um,
+        m.prezzoListino, m.prezzoRiservato, m.prezzoPublico, m.pzConfezione, m.nota, m.obsoleto ? 1 : 0, m.codice);
+      existingByCode.set(m.codice, m);
+      updated += 1;
     }
   });
   upsertAll(materials);
 
-  return NextResponse.json({ ok: true, count: materials.length });
+  return NextResponse.json({ ok: true, count: materials.length, imported, updated, unchanged });
 }

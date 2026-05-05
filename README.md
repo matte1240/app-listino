@@ -11,7 +11,7 @@ Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e *
 ## Funzionalità principali
 
 - **Listino** — ricerca veloce su materiali con flag "obsoleto", descrizioni arricchite con AI
-- **Ordini** — wizard 4 step con auto-save dello stato in corso nel `localStorage` del browser, bozze salvate sul server (tabella `orders` con status `bozza`), modifica via bozza-di-modifica (`order_drafts`), cancellazione
+- **Ordini** — wizard 4 step (Cliente → Articoli → Dettagli → Riepilogo), bozze salvate sul server con il pulsante **Salva bozza** (tabella `orders` con status `bozza`), modifica di un ordine confermato via bozza-di-modifica (`order_drafts`), cancellazione
 - **Email automatiche** — invio a email magazzino + CC agente per nuovo ordine, modifica, cancellazione
 - **Allegato XML Metodo** — generato e allegato automaticamente alle mail di nuovo ordine e modifica, importabile nel gestionale Metodo
 - **Diff visivo nelle mail di modifica** — header e righe con indicatori aggiunto/rimosso/modificato (verde/rosso/giallo)

@@ -9,15 +9,15 @@ Manuale d'uso passo-passo per agenti commerciali e amministratori. Questa guida 
 ## Indice
 
 1. [Cos'è App Listino e come accedere](#1-cosè-app-listino-e-come-accedere)
-2. [Il listino materiali](#2-il-listino-materiali)
-3. [Creare un ordine](#3-creare-un-ordine)
-4. [Bozze: salvare e riprendere un ordine](#4-bozze-salvare-e-riprendere-un-ordine)
-5. [Modificare un ordine già inviato](#5-modificare-un-ordine-già-inviato)
-6. [Cancellare un ordine](#6-cancellare-un-ordine)
-7. [Cronologia ordini](#7-cronologia-ordini)
-8. [Email automatiche](#8-email-automatiche)
-9. [Listino in PDF](#9-listino-in-pdf)
-10. [Installare l'app sul telefono (PWA)](#10-installare-lapp-sul-telefono-pwa)
+2. [Installare l'app sul telefono (PWA)](#2-installare-lapp-sul-telefono-pwa)
+3. [Il listino materiali](#3-il-listino-materiali)
+4. [Creare un ordine](#4-creare-un-ordine)
+5. [Bozze: salvare e riprendere un ordine](#5-bozze-salvare-e-riprendere-un-ordine)
+6. [Modificare un ordine già inviato](#6-modificare-un-ordine-già-inviato)
+7. [Cancellare un ordine](#7-cancellare-un-ordine)
+8. [Cronologia ordini](#8-cronologia-ordini)
+9. [Email automatiche](#9-email-automatiche)
+10. [Listino in PDF](#10-listino-in-pdf)
 11. [Sezione Admin](#11-sezione-admin)
 12. [Domande frequenti](#12-domande-frequenti)
 
@@ -34,7 +34,7 @@ App Listino è lo strumento che usi per:
 
 ### Accesso
 
-1. Apri l'app dal browser (oppure dall'icona se l'hai installata sul telefono — vedi sezione 10).
+1. Apri l'app dal browser (oppure dall'icona se l'hai installata sul telefono — vedi sezione 2).
 2. Inserisci il tuo **username** e la **password** che ti ha fornito l'amministratore.
 3. Clicca **Accedi**. Resti loggato per qualche ora; se chiudi e riapri, di norma non devi rifare login.
 
@@ -44,7 +44,31 @@ Solo l'amministratore può cambiare la tua password (vedi sezione 11.7). Se l'ha
 
 ---
 
-## 2. Il listino materiali
+## 2. Installare l'app sul telefono (PWA)
+
+App Listino è una **PWA**: la puoi installare sulla home del telefono e usarla come un'app nativa. Conviene farlo subito, prima di iniziare a usarla quotidianamente.
+
+### Su Android (Chrome / Edge)
+
+1. Apri l'app nel browser.
+2. Tocca il menu (`⋮`) → **Installa app** (oppure **Aggiungi a schermata Home**).
+3. Conferma. L'icona compare in home.
+
+### Su iPhone / iPad (Safari)
+
+1. Apri l'app in Safari.
+2. Tocca l'icona **Condividi** (quadrato con freccia in su).
+3. Scorri e scegli **Aggiungi alla schermata Home**.
+4. Conferma.
+
+### Vantaggi
+
+- Avvio più veloce, niente barra del browser.
+- **Funziona anche offline** per consultare il listino già caricato e iniziare a compilare un ordine. L'invio dell'ordine richiede ovviamente connessione.
+
+---
+
+## 3. Il listino materiali
 
 La home dell'app è il **listino**: la lista completa degli articoli disponibili.
 
@@ -65,11 +89,11 @@ Se per un articolo non c'è ancora la descrizione AI puoi richiederla con il pul
 
 ### Aggiungere articoli all'ordine
 
-In ogni riga c'è un pulsante per aggiungere l'articolo all'ordine in corso. Quando lo premi, l'articolo entra nel **carrello** del wizard ordine (vedi sezione 3).
+In ogni riga c'è un pulsante per aggiungere l'articolo all'ordine in corso. Quando lo premi, l'articolo entra nel **carrello** del wizard ordine (vedi sezione 4).
 
 ---
 
-## 3. Creare un ordine
+## 4. Creare un ordine
 
 Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 
@@ -101,21 +125,20 @@ Vedi un'anteprima completa dell'ordine: cliente, magazzino, cantiere, data, note
 Tre azioni possibili:
 
 - **Salva bozza** — l'ordine resta in stato "Bozza" e non parte alcuna mail. Puoi riprenderlo in qualsiasi momento.
-- **Invia ordine** — l'ordine viene confermato, salvato e inviato per email al magazzino + a te in CC. Vedi sezione 8.
+- **Invia ordine** — l'ordine viene confermato, salvato e inviato per email al magazzino + a te in CC. Vedi sezione 9.
 - **Annulla** — chiude il wizard senza salvare nulla.
 
-> **Suggerimento**: i dati che inserisci nel wizard sono salvati man mano nel browser. Se chiudi la scheda per errore, riapri "Nuovo Ordine" e ritrovi quello che avevi scritto.
+> **Suggerimento**: se non vuoi perdere quello che hai compilato, premi **Salva bozza** prima di chiudere. Il wizard non salva da solo: chiudendo la scheda senza salvare, i dati vanno persi.
 
 ---
 
-## 4. Bozze: salvare e riprendere un ordine
+## 5. Bozze: salvare e riprendere un ordine
 
 Una **bozza** è un ordine ancora in lavorazione, non ancora inviato.
 
 ### Quando si crea una bozza
 
-- Quando premi **Salva bozza** nello step 4.
-- Automaticamente, mentre compili il wizard, i dati sono ricordati nel tuo browser.
+Quando premi **Salva bozza** nello step 4 del wizard. La bozza viene salvata sul server e diventa visibile in Cronologia ordini da qualsiasi dispositivo.
 
 ### Riprendere una bozza
 
@@ -125,11 +148,11 @@ Vai su **Cronologia ordini**: le bozze hanno un'etichetta dedicata. Aprila e pre
 
 Dalla cronologia ordini, sulla bozza, c'è il pulsante **Elimina**. La bozza viene cancellata in modo definitivo, senza inviare alcuna mail.
 
-> **Attenzione**: le bozze "in corso di compilazione" (non ancora salvate) vivono solo nel **tuo browser**. Se cambi computer o cancelli i dati di navigazione, le perdi. Le bozze **salvate** invece restano sul server.
+> **Attenzione**: il wizard non ha auto-save. Se chiudi la scheda o vai su un'altra pagina prima di premere **Salva bozza** o **Invia ordine**, perdi quello che hai compilato. Una volta salvata, la bozza è sicura sul server e la ritrovi da qualsiasi dispositivo.
 
 ---
 
-## 5. Modificare un ordine già inviato
+## 6. Modificare un ordine già inviato
 
 Anche dopo l'invio puoi modificare un ordine. Funziona in modo "sicuro": l'ordine originale resta intatto finché non confermi le modifiche.
 
@@ -152,7 +175,7 @@ Se hai salvato come bozza la modifica ma poi cambi idea, vai sull'ordine in cron
 
 ---
 
-## 6. Cancellare un ordine
+## 7. Cancellare un ordine
 
 Dalla cronologia, apri un ordine confermato e premi **Cancella ordine** (o l'icona del cestino).
 
@@ -160,11 +183,11 @@ Dalla cronologia, apri un ordine confermato e premi **Cancella ordine** (o l'ico
 - Parte una mail **"Ordine Cancellato"** al magazzino + CC a te.
 - A differenza della modifica, **non c'è allegato XML** (l'ordine non va più importato).
 
-Le **bozze** invece si eliminano senza notifica via mail (vedi sezione 4).
+Le **bozze** invece si eliminano senza notifica via mail (vedi sezione 5).
 
 ---
 
-## 7. Cronologia ordini
+## 8. Cronologia ordini
 
 Il menu **Ordini** mostra l'elenco di tutti i tuoi ordini.
 
@@ -187,7 +210,7 @@ Il menu **Ordini** mostra l'elenco di tutti i tuoi ordini.
 
 ---
 
-## 8. Email automatiche
+## 9. Email automatiche
 
 Ogni volta che invii o modifichi un ordine, parte una mail. Vediamo a chi arriva e cosa contiene.
 
@@ -219,7 +242,7 @@ Ogni volta che invii o modifichi un ordine, parte una mail. Vediamo a chi arriva
 
 ---
 
-## 9. Listino in PDF
+## 10. Listino in PDF
 
 Il menu **Listino PDF** (icona stampante) apre una versione del listino pensata per la stampa.
 
@@ -229,30 +252,6 @@ Il menu **Listino PDF** (icona stampante) apre una versione del listino pensata 
 - Pulsante **Aggiorna**: ricarica il listino dal server.
 
 > Se hai una stampante puoi stampare direttamente; il layout è ottimizzato per A4.
-
----
-
-## 10. Installare l'app sul telefono (PWA)
-
-App Listino è una **PWA**: la puoi installare sulla home del telefono e usarla come un'app nativa.
-
-### Su Android (Chrome / Edge)
-
-1. Apri l'app nel browser.
-2. Tocca il menu (`⋮`) → **Installa app** (oppure **Aggiungi a schermata Home**).
-3. Conferma. L'icona compare in home.
-
-### Su iPhone / iPad (Safari)
-
-1. Apri l'app in Safari.
-2. Tocca l'icona **Condividi** (quadrato con freccia in su).
-3. Scorri e scegli **Aggiungi alla schermata Home**.
-4. Conferma.
-
-### Vantaggi
-
-- Avvio più veloce, niente barra del browser.
-- **Funziona anche offline** per consultare il listino già caricato e iniziare a compilare un ordine. L'invio dell'ordine richiede ovviamente connessione.
 
 ---
 
@@ -354,8 +353,8 @@ Normale dopo qualche ora di inattività. Rifai login: gli ordini in corso restan
 **Posso lavorare offline?**
 Puoi consultare il listino già scaricato e iniziare a compilare un ordine offline. L'**invio** richiede connessione: se la connessione torna, l'ordine può essere ripreso e inviato.
 
-**Ho perso una bozza dopo aver cambiato browser.**
-Le bozze "in corso di compilazione" stanno solo nel browser. Le bozze **salvate** (con il pulsante Salva bozza) restano invece sul server e si vedono in Cronologia da qualsiasi dispositivo.
+**Ho compilato un ordine, sono uscito dalla pagina e ho perso tutto.**
+Il wizard non salva automaticamente: prima di lasciare la pagina premi **Salva bozza**. Le bozze salvate restano sul server e si ritrovano in Cronologia da qualsiasi dispositivo.
 
 **Come cambio password?**
 Chiedi all'amministratore: dalla sezione Utenti può resettarla.
