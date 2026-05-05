@@ -4,6 +4,9 @@ import { getDb } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
 import { COOKIE_NAME } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function toObsoleteFlag(value: unknown): boolean {
   if (typeof value === "number") return value === 1;
 
@@ -53,5 +56,8 @@ export async function GET() {
     obsoleto: toObsoleteFlag(r.obsoleto),
   }));
 
-  return NextResponse.json({ materials });
+  return NextResponse.json(
+    { materials },
+    { headers: { "Cache-Control": "no-store, must-revalidate" } }
+  );
 }

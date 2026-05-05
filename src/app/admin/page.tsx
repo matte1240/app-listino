@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Sparkles, Mail, Building2, ArrowRight, Database } from "lucide-react";
+import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import UploadExcel from "@/components/UploadExcel";
 
@@ -37,6 +37,12 @@ const adminSections = [
     title: "Backup DB",
     description: "Crea e scarica backup del database SQLite.",
     icon: Database,
+  },
+  {
+    href: "/admin/export-metodo",
+    title: "Export Metodo",
+    description: "Esporta un ordine in XML per l'import nel gestionale Metodo.",
+    icon: FileCode2,
   },
 ];
 

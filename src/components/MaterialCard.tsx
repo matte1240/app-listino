@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, Sparkles, AlertCircle } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
+import { useAuth } from "@/lib/auth-context";
 import type { Material } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,38 @@ export default function MaterialCard({
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const setQty = useOrderStore((s) => s.setQty);
   const setSconto = useOrderStore((s) => s.setSconto);
+  const setMaterialDescrizioneAI = useOrderStore((s) => s.setMaterialDescrizioneAI);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [enriching, setEnriching] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+
+  const handleRegenerateAI = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (enriching) return;
+    setEnriching(true);
+    setEnrichError(null);
+    try {
+      const res = await fetch("/api/ai/enrich/single", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codice }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEnrichError(data?.error || `Errore (${res.status})`);
+        return;
+      }
+      if (typeof data?.descrizioneAI === "string") {
+        setMaterialDescrizioneAI(codice, data.descrizioneAI);
+      }
+    } catch (err) {
+      setEnrichError(err instanceof Error ? err.message : "Errore di rete");
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   const isInCart = orderItem?.flagged ?? false;
   const cartQty = orderItem?.qty ?? 0;
@@ -234,6 +267,32 @@ export default function MaterialCard({
               )}
             </div>
           </label>
+          {isAdmin && (
+            <div className="shrink-0 flex flex-col items-end gap-1 max-w-[140px]">
+              <button
+                type="button"
+                onClick={handleRegenerateAI}
+                disabled={enriching}
+                title={enriching ? "Rigenerazione in corso…" : "Rigenera descrizione AI"}
+                aria-label="Rigenera descrizione AI"
+                className={cn(
+                  "inline-flex items-center gap-1 h-6 px-2 rounded-md border text-[10px] font-semibold uppercase tracking-wide transition-colors",
+                  enriching
+                    ? "border-primary/40 bg-primary/10 text-primary cursor-wait"
+                    : "border-border text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5"
+                )}
+              >
+                <Sparkles className={cn("h-3 w-3", enriching && "animate-spin")} />
+                AI
+              </button>
+              {enrichError && (
+                <div className="flex items-start gap-1 text-[11px] text-destructive text-right">
+                  <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                  <span className="break-words">{enrichError}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Quantity + discount rows — shown when expanded or flagged, hidden in catalog mode */}

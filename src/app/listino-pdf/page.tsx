@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Printer, PackageSearch } from "lucide-react";
+import { Printer, PackageSearch, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import type { Material } from "@/types";
@@ -23,22 +23,49 @@ export default function ListinoPdfPage() {
   const router = useRouter();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
   }, [authLoading, router, user]);
 
+  const loadMaterials = useCallback(async () => {
+    const res = await fetch("/api/materials", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    setMaterials(data?.materials ?? []);
+  }, []);
+
   useEffect(() => {
     if (authLoading || !user) return;
-    fetch("/api/materials")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setMaterials(data?.materials ?? []))
-      .finally(() => setLoading(false));
-  }, [authLoading, user]);
+    loadMaterials().finally(() => setLoading(false));
+  }, [authLoading, user, loadMaterials]);
+
+  useEffect(() => {
+    if (authLoading || !user) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadMaterials();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", loadMaterials);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", loadMaterials);
+    };
+  }, [authLoading, user, loadMaterials]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadMaterials();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadMaterials]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Material[]>();
-    for (const material of materials.filter((m) => !m.obsoleto)) {
+    for (const material of materials) {
       const categoria = material.categoria?.trim() || "SENZA CATEGORIA";
       if (!map.has(categoria)) map.set(categoria, []);
       map.get(categoria)!.push(material);
@@ -79,10 +106,21 @@ export default function ListinoPdfPage() {
             <h1 className="text-lg font-bold">Listino PDF</h1>
             <p className="text-sm text-muted-foreground">Vista stampabile per consultazione in cantiere.</p>
           </div>
-          <Button onClick={() => window.print()} className="gap-2 w-full justify-center sm:w-auto">
-            <Printer className="h-4 w-4" />
-            Esporta PDF
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="gap-2 w-full justify-center sm:w-auto"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Aggiornamento…" : "Aggiorna"}
+            </Button>
+            <Button onClick={() => window.print()} className="gap-2 w-full justify-center sm:w-auto">
+              <Printer className="h-4 w-4" />
+              Esporta PDF
+            </Button>
+          </div>
         </div>
 
         <section className="listino-sheet rounded-xl border bg-white text-black p-3 sm:p-4 md:p-6">
@@ -110,21 +148,31 @@ export default function ListinoPdfPage() {
                     const sconto15 = prezzo * DISCOUNT_15_MULTIPLIER;
 
                     return (
-                      <article key={item.codice} className="p-3 space-y-3">
+                      <article
+                        key={item.codice}
+                        className={`p-3 space-y-3 ${item.obsoleto ? "bg-slate-50 text-slate-500" : ""}`}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-[11px] uppercase tracking-wide text-slate-600">Codice</p>
-                            <p className="font-semibold break-all">{item.codice}</p>
+                            <p className={`font-semibold break-all ${item.obsoleto ? "line-through" : ""}`}>{item.codice}</p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-[11px] uppercase tracking-wide text-slate-600">Listino</p>
-                            <p className="font-semibold">{formatPrice(prezzo)}</p>
+                            <p className={`font-semibold ${item.obsoleto ? "line-through" : ""}`}>{formatPrice(prezzo)}</p>
                           </div>
                         </div>
 
                         <div>
-                          <p className="text-[11px] uppercase tracking-wide text-slate-600">Descrizione</p>
-                          <p className="text-sm leading-snug">{item.descrizioneAI || item.descrizione}</p>
+                          <p className="text-[11px] uppercase tracking-wide text-slate-600 flex items-center gap-2">
+                            Descrizione
+                            {item.obsoleto && (
+                              <span className="inline-block rounded border border-slate-400 bg-white px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-slate-700">
+                                OBSOLETO
+                              </span>
+                            )}
+                          </p>
+                          <p className={`text-sm leading-snug ${item.obsoleto ? "line-through" : ""}`}>{item.descrizioneAI || item.descrizione}</p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -158,15 +206,22 @@ export default function ListinoPdfPage() {
                         const prezzo = item.prezzoListino || 0;
                         const sconto8 = prezzo * DISCOUNT_8_MULTIPLIER;
                         const sconto15 = prezzo * DISCOUNT_15_MULTIPLIER;
+                        const rowClass = item.obsoleto ? "bg-slate-50 text-slate-500 line-through" : "";
+                        const priceClass = item.obsoleto ? "text-slate-500" : "text-red-700";
                         return (
-                          <tr key={item.codice}>
+                          <tr key={item.codice} className={rowClass}>
                             <td className={`${bodyCellClass} font-semibold`}>{item.codice}</td>
                             <td className={bodyCellClass} title={item.descrizioneAI || item.descrizione}>
-                              {item.descrizioneAI || item.descrizione}
+                              <span className="align-middle">{item.descrizioneAI || item.descrizione}</span>
+                              {item.obsoleto && (
+                                <span className="ml-2 inline-block rounded border border-slate-400 bg-white px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-slate-700 no-underline align-middle">
+                                  OBSOLETO
+                                </span>
+                              )}
                             </td>
                             <td className={`${bodyCellClass} text-right font-semibold`}>{formatPrice(prezzo)}</td>
-                            <td className={`${bodyCellClass} text-right text-red-700 font-semibold`}>{formatPrice(sconto8)}</td>
-                            <td className={`${bodyCellClass} text-right text-red-700 font-semibold`}>{formatPrice(sconto15)}</td>
+                            <td className={`${bodyCellClass} text-right ${priceClass} font-semibold`}>{formatPrice(sconto8)}</td>
+                            <td className={`${bodyCellClass} text-right ${priceClass} font-semibold`}>{formatPrice(sconto15)}</td>
                           </tr>
                         );
                       })}

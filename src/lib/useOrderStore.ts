@@ -15,6 +15,7 @@ interface OrderStore {
   setExitDialogOpen: (open: boolean) => void;
   setStep: (step: 1 | 2 | 3 | 4) => void;
   setMaterials: (materials: Material[]) => void;
+  setMaterialDescrizioneAI: (codice: string, descrizioneAI: string) => void;
   toggleFlag: (codice: string) => void;
   setQty: (codice: string, qty: number) => void;
   setSconto: (codice: string, sconto: 0 | 8 | 15) => void;
@@ -49,6 +50,13 @@ export const useOrderStore = create<OrderStore>()(
       setStep: (currentStep) => set({ currentStep }),
 
       setMaterials: (materials) => set({ materials }),
+
+      setMaterialDescrizioneAI: (codice, descrizioneAI) =>
+        set((state) => ({
+          materials: state.materials.map((m) =>
+            m.codice === codice ? { ...m, descrizioneAI } : m
+          ),
+        })),
 
       toggleFlag: (codice) => {
         const current = get().orderItems[codice];
