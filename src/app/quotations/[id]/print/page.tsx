@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
@@ -9,6 +10,8 @@ import { useAuth } from "@/lib/auth-context";
 import type { Anagrafica, Quotation, QuotationItem } from "@/types";
 
 const VAT_RATE = 0.22;
+const TABLE_BODY_AVAILABLE_MM = 134;
+const MIN_FILLER_ROW_MM = 0;
 
 function formatDate(iso: string) {
   if (!iso) return "-";
@@ -43,6 +46,28 @@ function splitLines(value: string) {
 
 function displayDiscount(item: QuotationItem) {
   return item.sconto ? `${item.sconto}` : "*";
+}
+
+function estimateWrappedLines(value: string, charsPerLine: number) {
+  const lines = value.split(/\r?\n/).filter(Boolean);
+  if (lines.length === 0) return 1;
+  return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+}
+
+function estimateItemRowHeightMm(item: QuotationItem, index: number, note: string) {
+  const noteLines = index === 0 && note ? splitLines(note).slice(1).length : 0;
+  const descriptionLines = estimateWrappedLines(item.descrizione, 46) + noteLines;
+  const codeLines = estimateWrappedLines(item.codice, 22);
+  const visibleLines = Math.max(descriptionLines, codeLines, 1);
+  return 3 + visibleLines * 4.1;
+}
+
+function quotationFillerHeightMm(quotation: Quotation) {
+  const rowsHeight = quotation.items.reduce(
+    (sum, item, index) => sum + estimateItemRowHeightMm(item, index, quotation.note),
+    0
+  );
+  return Math.max(MIN_FILLER_ROW_MM, TABLE_BODY_AVAILABLE_MM - rowsHeight);
 }
 
 export default function QuotationPrintPage() {
@@ -96,6 +121,7 @@ export default function QuotationPrintPage() {
   const total = useMemo(() => (quotation ? quotationTotal(quotation) : 0), [quotation]);
   const vatTotal = useMemo(() => total * VAT_RATE, [total]);
   const documentTotal = useMemo(() => total + vatTotal, [total, vatTotal]);
+  const fillerHeightMm = useMemo(() => (quotation ? quotationFillerHeightMm(quotation) : 0), [quotation]);
 
   if (authLoading || loading) {
     return (
@@ -331,7 +357,7 @@ export default function QuotationPrintPage() {
         }
 
         .filler-row td {
-          height: 126mm;
+          height: var(--quotation-filler-height);
           padding: 0;
           border-top: 0;
         }
@@ -546,7 +572,7 @@ export default function QuotationPrintPage() {
                   </tr>
                 );
               })}
-              <tr className="filler-row" aria-hidden="true">
+              <tr className="filler-row" aria-hidden="true" style={{ "--quotation-filler-height": `${fillerHeightMm}mm` } as CSSProperties}>
                 <td />
                 <td />
                 <td />
