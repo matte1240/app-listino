@@ -114,6 +114,43 @@ function createDb() {
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_order_drafts_updated_at ON order_drafts(updated_at)");
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quotations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      numero TEXT NOT NULL UNIQUE DEFAULT '',
+      cliente TEXT NOT NULL,
+      cliente_id INTEGER,
+      data_preventivo TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      agente TEXT NOT NULL DEFAULT '',
+      items TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  const quotationCols = db.pragma("table_info(quotations)") as { name: string }[];
+  if (!quotationCols.some((c) => c.name === "numero")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN numero TEXT NOT NULL DEFAULT ''");
+  }
+  if (!quotationCols.some((c) => c.name === "cliente_id")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN cliente_id INTEGER");
+  }
+  if (!quotationCols.some((c) => c.name === "data_preventivo")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN data_preventivo TEXT NOT NULL DEFAULT ''");
+  }
+  if (!quotationCols.some((c) => c.name === "note")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  }
+  if (!quotationCols.some((c) => c.name === "agente")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN agente TEXT NOT NULL DEFAULT ''");
+  }
+  if (!quotationCols.some((c) => c.name === "updated_at")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_numero ON quotations(numero)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_agente_created_at ON quotations(agente, created_at)");
+
   type LegacyLinkedDraftRow = {
     id: number;
     parent_order_id: number;

@@ -5,16 +5,27 @@ import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useOrderStore } from "@/lib/useOrderStore";
+import { useQuotationStore } from "@/lib/useQuotationStore";
 
 interface Props {
   autoFocus?: boolean;
+  store?: "order" | "quotation";
 }
 
-const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar({ autoFocus = false }, ref) {
-  const searchQuery = useOrderStore((s) => s.searchQuery);
-  const setSearchQuery = useOrderStore((s) => s.setSearchQuery);
-  const showObsolete = useOrderStore((s) => s.showObsolete);
-  const setShowObsolete = useOrderStore((s) => s.setShowObsolete);
+const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar({ autoFocus = false, store = "order" }, ref) {
+  const orderSearchQuery = useOrderStore((s) => s.searchQuery);
+  const orderSetSearchQuery = useOrderStore((s) => s.setSearchQuery);
+  const orderShowObsolete = useOrderStore((s) => s.showObsolete);
+  const orderSetShowObsolete = useOrderStore((s) => s.setShowObsolete);
+  const quotationSearchQuery = useQuotationStore((s) => s.searchQuery);
+  const quotationSetSearchQuery = useQuotationStore((s) => s.setSearchQuery);
+  const quotationShowObsolete = useQuotationStore((s) => s.showObsolete);
+  const quotationSetShowObsolete = useQuotationStore((s) => s.setShowObsolete);
+
+  const searchQuery = store === "quotation" ? quotationSearchQuery : orderSearchQuery;
+  const setSearchQuery = store === "quotation" ? quotationSetSearchQuery : orderSetSearchQuery;
+  const showObsolete = store === "quotation" ? quotationShowObsolete : orderShowObsolete;
+  const setShowObsolete = store === "quotation" ? quotationSetShowObsolete : orderSetShowObsolete;
 
   return (
     <div className="flex flex-col gap-2">

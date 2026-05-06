@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Minus, Plus, Sparkles, AlertCircle } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
+import { useQuotationStore } from "@/lib/useQuotationStore";
 import { useAuth } from "@/lib/auth-context";
 import type { Material } from "@/types";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 interface Props {
   material: Material;
   isReadOnlyCatalog?: boolean;
+  store?: "order" | "quotation";
   onArticleConfirmed?: () => void;
   openArticleRequest?: { codice: string; requestId: number } | null;
   onOpenArticleRequestHandled?: (requestId: number) => void;
@@ -20,15 +22,24 @@ interface Props {
 export default function MaterialCard({
   material,
   isReadOnlyCatalog = false,
+  store = "order",
   onArticleConfirmed,
   openArticleRequest,
   onOpenArticleRequestHandled,
 }: Props) {
   const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
-  const setQty = useOrderStore((s) => s.setQty);
-  const setSconto = useOrderStore((s) => s.setSconto);
-  const setMaterialDescrizioneAI = useOrderStore((s) => s.setMaterialDescrizioneAI);
+  const orderSetQty = useOrderStore((s) => s.setQty);
+  const orderSetSconto = useOrderStore((s) => s.setSconto);
+  const orderSetMaterialDescrizioneAI = useOrderStore((s) => s.setMaterialDescrizioneAI);
+  const quotationItem = useQuotationStore((s) => s.quotationItems[codice]);
+  const quotationSetQty = useQuotationStore((s) => s.setQty);
+  const quotationSetSconto = useQuotationStore((s) => s.setSconto);
+  const quotationSetMaterialDescrizioneAI = useQuotationStore((s) => s.setMaterialDescrizioneAI);
+  const activeItem = store === "quotation" ? quotationItem : orderItem;
+  const setQty = store === "quotation" ? quotationSetQty : orderSetQty;
+  const setSconto = store === "quotation" ? quotationSetSconto : orderSetSconto;
+  const setMaterialDescrizioneAI = store === "quotation" ? quotationSetMaterialDescrizioneAI : orderSetMaterialDescrizioneAI;
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [enriching, setEnriching] = useState(false);
@@ -61,9 +72,9 @@ export default function MaterialCard({
     }
   };
 
-  const isInCart = orderItem?.flagged ?? false;
-  const cartQty = orderItem?.qty ?? 0;
-  const cartSconto = orderItem?.sconto ?? 0;
+  const isInCart = activeItem?.flagged ?? false;
+  const cartQty = activeItem?.qty ?? 0;
+  const cartSconto = activeItem?.sconto ?? 0;
 
   const [expanded, setExpanded] = useState(false);
   const [draftQty, setDraftQty] = useState(0);

@@ -28,6 +28,28 @@ export interface OrderHistoryItem {
   sconto?: number; // 0 | 8 | 15
 }
 
+export interface QuotationItem {
+  codice: string;
+  descrizione: string;
+  qty: number;
+  um: string;
+  prezzoListino: number;
+  sconto?: number; // 0 | 8 | 15
+}
+
+export interface Quotation {
+  id: number;
+  numero: string;
+  clienteId: number | null;
+  cliente: string;
+  dataPreventivo: string;
+  note: string;
+  agente: string;
+  items: QuotationItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type OrderStatus = 'bozza' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
 
 export interface OrderDraft {
@@ -69,6 +91,21 @@ export interface OrderItem {
 }
 
 export type OrderMap = Record<string, OrderItem>;
+
+export interface QuotationStoreItem {
+  flagged: boolean;
+  qty: number;
+  sconto: 0 | 8 | 15;
+}
+
+export type QuotationMap = Record<string, QuotationStoreItem>;
+
+export interface QuotationInfo {
+  clienteId: number | null;
+  cliente: string;
+  dataPreventivo: string;
+  note: string;
+}
 
 export const MAGAZZINI = ["Pordenone", "Udine", "Fossalta di Portogruaro", "Trieste"] as const;
 export type Magazzino = typeof MAGAZZINI[number];

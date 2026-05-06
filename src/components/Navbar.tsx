@@ -9,11 +9,13 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOrderStore } from "@/lib/useOrderStore";
+import { useQuotationStore } from "@/lib/useQuotationStore";
 
 const navItems = [
   { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
   { href: "/listino-pdf", label: "Listino PDF", icon: FileSpreadsheet, adminOnly: false },
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
+  { href: "/quotations", label: "Preventivi", icon: FileText, adminOnly: false },
   { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
@@ -38,6 +40,11 @@ export default function Navbar() {
   const currentStep = useOrderStore((s) => s.currentStep);
   const setMobileCartOpen = useOrderStore((s) => s.setMobileCartOpen);
   const setExitDialogOpen = useOrderStore((s) => s.setExitDialogOpen);
+  const quotationInfo = useQuotationStore((s) => s.quotationInfo);
+  const quotationItems = useQuotationStore((s) => s.quotationItems);
+  const quotationCurrentStep = useQuotationStore((s) => s.currentStep);
+  const setQuotationMobileCartOpen = useQuotationStore((s) => s.setMobileCartOpen);
+  const resetQuotation = useQuotationStore((s) => s.resetQuotation);
 
   if (!user || pathname === "/login") return null;
 
@@ -46,9 +53,17 @@ export default function Navbar() {
   const editMatch = pathname.match(/^\/orders\/(\d+)\/edit$/);
   const isEditOrder = !!editMatch;
   const editOrderId = editMatch ? editMatch[1] : null;
-  const isWizardMode = isNewOrder || isEditOrder;
-  const isMaterialsStep = isWizardMode && currentStep === 2;
-  const flaggedCount = Object.values(orderItems).filter((item) => item?.flagged).length;
+  const isNewQuotation = pathname === "/quotations/new";
+  const editQuotationMatch = pathname.match(/^\/quotations\/(\d+)\/edit$/);
+  const isEditQuotation = !!editQuotationMatch;
+  const editQuotationId = editQuotationMatch ? editQuotationMatch[1] : null;
+  const isOrderWizardMode = isNewOrder || isEditOrder;
+  const isQuotationWizardMode = isNewQuotation || isEditQuotation;
+  const isWizardMode = isOrderWizardMode || isQuotationWizardMode;
+  const activeStep = isQuotationWizardMode ? quotationCurrentStep : currentStep;
+  const isMaterialsStep = isWizardMode && activeStep === 2;
+  const flaggedCount = Object.values(isQuotationWizardMode ? quotationItems : orderItems).filter((item) => item?.flagged).length;
+  const activeCustomer = isQuotationWizardMode ? quotationInfo.cliente : orderInfo.cliente;
 
   const items = navItems.filter((item) => !item.adminOnly || user.role === "admin");
 
@@ -88,14 +103,20 @@ export default function Navbar() {
             {/* Wizard mode: context label */}
             {isWizardMode && (
               <div className="flex min-w-0 items-center gap-2">
-                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isEditOrder ? "bg-amber-400" : "bg-white/20"} text-white`}>
-                  {isEditOrder ? <FileText className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isEditOrder || isEditQuotation ? "bg-amber-400" : "bg-white/20"} text-white`}>
+                  {isEditOrder || isEditQuotation ? <FileText className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                 </div>
                 <span className="font-bold text-sm text-white truncate max-w-[48vw] sm:max-w-none">
-                  {isEditOrder ? `Modifica ordine #${editOrderId}` : "Nuovo ordine"}
+                  {isEditOrder
+                    ? `Modifica ordine #${editOrderId}`
+                    : isEditQuotation
+                      ? `Modifica preventivo #${editQuotationId}`
+                      : isNewQuotation
+                        ? "Nuovo preventivo"
+                        : "Nuovo ordine"}
                 </span>
-                {orderInfo.cliente && (
-                  <span className="hidden lg:inline truncate max-w-[24vw] text-xs text-white/60">— {orderInfo.cliente}</span>
+                {activeCustomer && (
+                  <span className="hidden lg:inline truncate max-w-[24vw] text-xs text-white/60">— {activeCustomer}</span>
                 )}
               </div>
             )}
@@ -134,10 +155,10 @@ export default function Navbar() {
               <Button
                 size="sm"
                 className="gap-1.5 h-8 rounded-xl font-semibold bg-white text-primary hover:bg-white/90"
-                onClick={() => router.push("/orders/new")}
+                onClick={() => router.push(pathname.startsWith("/quotations") ? "/quotations/new" : "/orders/new")}
               >
                 <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">Nuovo ordine</span>
+                <span className="hidden sm:inline">{pathname.startsWith("/quotations") ? "Crea preventivo" : "Nuovo ordine"}</span>
               </Button>
             )}
 
@@ -149,7 +170,7 @@ export default function Navbar() {
                     variant="outline"
                     size="sm"
                     className="lg:hidden gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
-                    onClick={() => setMobileCartOpen(true)}
+                    onClick={() => isQuotationWizardMode ? setQuotationMobileCartOpen(true) : setMobileCartOpen(true)}
                   >
                     <ShoppingCart className="h-4 w-4" />
                     Carrello
@@ -165,7 +186,14 @@ export default function Navbar() {
                   variant="outline"
                   size="sm"
                   className="gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
-                  onClick={() => setExitDialogOpen(true)}
+                  onClick={() => {
+                    if (isQuotationWizardMode) {
+                      resetQuotation();
+                      router.push("/quotations");
+                      return;
+                    }
+                    setExitDialogOpen(true);
+                  }}
                 >
                   <ArrowLeft className="h-4 w-4" />
                   <span className="hidden sm:inline">Esci</span>
