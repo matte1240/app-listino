@@ -23,11 +23,15 @@ export async function GET() {
 
   const db = getDb();
   const users = db
-    .prepare("SELECT id, username, role, email, created_at FROM users ORDER BY id")
+    .prepare("SELECT id, username, full_name, role, email, created_at FROM users ORDER BY id")
     .all() as Omit<DbUser, "password">[];
 
   const normalizedUsers = users.map((u) => ({
-    ...u,
+    id: u.id,
+    username: u.username,
+    fullName: u.full_name || u.username,
+    role: u.role,
+    email: u.email,
     created_at: normalizeUtcTimestamp(u.created_at),
   }));
 
@@ -41,10 +45,12 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { username, password, role, email } = body as {
+  const { username, password, role, fullName, full_name, email } = body as {
     username?: string;
     password?: string;
     role?: string;
+    fullName?: string;
+    full_name?: string;
     email?: string;
   };
 
@@ -74,6 +80,7 @@ export async function POST(request: Request) {
   }
 
   const db = getDb();
+  const normalizedFullName = (fullName ?? full_name ?? "").trim();
   const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username);
   if (existing) {
     return NextResponse.json({ error: "Username già in uso" }, { status: 409 });
@@ -81,11 +88,11 @@ export async function POST(request: Request) {
 
   const hash = hashSync(password, 10);
   const result = db
-    .prepare("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)")
-    .run(username, hash, role, email ?? "");
+    .prepare("INSERT INTO users (username, password, role, full_name, email) VALUES (?, ?, ?, ?, ?)")
+    .run(username, hash, role, normalizedFullName, email ?? "");
 
   return NextResponse.json(
-    { user: { id: result.lastInsertRowid, username, role, email: email ?? "" } },
+    { user: { id: result.lastInsertRowid, username, fullName: normalizedFullName || username, role, email: email ?? "" } },
     { status: 201 }
   );
 }

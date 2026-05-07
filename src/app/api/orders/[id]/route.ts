@@ -12,6 +12,7 @@ import {
   type DbOrder,
   type OrderWriteData,
 } from "@/lib/orders";
+import { getDbQuotation, markQuotationConverted } from "@/lib/quotations";
 import type { OrderHistoryItem } from "@/types";
 
 /** GET /api/orders/[id] — get single order */
@@ -26,7 +27,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (isNaN(orderId)) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
 
   const db = getDb();
-  const row = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder | undefined;
+  const row = db.prepare(
+    `SELECT orders.*, users.full_name AS agente_full_name
+     FROM orders
+     LEFT JOIN users ON users.username = orders.agente
+     WHERE orders.id = ?`
+  ).get(orderId) as DbOrder | undefined;
   if (!row) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   if (payload.role !== "admin" && row.agente !== payload.username) {
@@ -51,7 +57,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (isNaN(orderId)) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
 
   const db = getDb();
-  const existing = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder | undefined;
+  const existing = db.prepare(
+    `SELECT orders.*, users.full_name AS agente_full_name
+     FROM orders
+     LEFT JOIN users ON users.username = orders.agente
+     WHERE orders.id = ?`
+  ).get(orderId) as DbOrder | undefined;
   if (!existing) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   if (payload.role !== "admin" && existing.agente !== payload.username) {
@@ -126,7 +137,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (isLinkedDraft && resolvedStatus === "confermato") {
     const parentId = existingParentOrderId as number;
-    const parent = db.prepare("SELECT * FROM orders WHERE id = ?").get(parentId) as DbOrder | undefined;
+    const parent = db.prepare(
+      `SELECT orders.*, users.full_name AS agente_full_name
+       FROM orders
+       LEFT JOIN users ON users.username = orders.agente
+       WHERE orders.id = ?`
+    ).get(parentId) as DbOrder | undefined;
     if (!parent) {
       return NextResponse.json({ error: "Ordine principale non trovato" }, { status: 409 });
     }
@@ -164,7 +180,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
     })();
 
-    const updatedParent = db.prepare("SELECT * FROM orders WHERE id = ?").get(parentId) as DbOrder | undefined;
+    const updatedParent = db.prepare(
+      `SELECT orders.*, users.full_name AS agente_full_name
+       FROM orders
+       LEFT JOIN users ON users.username = orders.agente
+       WHERE orders.id = ?`
+    ).get(parentId) as DbOrder | undefined;
     if (!updatedParent) {
       return NextResponse.json({ error: "Ordine principale non trovato" }, { status: 500 });
     }
@@ -188,31 +209,58 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const nextParentOrderId = isLinkedDraft ? existingParentOrderId : null;
   const nextStatus = isStandaloneDraft || isLinkedDraft ? resolvedStatus : existing.status;
 
-  db.transaction(() => {
-    db.prepare(
-      `UPDATE orders
-       SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?
-       WHERE id = ?`
-    ).run(
-      resolvedCliente,
-      resolvedClienteId,
-      magazzino,
-      luogoConsegna ?? "",
-      dataConsegna ?? "",
-      note ?? "",
-      JSON.stringify(items),
-      nextStatus,
-      nextParentOrderId,
-      orderId
-    );
-
-    if (!isStandaloneDraft && !isLinkedDraft) {
-      deleteOrderDraft(db, orderId);
-      db.prepare("DELETE FROM orders WHERE parent_order_id = ? AND status = 'bozza'").run(orderId);
+  if (isStandaloneDraft && resolvedStatus === "confermato" && existing.quotation_id !== null) {
+    const sourceQuotation = getDbQuotation(db, existing.quotation_id);
+    if (!sourceQuotation) {
+      return NextResponse.json({ error: "Preventivo non trovato" }, { status: 409 });
     }
-  })();
+    if (sourceQuotation.status === "convertito") {
+      return NextResponse.json({ error: "Preventivo già trasformato in ordine" }, { status: 409 });
+    }
+  }
 
-  const updated = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder | undefined;
+  try {
+    db.transaction(() => {
+      db.prepare(
+        `UPDATE orders
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?
+         WHERE id = ?`
+      ).run(
+        resolvedCliente,
+        resolvedClienteId,
+        magazzino,
+        luogoConsegna ?? "",
+        dataConsegna ?? "",
+        note ?? "",
+        JSON.stringify(items),
+        nextStatus,
+        nextParentOrderId,
+        orderId
+      );
+
+      if (!isStandaloneDraft && !isLinkedDraft) {
+        deleteOrderDraft(db, orderId);
+        db.prepare("DELETE FROM orders WHERE parent_order_id = ? AND status = 'bozza'").run(orderId);
+      }
+
+      if (isStandaloneDraft && resolvedStatus === "confermato" && existing.quotation_id !== null) {
+        const convertedChanges = markQuotationConverted(db, existing.quotation_id, orderId);
+        if (convertedChanges === 0) throw new Error("QUOTATION_ALREADY_CONVERTED");
+      }
+    })();
+  } catch (error) {
+    if (error instanceof Error && error.message === "QUOTATION_ALREADY_CONVERTED") {
+      return NextResponse.json({ error: "Preventivo già trasformato in ordine" }, { status: 409 });
+    }
+    throw error;
+  }
+
+  const updated = db.prepare(
+    `SELECT orders.*, users.full_name AS agente_full_name
+     FROM orders
+     LEFT JOIN users ON users.username = orders.agente
+     WHERE orders.id = ?`
+  ).get(orderId) as DbOrder | undefined;
   if (!updated) {
     return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
   }
@@ -246,7 +294,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (isNaN(orderId)) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
 
   const db = getDb();
-  const existing = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder | undefined;
+  const existing = db.prepare(
+    `SELECT orders.*, users.full_name AS agente_full_name
+     FROM orders
+     LEFT JOIN users ON users.username = orders.agente
+     WHERE orders.id = ?`
+  ).get(orderId) as DbOrder | undefined;
   if (!existing) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   if (payload.role !== "admin" && existing.agente !== payload.username) {

@@ -95,6 +95,7 @@ export default function NewOrderPage() {
         if (loadedMaterials.length > 0) setMaterials(loadedMaterials);
 
         setOrderInfo({
+          quotationId: quotation.id,
           clienteId: quotation.clienteId,
           cliente: quotation.cliente,
           note: quotation.note,

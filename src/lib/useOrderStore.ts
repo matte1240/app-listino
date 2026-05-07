@@ -26,6 +26,7 @@ interface OrderStore {
 }
 
 const defaultOrderInfo: OrderInfo = {
+  quotationId: null,
   clienteId: null,
   cliente: "",
   luogoConsegna: "",
@@ -99,7 +100,7 @@ export const useOrderStore = create<OrderStore>()(
         }));
       },
 
-      resetOrder: () => set({ orderItems: {}, orderInfo: defaultOrderInfo, currentStep: 1, mobileCartOpen: false }),
+      resetOrder: () => set({ orderItems: {}, orderInfo: { ...defaultOrderInfo }, currentStep: 1, mobileCartOpen: false }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
 

@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 interface User {
   id: number;
   username: string;
+  fullName: string;
   role: "admin" | "agente";
 }
 

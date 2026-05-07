@@ -16,6 +16,12 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    user: { id: payload.id, username: payload.username, role: payload.role, email: payload.email },
+    user: {
+      id: payload.id,
+      username: payload.username,
+      fullName: payload.fullName || payload.username,
+      role: payload.role,
+      email: payload.email,
+    },
   });
 }

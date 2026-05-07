@@ -18,6 +18,7 @@ function createDb() {
       username TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('admin', 'agente')),
+      full_name TEXT NOT NULL DEFAULT '',
       email TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -27,6 +28,9 @@ function createDb() {
   const userCols = db.pragma("table_info(users)") as { name: string }[];
   if (!userCols.some((c) => c.name === "email")) {
     db.exec("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''");
+  }
+  if (!userCols.some((c) => c.name === "full_name")) {
+    db.exec("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''");
   }
 
   db.exec(`
@@ -81,6 +85,7 @@ function createDb() {
       items TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'confermato',
       parent_order_id INTEGER,
+      quotation_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
@@ -96,7 +101,11 @@ function createDb() {
   if (!orderCols.some((c) => c.name === "parent_order_id")) {
     db.exec("ALTER TABLE orders ADD COLUMN parent_order_id INTEGER");
   }
+  if (!orderCols.some((c) => c.name === "quotation_id")) {
+    db.exec("ALTER TABLE orders ADD COLUMN quotation_id INTEGER");
+  }
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_orders_quotation_id ON orders(quotation_id)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS order_drafts (
@@ -126,6 +135,8 @@ function createDb() {
       note TEXT NOT NULL DEFAULT '',
       agente TEXT NOT NULL DEFAULT '',
       items TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'attivo',
+      converted_order_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -156,8 +167,16 @@ function createDb() {
   if (!quotationCols.some((c) => c.name === "updated_at")) {
     db.exec("ALTER TABLE quotations ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
   }
+  if (!quotationCols.some((c) => c.name === "status")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN status TEXT NOT NULL DEFAULT 'attivo'");
+  }
+  if (!quotationCols.some((c) => c.name === "converted_order_id")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN converted_order_id INTEGER");
+  }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_numero ON quotations(numero)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_agente_created_at ON quotations(agente, created_at)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_status ON quotations(status)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_converted_order_id ON quotations(converted_order_id)");
 
   type LegacyLinkedDraftRow = {
     id: number;
@@ -279,10 +298,11 @@ function createDb() {
   const count = db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number };
   if (count.c === 0) {
     const hash = hashSync("admin123", 10);
-    db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)").run(
+    db.prepare("INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)").run(
       "admin",
       hash,
-      "admin"
+      "admin",
+      "Admin"
     );
   }
 
@@ -325,6 +345,7 @@ export interface DbUser {
   username: string;
   password: string;
   role: "admin" | "agente";
+  full_name: string;
   email: string;
   created_at: string;
 }

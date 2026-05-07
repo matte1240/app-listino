@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, Clock, FileText, Package, Pencil, Printer, ShoppingCart, Trash2, Truck, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, Clock, FileText, Package, Pencil, Printer, ShoppingCart, Trash2, Truck, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -100,15 +100,23 @@ export default function QuotationDetailPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg font-bold">Preventivo {quotation.numero}</h1>
                 <Badge variant="outline">{formatDate(quotation.dataPreventivo)}</Badge>
+                {quotation.status === "convertito" && <Badge className="gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Ordine creato</Badge>}
               </div>
               <p className="text-sm text-muted-foreground">{quotation.cliente}</p>
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button className="gap-2" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)}>
-              <ShoppingCart className="h-4 w-4" />
-              Trasforma in ordine
-            </Button>
+            {quotation.status === "convertito" && quotation.convertedOrderId ? (
+              <Button className="gap-2" onClick={() => router.push(`/orders/${quotation.convertedOrderId}`)}>
+                <ShoppingCart className="h-4 w-4" />
+                Apri ordine
+              </Button>
+            ) : quotation.status !== "convertito" ? (
+              <Button className="gap-2" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)}>
+                <ShoppingCart className="h-4 w-4" />
+                Trasforma in ordine
+              </Button>
+            ) : null}
             <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/print`)}>
               <Printer className="h-4 w-4" />
               PDF

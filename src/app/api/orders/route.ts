@@ -3,6 +3,7 @@ import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { sendOrderEmail } from "@/lib/mail";
 import { dbOrderToOrder, getOrderDraftMap, type DbOrder } from "@/lib/orders";
+import { getDbQuotation, markQuotationConverted } from "@/lib/quotations";
 import type { Order, OrderHistoryItem } from "@/types";
 
 /** GET /api/orders — list orders (admin sees all, agente sees own) */
@@ -17,12 +18,20 @@ export async function GET(req: NextRequest) {
     payload.role === "admin"
       ? (db
           .prepare(
-            "SELECT * FROM orders WHERE NOT (status = 'bozza' AND parent_order_id IS NOT NULL) ORDER BY created_at DESC"
+            `SELECT orders.*, users.full_name AS agente_full_name
+             FROM orders
+             LEFT JOIN users ON users.username = orders.agente
+             WHERE NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)
+             ORDER BY orders.created_at DESC`
           )
           .all() as DbOrder[])
       : (db
           .prepare(
-            "SELECT * FROM orders WHERE agente = ? AND NOT (status = 'bozza' AND parent_order_id IS NOT NULL) ORDER BY created_at DESC"
+            `SELECT orders.*, users.full_name AS agente_full_name
+             FROM orders
+             LEFT JOIN users ON users.username = orders.agente
+             WHERE orders.agente = ? AND NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)
+             ORDER BY orders.created_at DESC`
           )
           .all(payload.username) as DbOrder[]);
 
@@ -44,7 +53,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items, status } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items, status, quotationId } = body as {
+    quotationId?: number | null;
     clienteId?: number | null;
     cliente: string;
     magazzino: string;
@@ -60,6 +70,8 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const normalizedClienteId = Number(clienteId);
   const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
+  const normalizedQuotationId = Number(quotationId);
+  const resolvedQuotationId = Number.isInteger(normalizedQuotationId) && normalizedQuotationId > 0 ? normalizedQuotationId : null;
 
   let resolvedClienteId: number | null = null;
   let resolvedCliente = cliente?.trim() ?? "";
@@ -81,29 +93,60 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 
-  const result = db
-    .prepare(
-      `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status, parent_order_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      resolvedCliente,
-      resolvedClienteId,
-      magazzino,
-      luogoConsegna ?? "",
-      dataConsegna ?? "",
-      note ?? "",
-      payload.username,
-      JSON.stringify(items),
-      resolvedStatus,
-      null
-    );
+  if (resolvedQuotationId !== null) {
+    const sourceQuotation = getDbQuotation(db, resolvedQuotationId);
+    if (!sourceQuotation) {
+      return NextResponse.json({ error: "Preventivo non trovato" }, { status: 400 });
+    }
+    if (payload.role !== "admin" && sourceQuotation.agente !== payload.username) {
+      return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+    }
+    if (sourceQuotation.status === "convertito") {
+      return NextResponse.json({ error: "Preventivo già trasformato in ordine" }, { status: 409 });
+    }
+  }
 
-  const orderId = result.lastInsertRowid as number;
+  let orderId: number;
+  try {
+    orderId = db.transaction(() => {
+      const result = db
+        .prepare(
+          `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status, parent_order_id, quotation_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          resolvedCliente,
+          resolvedClienteId,
+          magazzino,
+          luogoConsegna ?? "",
+          dataConsegna ?? "",
+          note ?? "",
+          payload.username,
+          JSON.stringify(items),
+          resolvedStatus,
+          null,
+          resolvedQuotationId
+        );
+
+      const savedOrderId = result.lastInsertRowid as number;
+      if (resolvedStatus === "confermato" && resolvedQuotationId !== null) {
+        const convertedChanges = markQuotationConverted(db, resolvedQuotationId, savedOrderId);
+        if (convertedChanges === 0) throw new Error("QUOTATION_ALREADY_CONVERTED");
+      }
+
+      return savedOrderId;
+    })();
+  } catch (error) {
+    if (error instanceof Error && error.message === "QUOTATION_ALREADY_CONVERTED") {
+      return NextResponse.json({ error: "Preventivo già trasformato in ordine" }, { status: 409 });
+    }
+    throw error;
+  }
 
   const order: Order = {
     id: orderId,
     parentOrderId: null,
+    quotationId: resolvedQuotationId,
     clienteId: resolvedClienteId,
     cliente: resolvedCliente,
     magazzino,
@@ -111,6 +154,7 @@ export async function POST(req: NextRequest) {
     dataConsegna: dataConsegna ?? "",
     note: note ?? "",
     agente: payload.username,
+    agenteFullName: payload.fullName || payload.username,
     items,
     status: resolvedStatus,
     createdAt: new Date().toISOString(),

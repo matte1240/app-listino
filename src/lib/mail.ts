@@ -342,6 +342,7 @@ function buildOrderHtml(
 
   const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0);
   const mapsUrl = buildGoogleMapsSearchUrl(order.luogoConsegna);
+  const agenteDisplayName = order.agenteFullName || order.agente;
   const rows = mode === "updated" && diff
     ? buildDiffItemsRows(diff)
     : order.items
@@ -385,7 +386,7 @@ function buildOrderHtml(
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
           <tr><td style="padding:3px 0;"><strong>Cliente:</strong> ${order.cliente}</td></tr>
           <tr><td style="padding:3px 0;"><strong>Magazzino:</strong> ${order.magazzino}</td></tr>
-          <tr><td style="padding:3px 0;"><strong>Agente:</strong> ${order.agente}</td></tr>
+          <tr><td style="padding:3px 0;"><strong>Agente:</strong> ${agenteDisplayName}</td></tr>
           ${order.luogoConsegna ? `<tr><td style="padding:3px 0;"><strong>Luogo consegna:</strong> ${order.luogoConsegna}</td></tr>` : ""}
           ${mapsUrl ? `<tr><td style="padding:3px 0;"><strong>Google Maps:</strong> <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">Apri indirizzo cantiere</a></td></tr>` : ""}
           ${order.dataConsegna ? `<tr><td style="padding:3px 0;"><strong>Data consegna:</strong> ${formatDate(order.dataConsegna)}</td></tr>` : ""}
@@ -456,7 +457,7 @@ function buildOrderText(
     `Data ordine: ${formatDate(order.createdAt)}`,
     `Cliente: ${order.cliente}`,
     `Magazzino: ${order.magazzino}`,
-    `Agente: ${order.agente}`,
+    `Agente: ${order.agenteFullName || order.agente}`,
   ];
   const mapsUrl = buildGoogleMapsSearchUrl(order.luogoConsegna);
 

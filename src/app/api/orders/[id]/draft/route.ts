@@ -32,7 +32,12 @@ async function getAuthorizedOrder(req: NextRequest, paramsPromise: Promise<{ id:
   }
 
   const db = getDb();
-  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder | undefined;
+  const order = db.prepare(
+    `SELECT orders.*, users.full_name AS agente_full_name
+     FROM orders
+     LEFT JOIN users ON users.username = orders.agente
+     WHERE orders.id = ?`
+  ).get(orderId) as DbOrder | undefined;
   if (!order) {
     return { error: NextResponse.json({ error: "Ordine non trovato" }, { status: 404 }) };
   }
@@ -156,7 +161,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     db.prepare("DELETE FROM orders WHERE parent_order_id = ? AND status = 'bozza'").run(orderId);
   })();
 
-  const updatedOrder = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder | undefined;
+  const updatedOrder = db.prepare(
+    `SELECT orders.*, users.full_name AS agente_full_name
+     FROM orders
+     LEFT JOIN users ON users.username = orders.agente
+     WHERE orders.id = ?`
+  ).get(orderId) as DbOrder | undefined;
   if (!updatedOrder) {
     return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
   }

@@ -18,8 +18,8 @@ const navItems = [
   { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
-function getUserInitials(username: string): string {
-  const trimmed = username.trim();
+function getUserInitials(displayName: string): string {
+  const trimmed = displayName.trim();
   if (!trimmed) return "U";
   const tokens = trimmed.split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return "U";
@@ -65,6 +65,7 @@ export default function Navbar() {
   const activeCustomer = isQuotationWizardMode ? quotationInfo.cliente : orderInfo.cliente;
 
   const items = navItems.filter((item) => !item.adminOnly || user.role === "admin");
+  const userDisplayName = user.fullName || user.username;
 
   return (
     <>
@@ -206,10 +207,10 @@ export default function Navbar() {
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                 className="flex items-center justify-center h-8 w-8 rounded-full bg-white/20 text-white font-bold text-xs border border-white/30 hover:bg-white/30 transition-colors"
                 aria-expanded={isUserMenuOpen}
-                aria-label={`Menu utente ${user.username}`}
-                title={user.username}
+                aria-label={`Menu utente ${userDisplayName}`}
+                title={userDisplayName}
               >
-                {getUserInitials(user.username)}
+                {getUserInitials(userDisplayName)}
               </button>
               {isUserMenuOpen && (
                 <>
@@ -220,7 +221,7 @@ export default function Navbar() {
                   <div className="absolute right-0 top-10 z-50 w-48 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-card shadow-lg overflow-hidden">
                     <div className="px-4 py-3 border-b border-border text-sm">
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">Utente</p>
-                      <p className="font-semibold text-foreground truncate">{user.username}</p>
+                      <p className="font-semibold text-foreground truncate">{userDisplayName}</p>
                     </div>
                     <button
                       onClick={() => {
@@ -249,7 +250,7 @@ export default function Navbar() {
           />
           <div className="fixed top-0 left-0 z-50 h-full w-[min(15rem,85vw)] bg-background border-r border-border shadow-xl lg:hidden flex flex-col">
             <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
-              <span className="font-bold text-sm text-foreground">{user.username}</span>
+              <span className="font-bold text-sm text-foreground truncate">{userDisplayName}</span>
               <button
                 onClick={() => { setOpen(false); setIsUserMenuOpen(false); }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"

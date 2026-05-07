@@ -22,7 +22,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const db = getDb();
-  const row = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as DbOrder | undefined;
+  const row = db.prepare(
+    `SELECT orders.*, users.full_name AS agente_full_name
+     FROM orders
+     LEFT JOIN users ON users.username = orders.agente
+     WHERE orders.id = ?`
+  ).get(orderId) as DbOrder | undefined;
   if (!row) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   const order = dbOrderToOrder(row);

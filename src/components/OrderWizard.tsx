@@ -84,6 +84,7 @@ export default function OrderWizard({ editingOrder }: Props) {
     if (!editingSource) return;
     // Populate orderInfo
     setOrderInfo({
+      quotationId: editingOrder?.quotationId ?? null,
       clienteId: editingSource.clienteId ?? null,
       cliente: editingSource.cliente,
       magazzino: editingSource.magazzino as typeof orderInfo.magazzino,

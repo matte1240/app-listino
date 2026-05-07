@@ -88,7 +88,7 @@ export default function AdminExportMetodoPage() {
 
   function matchesSearch(order: Order): boolean {
     if (!searchQuery.trim()) return true;
-    const text = `${order.id} ${order.cliente} ${order.luogoConsegna} ${order.agente}`.toLowerCase();
+    const text = `${order.id} ${order.cliente} ${order.luogoConsegna} ${order.agenteFullName || order.agente} ${order.agente}`.toLowerCase();
     const tokens = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
     return tokens.every((t) => text.includes(t));
   }
@@ -209,7 +209,7 @@ export default function AdminExportMetodoPage() {
                         </>
                       )}
                       <span className="hidden sm:inline text-muted-foreground/60">·</span>
-                      <span>{order.agente}</span>
+                      <span>{order.agenteFullName || order.agente}</span>
                     </div>
                   </div>
 

@@ -42,15 +42,20 @@ export interface Quotation {
   numero: string;
   clienteId: number | null;
   cliente: string;
+  status: QuotationStatus;
+  convertedOrderId: number | null;
   dataPreventivo: string;
   dataConsegnaPrevista: string;
   validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
   agente: string;
+  agenteFullName?: string;
   items: QuotationItem[];
   createdAt: string;
   updatedAt: string;
 }
+
+export type QuotationStatus = 'attivo' | 'convertito';
 
 export type OrderStatus = 'bozza' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
 
@@ -70,6 +75,7 @@ export interface OrderDraft {
 export interface Order {
   id: number;
   parentOrderId: number | null;
+  quotationId: number | null;
   clienteId: number | null;
   cliente: string;
   magazzino: string;
@@ -77,6 +83,7 @@ export interface Order {
   dataConsegna: string;
   note: string;
   agente: string;
+  agenteFullName?: string;
   items: OrderHistoryItem[];
   status: OrderStatus;
   createdAt: string;
@@ -118,6 +125,7 @@ export const MAGAZZINI = ["Pordenone", "Udine", "Fossalta di Portogruaro", "Trie
 export type Magazzino = typeof MAGAZZINI[number];
 
 export interface OrderInfo {
+  quotationId: number | null;
   clienteId: number | null;
   cliente: string;
   luogoConsegna: string;

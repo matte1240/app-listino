@@ -1,17 +1,20 @@
 import type Database from "better-sqlite3";
 import { normalizeUtcTimestamp } from "@/lib/datetime";
-import type { Quotation, QuotationItem, ValiditaPreventivoGiorni } from "@/types";
+import type { Quotation, QuotationItem, QuotationStatus, ValiditaPreventivoGiorni } from "@/types";
 
 export interface DbQuotation {
   id: number;
   numero: string;
   cliente: string;
   cliente_id: number | null;
+  status: string | null;
+  converted_order_id: number | null;
   data_preventivo: string;
   data_consegna_prevista: string | null;
   validita_giorni: number | null;
   note: string;
   agente: string;
+  agente_full_name?: string | null;
   items: string;
   created_at: string;
   updated_at: string;
@@ -41,17 +44,24 @@ function normalizeValiditaGiorni(value: number | null | undefined): ValiditaPrev
   return value === 7 || value === 15 || value === 30 ? value : 30;
 }
 
+function normalizeQuotationStatus(value: string | null | undefined): QuotationStatus {
+  return value === "convertito" ? "convertito" : "attivo";
+}
+
 export function dbQuotationToQuotation(row: DbQuotation): Quotation {
   return {
     id: row.id,
     numero: row.numero || `PREV-${row.id}`,
     clienteId: row.cliente_id ?? null,
     cliente: row.cliente,
+    status: normalizeQuotationStatus(row.status),
+    convertedOrderId: row.converted_order_id ?? null,
     dataPreventivo: row.data_preventivo,
     dataConsegnaPrevista: row.data_consegna_prevista ?? "",
     validitaGiorni: normalizeValiditaGiorni(row.validita_giorni),
     note: row.note,
     agente: row.agente,
+    agenteFullName: row.agente_full_name || row.agente,
     items: parseQuotationItems(row.items),
     createdAt: normalizeUtcTimestamp(row.created_at),
     updatedAt: normalizeUtcTimestamp(row.updated_at || row.created_at),
@@ -72,19 +82,35 @@ export function nextQuotationNumber(db: Database.Database, dateValue: string): s
 
 export function listQuotations(db: Database.Database, options: { agente?: string | null } = {}): Quotation[] {
   const rows = options.agente
-    ? (db.prepare("SELECT * FROM quotations WHERE agente = ? ORDER BY datetime(created_at) DESC, id DESC").all(options.agente) as DbQuotation[])
-    : (db.prepare("SELECT * FROM quotations ORDER BY datetime(created_at) DESC, id DESC").all() as DbQuotation[]);
+    ? (db.prepare(
+        `SELECT quotations.*, users.full_name AS agente_full_name
+         FROM quotations
+         LEFT JOIN users ON users.username = quotations.agente
+         WHERE quotations.agente = ?
+         ORDER BY datetime(quotations.created_at) DESC, quotations.id DESC`
+      ).all(options.agente) as DbQuotation[])
+    : (db.prepare(
+        `SELECT quotations.*, users.full_name AS agente_full_name
+         FROM quotations
+         LEFT JOIN users ON users.username = quotations.agente
+         ORDER BY datetime(quotations.created_at) DESC, quotations.id DESC`
+      ).all() as DbQuotation[]);
 
   return rows.map(dbQuotationToQuotation);
 }
 
 export function getQuotation(db: Database.Database, id: number): Quotation | null {
-  const row = db.prepare("SELECT * FROM quotations WHERE id = ?").get(id) as DbQuotation | undefined;
+  const row = getDbQuotation(db, id);
   return row ? dbQuotationToQuotation(row) : null;
 }
 
 export function getDbQuotation(db: Database.Database, id: number): DbQuotation | undefined {
-  return db.prepare("SELECT * FROM quotations WHERE id = ?").get(id) as DbQuotation | undefined;
+  return db.prepare(
+    `SELECT quotations.*, users.full_name AS agente_full_name
+     FROM quotations
+     LEFT JOIN users ON users.username = quotations.agente
+     WHERE quotations.id = ?`
+  ).get(id) as DbQuotation | undefined;
 }
 
 export function createQuotation(db: Database.Database, data: QuotationWriteData): Quotation {
@@ -125,4 +151,12 @@ export function updateQuotation(db: Database.Database, id: number, data: Omit<Qu
 
 export function deleteQuotation(db: Database.Database, id: number): number {
   return db.prepare("DELETE FROM quotations WHERE id = ?").run(id).changes;
+}
+
+export function markQuotationConverted(db: Database.Database, quotationId: number, orderId: number): number {
+  return db.prepare(
+    `UPDATE quotations
+     SET status = 'convertito', converted_order_id = ?, updated_at = datetime('now')
+     WHERE id = ? AND status != 'convertito'`
+  ).run(orderId, quotationId).changes;
 }

@@ -13,6 +13,7 @@ import Link from "next/link";
 interface UserRow {
   id: number;
   username: string;
+  fullName: string;
   role: "admin" | "agente";
   email: string;
   created_at: string;
@@ -20,12 +21,13 @@ interface UserRow {
 
 interface FormData {
   username: string;
+  fullName: string;
   password: string;
   role: "admin" | "agente";
   email: string;
 }
 
-const emptyForm: FormData = { username: "", password: "", role: "agente", email: "" };
+const emptyForm: FormData = { username: "", fullName: "", password: "", role: "agente", email: "" };
 
 export default function AdminUsersPage() {
   const { user, loading } = useAuth();
@@ -87,7 +89,7 @@ export default function AdminUsersPage() {
 
   function openEdit(u: UserRow) {
     setEditingId(u.id);
-    setForm({ username: u.username, password: "", role: u.role, email: u.email });
+    setForm({ username: u.username, fullName: u.fullName ?? "", password: "", role: u.role, email: u.email });
     setFormError("");
     setShowForm(true);
   }
@@ -109,6 +111,7 @@ export default function AdminUsersPage() {
 
     const body: Record<string, string> = {
       username: form.username,
+      fullName: form.fullName,
       role: form.role,
       email: form.email,
     };
@@ -139,7 +142,8 @@ export default function AdminUsersPage() {
   }
 
   async function handleDelete(u: UserRow) {
-    if (!confirm(`Sei sicuro di voler eliminare l'utente "${u.username}"?`)) return;
+    const displayName = u.fullName || u.username;
+    if (!confirm(`Sei sicuro di voler eliminare l'utente "${displayName}"?`)) return;
 
     const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
     if (res.ok) {
@@ -201,6 +205,16 @@ export default function AdminUsersPage() {
               </div>
 
               <div className="space-y-1.5">
+                <Label htmlFor="form-full-name" className="text-xs">Nome completo</Label>
+                <Input
+                  id="form-full-name"
+                  value={form.fullName}
+                  onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
+                  placeholder="Nome e cognome"
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="form-password" className="text-xs">
                   Password{editingId ? " (lascia vuoto per non cambiare)" : ""}
                 </Label>
@@ -255,20 +269,24 @@ export default function AdminUsersPage() {
 
         {/* Users list */}
         <div className="space-y-2">
-          {users.map((u) => (
+          {users.map((u) => {
+            const displayName = u.fullName || u.username;
+            return (
             <div
               key={u.id}
               className="flex flex-col gap-3 rounded-2xl border border-border bg-card shadow-sm p-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm truncate">{u.username}</span>
+                  <span className="font-medium text-sm truncate">{displayName}</span>
                   <Badge variant={u.role === "admin" ? "default" : "secondary"} className="text-xs">
                     {u.role}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {u.email && <>{u.email} · </>}
+                  @{u.username}
+                  {u.email && <> · {u.email}</>}
+                  {" · "}
                   Creato: {new Date(u.created_at).toLocaleDateString("it-IT")}
                 </p>
               </div>
@@ -278,7 +296,7 @@ export default function AdminUsersPage() {
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => openEdit(u)}
-                  aria-label={`Modifica ${u.username}`}
+                  aria-label={`Modifica ${displayName}`}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
@@ -288,14 +306,15 @@ export default function AdminUsersPage() {
                     size="icon"
                     className="h-8 w-8 text-red-500 hover:text-red-600"
                     onClick={() => handleDelete(u)}
-                    aria-label={`Elimina ${u.username}`}
+                    aria-label={`Elimina ${displayName}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {users.length === 0 && !loadingUsers && (

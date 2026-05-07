@@ -151,7 +151,7 @@ export default function OrdersPage() {
   }
 
   function orderSearchText(order: Order): string {
-    return `${order.id} ${order.parentOrderId ?? ""} ${order.cliente} ${order.luogoConsegna} ${order.agente}`.toLowerCase();
+    return `${order.id} ${order.parentOrderId ?? ""} ${order.cliente} ${order.luogoConsegna} ${order.agenteFullName || order.agente} ${order.agente}`.toLowerCase();
   }
 
   function matchesSearch(order: Order): boolean {
@@ -260,7 +260,7 @@ export default function OrdersPage() {
                         <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700">Bozza aperta</Badge>
                       )}
                       {user?.role === "admin" && (
-                        <span className="text-xs text-muted-foreground/70">{order.agente}</span>
+                        <span className="text-xs text-muted-foreground/70">{order.agenteFullName || order.agente}</span>
                       )}
                     </div>
                     <div className="flex flex-col gap-1.5 mt-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">

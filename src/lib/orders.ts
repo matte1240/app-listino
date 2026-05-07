@@ -5,6 +5,7 @@ import type { Order, OrderDraft, OrderHistoryItem, OrderStatus } from "@/types";
 export interface DbOrder {
   id: number;
   parent_order_id: number | null;
+  quotation_id: number | null;
   cliente: string;
   cliente_id: number | null;
   magazzino: string;
@@ -12,6 +13,7 @@ export interface DbOrder {
   data_consegna: string;
   note: string;
   agente: string;
+  agente_full_name?: string | null;
   items: string;
   status: string;
   created_at: string;
@@ -77,6 +79,7 @@ export function dbOrderToOrder(
   return {
     id: row.id,
     parentOrderId: row.parent_order_id ?? null,
+    quotationId: row.quotation_id ?? null,
     clienteId: row.cliente_id ?? null,
     cliente: row.cliente,
     magazzino: row.magazzino,
@@ -84,6 +87,7 @@ export function dbOrderToOrder(
     dataConsegna: row.data_consegna,
     note: row.note,
     agente: row.agente,
+    agenteFullName: row.agente_full_name || row.agente,
     items: JSON.parse(row.items) as OrderHistoryItem[],
     status: resolveOrderStatus(row.status),
     createdAt: normalizeUtcTimestamp(row.created_at),

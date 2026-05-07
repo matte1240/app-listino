@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Clock, FileText, Loader2, Package, Pencil, Plus, Printer, Search, ShoppingCart, Trash2, Truck, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Clock, FileText, Loader2, Package, Pencil, Plus, Printer, Search, ShoppingCart, Trash2, Truck, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -29,6 +29,8 @@ function quotationTotal(quotation: Quotation) {
   return quotation.items.reduce((sum, item) => sum + discountedPrice(item) * item.qty, 0);
 }
 
+type QuotationTab = "attivi" | "convertiti";
+
 export default function QuotationsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -38,6 +40,7 @@ export default function QuotationsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<QuotationTab>("attivi");
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -76,15 +79,23 @@ export default function QuotationsPage() {
     }
   }
 
+  const quotationCounts = useMemo(() => ({
+    attivi: quotations.filter((quotation) => quotation.status !== "convertito").length,
+    convertiti: quotations.filter((quotation) => quotation.status === "convertito").length,
+  }), [quotations]);
+
   const filteredQuotations = useMemo(() => {
     const tokens = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return quotations;
+    const statusFiltered = quotations.filter((quotation) =>
+      activeTab === "convertiti" ? quotation.status === "convertito" : quotation.status !== "convertito"
+    );
+    if (tokens.length === 0) return statusFiltered;
 
-    return quotations.filter((quotation) => {
-      const searchText = `${quotation.numero} ${quotation.id} ${quotation.cliente} ${quotation.agente}`.toLowerCase();
+    return statusFiltered.filter((quotation) => {
+      const searchText = `${quotation.numero} ${quotation.id} ${quotation.cliente} ${quotation.agenteFullName || quotation.agente} ${quotation.agente}`.toLowerCase();
       return tokens.every((token) => searchText.includes(token));
     });
-  }, [quotations, searchQuery]);
+  }, [activeTab, quotations, searchQuery]);
 
   if (authLoading || loading) {
     return (
@@ -121,6 +132,23 @@ export default function QuotationsPage() {
           )}
         </div>
 
+        <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/40 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("attivi")}
+            className={`h-10 rounded-lg px-3 text-sm font-semibold transition-colors ${activeTab === "attivi" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Attivi <span className="ml-1 text-xs font-normal">{quotationCounts.attivi}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("convertiti")}
+            className={`h-10 rounded-lg px-3 text-sm font-semibold transition-colors ${activeTab === "convertiti" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Trasformati <span className="ml-1 text-xs font-normal">{quotationCounts.convertiti}</span>
+          </button>
+        </div>
+
         {filteredQuotations.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
@@ -128,7 +156,9 @@ export default function QuotationsPage() {
             </div>
             <div>
               <p className="font-semibold text-foreground">Nessun preventivo trovato</p>
-              <p className="text-sm text-muted-foreground mt-1">I preventivi salvati appariranno qui</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {activeTab === "convertiti" ? "I preventivi trasformati in ordine appariranno qui" : "I preventivi attivi appariranno qui"}
+              </p>
             </div>
           </div>
         ) : (
@@ -143,7 +173,8 @@ export default function QuotationsPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-foreground leading-tight">{quotation.cliente}</span>
                       <Badge variant="outline" className="text-xs px-2 py-0 h-5">{quotation.numero}</Badge>
-                      {user?.role === "admin" && <span className="text-xs text-muted-foreground/70">{quotation.agente}</span>}
+                      {quotation.status === "convertito" && <Badge className="text-xs px-2 py-0 h-5 gap-1"><CheckCircle2 className="h-3 w-3" /> Ordine creato</Badge>}
+                      {user?.role === "admin" && <span className="text-xs text-muted-foreground/70">{quotation.agenteFullName || quotation.agente}</span>}
                     </div>
                     <div className="flex flex-col gap-1.5 mt-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                       <span className="text-xs text-muted-foreground">{formatDate(quotation.dataPreventivo)}</span>
@@ -212,9 +243,15 @@ export default function QuotationsPage() {
                         <Button variant="ghost" size="sm" onClick={() => router.push(`/quotations/${quotation.id}`)} className="text-xs w-full justify-center sm:w-auto">
                           <FileText className="h-3.5 w-3.5 mr-1.5" /> Dettaglio
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
-                          <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Ordine
-                        </Button>
+                        {quotation.status === "convertito" && quotation.convertedOrderId ? (
+                          <Button variant="ghost" size="sm" onClick={() => router.push(`/orders/${quotation.convertedOrderId}`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
+                            <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Apri ordine
+                          </Button>
+                        ) : quotation.status !== "convertito" ? (
+                          <Button variant="ghost" size="sm" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
+                            <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Ordine
+                          </Button>
+                        ) : null}
                         <Button variant="ghost" size="sm" onClick={() => router.push(`/quotations/${quotation.id}/print`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
                           <Printer className="h-3.5 w-3.5 mr-1.5" /> PDF
                         </Button>

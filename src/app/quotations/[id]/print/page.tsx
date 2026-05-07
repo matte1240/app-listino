@@ -480,7 +480,7 @@ export default function QuotationPrintPage() {
                 </div>
                 <div className="meta-cell">
                   <span className="meta-label">Agente</span>
-                  <span className="meta-value meta-value-small">{quotation.agente || "*"}</span>
+                  <span className="meta-value meta-value-small">{quotation.agenteFullName || quotation.agente || "*"}</span>
                 </div>
                 <div className="meta-cell meta-wide">
                   <span className="meta-label">Condizioni di Pagamento</span>
