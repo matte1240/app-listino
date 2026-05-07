@@ -114,8 +114,9 @@ src/
 │   ├── api/         # Endpoint REST (auth, orders, materials, anagrafiche, admin/*)
 │   ├── admin/       # Pannello amministrazione
 │   ├── orders/      # Cronologia, nuovo ordine, modifica ordine
+│   ├── quotations/  # Preventivi e stampa preventivo
 │   ├── login/       # Pagina login
-│   └── listino-pdf/ # Listino stampabile
+│   └── page.tsx     # Listino con esportazione PDF
 ├── components/      # UI: OrderWizard, MaterialList, MaterialCard, SearchBar, ...
 ├── lib/             # Domain logic
 │   ├── auth.ts          # JWT (jose) + bcrypt

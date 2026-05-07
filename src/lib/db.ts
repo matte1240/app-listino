@@ -121,6 +121,8 @@ function createDb() {
       cliente TEXT NOT NULL,
       cliente_id INTEGER,
       data_preventivo TEXT NOT NULL DEFAULT '',
+      data_consegna_prevista TEXT NOT NULL DEFAULT '',
+      validita_giorni INTEGER NOT NULL DEFAULT 30,
       note TEXT NOT NULL DEFAULT '',
       agente TEXT NOT NULL DEFAULT '',
       items TEXT NOT NULL,
@@ -138,6 +140,12 @@ function createDb() {
   }
   if (!quotationCols.some((c) => c.name === "data_preventivo")) {
     db.exec("ALTER TABLE quotations ADD COLUMN data_preventivo TEXT NOT NULL DEFAULT ''");
+  }
+  if (!quotationCols.some((c) => c.name === "data_consegna_prevista")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN data_consegna_prevista TEXT NOT NULL DEFAULT ''");
+  }
+  if (!quotationCols.some((c) => c.name === "validita_giorni")) {
+    db.exec("ALTER TABLE quotations ADD COLUMN validita_giorni INTEGER NOT NULL DEFAULT 30");
   }
   if (!quotationCols.some((c) => c.name === "note")) {
     db.exec("ALTER TABLE quotations ADD COLUMN note TEXT NOT NULL DEFAULT ''");

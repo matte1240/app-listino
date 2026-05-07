@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotation } from "@/lib/quotations";
-import type { QuotationItem } from "@/types";
+import type { QuotationItem, ValiditaPreventivoGiorni } from "@/types";
 
 async function getAuthPayload(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -53,6 +53,15 @@ function parseQuotationId(id: string) {
   return Number.isNaN(quotationId) ? null : quotationId;
 }
 
+function normalizeValiditaGiorni(value: unknown): ValiditaPreventivoGiorni {
+  const normalized = Number(value);
+  return normalized === 7 || normalized === 15 || normalized === 30 ? normalized : 30;
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const payload = await getAuthPayload(req);
   if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
@@ -93,7 +102,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!customer) return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
 
   const items = normalizeItems(body.items);
-  const dataPreventivo = String(body.dataPreventivo ?? "").trim();
+  const dataPreventivo = String(existing.data_preventivo ?? new Date().toISOString().slice(0, 10)).trim();
+  const dataConsegnaPrevista = String(body.dataConsegnaPrevista ?? "").trim() || String(existing.data_consegna_prevista ?? "").trim() || today();
+  const validitaGiorni = normalizeValiditaGiorni(body.validitaGiorni);
 
   if (!customer.cliente || !dataPreventivo || items.length === 0) {
     return NextResponse.json({ error: "Dati preventivo incompleti" }, { status: 400 });
@@ -103,6 +114,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     cliente: customer.cliente,
     clienteId: customer.clienteId,
     dataPreventivo,
+    dataConsegnaPrevista,
+    validitaGiorni,
     note: String(body.note ?? ""),
     items,
   });

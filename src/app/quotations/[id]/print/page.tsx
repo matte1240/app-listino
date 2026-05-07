@@ -468,7 +468,7 @@ export default function QuotationPrintPage() {
 
           <section className="document-top">
             <div>
-              <h2 className="document-title">Preventivo VALIDO 30 GIORNI</h2>
+              <h2 className="document-title">Preventivo VALIDO {quotation.validitaGiorni} GIORNI</h2>
               <div className="meta-grid">
                 <div className="meta-cell">
                   <span className="meta-label">N.Preventivo</span>
@@ -496,7 +496,7 @@ export default function QuotationPrintPage() {
                 </div>
                 <div className="meta-cell">
                   <span className="meta-label">Consegna prevista</span>
-                  <span className="meta-value meta-value-small">{formatDate(quotation.dataPreventivo)}</span>
+                  <span className="meta-value meta-value-small">{quotation.dataConsegnaPrevista ? formatDate(quotation.dataConsegnaPrevista) : "-"}</span>
                 </div>
                 <div className="meta-cell">
                   <span className="meta-label">Telefono</span>
@@ -556,11 +556,12 @@ export default function QuotationPrintPage() {
             <tbody>
               {quotation.items.map((item, index) => {
                 const rowPrice = discountedPrice(item);
+                const noteContinuationLines = index === 0 && quotation.note ? splitLines(quotation.note).slice(1) : [];
                 return (
                   <tr key={`${item.codice}-${index}`}>
                     <td className="code-cell">{item.codice}</td>
                     <td className="description-lines">
-                      {index === 0 && quotation.note ? `${splitLines(quotation.note).slice(1).join("\n")}\n` : ""}
+                      {noteContinuationLines.length > 0 ? `${noteContinuationLines.join("\n")}\n` : ""}
                       {item.descrizione}
                     </td>
                     <td>{item.um}</td>

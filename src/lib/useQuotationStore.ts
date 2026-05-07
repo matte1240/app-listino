@@ -29,6 +29,8 @@ const defaultQuotationInfo = (): QuotationInfo => ({
   clienteId: null,
   cliente: "",
   dataPreventivo: today(),
+  dataConsegnaPrevista: today(),
+  validitaGiorni: 30,
   note: "",
 });
 
@@ -106,6 +108,17 @@ export const useQuotationStore = create<QuotationStore>()(
     }),
     {
       name: "listino-quotation-store",
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<QuotationStore> | undefined;
+        return {
+          ...currentState,
+          ...persisted,
+          quotationInfo: {
+            ...defaultQuotationInfo(),
+            ...persisted?.quotationInfo,
+          },
+        };
+      },
       partialize: (state) => ({
         quotationItems: state.quotationItems,
         quotationInfo: state.quotationInfo,

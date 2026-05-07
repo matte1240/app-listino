@@ -28,7 +28,7 @@ export default function LoginPage() {
       setError(err);
       setSubmitting(false);
     } else {
-      router.push("/");
+      router.push("/orders");
     }
   }
 

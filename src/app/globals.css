@@ -130,6 +130,10 @@
   }
 }
 
+.print-only {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4 landscape;
@@ -139,6 +143,10 @@
   nav,
   .no-print {
     display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
   }
 
   .listino-sheet {

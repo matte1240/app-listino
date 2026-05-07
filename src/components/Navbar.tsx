@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, FileSpreadsheet, Plus, ArrowLeft, ShoppingCart } from "lucide-react";
+import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, Plus, ArrowLeft, ShoppingCart } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -12,10 +12,9 @@ import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 
 const navItems = [
-  { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
-  { href: "/listino-pdf", label: "Listino PDF", icon: FileSpreadsheet, adminOnly: false },
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
   { href: "/quotations", label: "Preventivi", icon: FileText, adminOnly: false },
+  { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
   { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
@@ -88,7 +87,7 @@ export default function Navbar() {
 
             {/* Logo (outside wizard) */}
             {!isWizardMode && (
-              <Link href="/" className="flex items-center shrink-0">
+              <Link href="/orders" className="flex items-center shrink-0">
                 <Image
                   src="/IVI_white_marchio.png"
                   alt="IVI Colors"

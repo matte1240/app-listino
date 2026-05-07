@@ -43,6 +43,8 @@ export interface Quotation {
   clienteId: number | null;
   cliente: string;
   dataPreventivo: string;
+  dataConsegnaPrevista: string;
+  validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
   agente: string;
   items: QuotationItem[];
@@ -104,8 +106,13 @@ export interface QuotationInfo {
   clienteId: number | null;
   cliente: string;
   dataPreventivo: string;
+  dataConsegnaPrevista: string;
+  validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
 }
+
+export const VALIDITA_PREVENTIVO_GIORNI = [7, 15, 30] as const;
+export type ValiditaPreventivoGiorni = typeof VALIDITA_PREVENTIVO_GIORNI[number];
 
 export const MAGAZZINI = ["Pordenone", "Udine", "Fossalta di Portogruaro", "Trieste"] as const;
 export type Magazzino = typeof MAGAZZINI[number];

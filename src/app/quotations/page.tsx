@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, FileText, Loader2, Package, Pencil, Plus, Printer, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Clock, FileText, Loader2, Package, Pencil, Plus, Printer, Search, ShoppingCart, Trash2, Truck, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -151,6 +151,16 @@ export default function QuotationsPage() {
                         <Package className="h-3 w-3" />
                         {quotation.items.length} art. - {totalQty} pz
                       </span>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Valido {quotation.validitaGiorni} gg
+                      </span>
+                      {quotation.dataConsegnaPrevista && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Truck className="h-3 w-3" />
+                          Consegna {formatDate(quotation.dataConsegnaPrevista)}
+                        </span>
+                      )}
                       <span className="text-xs font-semibold text-foreground">{formatCurrency(quotationTotal(quotation))}</span>
                     </div>
                   </div>
@@ -201,6 +211,9 @@ export default function QuotationsPage() {
                       <div className="px-4 py-3 border-t border-border flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
                         <Button variant="ghost" size="sm" onClick={() => router.push(`/quotations/${quotation.id}`)} className="text-xs w-full justify-center sm:w-auto">
                           <FileText className="h-3.5 w-3.5 mr-1.5" /> Dettaglio
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
+                          <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Ordine
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => router.push(`/quotations/${quotation.id}/print`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
                           <Printer className="h-3.5 w-3.5 mr-1.5" /> PDF

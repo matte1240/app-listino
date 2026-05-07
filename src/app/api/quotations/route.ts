@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { createQuotation, listQuotations } from "@/lib/quotations";
-import type { QuotationItem } from "@/types";
+import type { QuotationItem, ValiditaPreventivoGiorni } from "@/types";
 
 async function getAuthPayload(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -48,6 +48,15 @@ async function resolveCustomer(db: ReturnType<typeof getDb>, clienteId: unknown,
   return { clienteId: selectedCustomer.id, cliente: selectedCustomer.ragione_sociale };
 }
 
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeValiditaGiorni(value: unknown): ValiditaPreventivoGiorni {
+  const normalized = Number(value);
+  return normalized === 7 || normalized === 15 || normalized === 30 ? normalized : 30;
+}
+
 export async function GET(req: NextRequest) {
   const payload = await getAuthPayload(req);
   if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
@@ -72,7 +81,9 @@ export async function POST(req: NextRequest) {
   if (!customer) return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
 
   const items = normalizeItems(body.items);
-  const dataPreventivo = String(body.dataPreventivo ?? new Date().toISOString().slice(0, 10)).trim();
+  const dataPreventivo = today();
+  const dataConsegnaPrevista = String(body.dataConsegnaPrevista ?? "").trim() || today();
+  const validitaGiorni = normalizeValiditaGiorni(body.validitaGiorni);
 
   if (!customer.cliente || !dataPreventivo || items.length === 0) {
     return NextResponse.json({ error: "Dati preventivo incompleti" }, { status: 400 });
@@ -83,6 +94,8 @@ export async function POST(req: NextRequest) {
       cliente: customer.cliente,
       clienteId: customer.clienteId,
       dataPreventivo,
+      dataConsegnaPrevista,
+      validitaGiorni,
       note: String(body.note ?? ""),
       agente: payload.username,
       items,

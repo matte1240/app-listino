@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, FileText, Package, Pencil, Printer, Trash2, User } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, FileText, Package, Pencil, Printer, ShoppingCart, Trash2, Truck, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -105,6 +105,10 @@ export default function QuotationDetailPage() {
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
+            <Button className="gap-2" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)}>
+              <ShoppingCart className="h-4 w-4" />
+              Trasforma in ordine
+            </Button>
             <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/print`)}>
               <Printer className="h-4 w-4" />
               PDF
@@ -120,7 +124,7 @@ export default function QuotationDetailPage() {
           </div>
         </div>
 
-        <section className="rounded-2xl border border-border bg-card p-4 grid gap-4 sm:grid-cols-3">
+        <section className="rounded-2xl border border-border bg-card p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="flex items-center gap-2 min-w-0">
             <User className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="min-w-0">
@@ -133,6 +137,20 @@ export default function QuotationDetailPage() {
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Data</p>
               <p className="font-semibold text-sm">{formatDate(quotation.dataPreventivo)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <Truck className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Consegna</p>
+              <p className="font-semibold text-sm">{quotation.dataConsegnaPrevista ? formatDate(quotation.dataConsegnaPrevista) : "-"}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Validità</p>
+              <p className="font-semibold text-sm">{quotation.validitaGiorni} giorni</p>
             </div>
           </div>
           <div className="flex items-center gap-2 min-w-0">

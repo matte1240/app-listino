@@ -7,12 +7,14 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock,
   FileText,
   Loader2,
   MessageSquare,
   Package,
   Save,
   ShoppingCart,
+  Truck,
   User,
   X,
 } from "lucide-react";
@@ -25,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import MaterialList from "@/components/MaterialList";
 import SearchBar from "@/components/SearchBar";
 import { useQuotationStore } from "@/lib/useQuotationStore";
-import type { AnagraficaSearchItem, Quotation, QuotationItem } from "@/types";
+import { VALIDITA_PREVENTIVO_GIORNI, type AnagraficaSearchItem, type Quotation, type QuotationItem } from "@/types";
 
 const STEP_LABELS = ["Cliente", "Materiali", "Dati", "Riepilogo"] as const;
 
@@ -39,6 +41,26 @@ function formatCurrency(value: number) {
 
 function discountedPrice(item: QuotationItem) {
   return item.prezzoListino * (1 - (item.sconto ?? 0) / 100);
+}
+
+function formatDate(iso: string) {
+  if (!iso) return "-";
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("it-IT", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function addDays(iso: string, days: number) {
+  if (!iso) return "";
+  const date = new Date(`${iso}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function QuotationWizard({ editingQuotation }: Props) {
@@ -76,6 +98,8 @@ export default function QuotationWizard({ editingQuotation }: Props) {
       clienteId: editingQuotation.clienteId,
       cliente: editingQuotation.cliente,
       dataPreventivo: editingQuotation.dataPreventivo,
+      dataConsegnaPrevista: editingQuotation.dataConsegnaPrevista || editingQuotation.dataPreventivo || today(),
+      validitaGiorni: editingQuotation.validitaGiorni ?? 30,
       note: editingQuotation.note,
     });
 
@@ -145,6 +169,9 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const canGoNextStep1 = quotationInfo.cliente.trim() !== "";
   const canGoNextStep2 = flaggedCount > 0;
   const canGoNextStep3 = quotationInfo.dataPreventivo.trim() !== "";
+  const validitaGiorni = quotationInfo.validitaGiorni ?? 30;
+  const dataConsegnaPrevista = quotationInfo.dataConsegnaPrevista ?? "";
+  const dataScadenza = addDays(quotationInfo.dataPreventivo, validitaGiorni);
 
   function handleSelectCustomer(customer: AnagraficaSearchItem) {
     setQuotationInfo({ clienteId: customer.id, cliente: customer.ragioneSociale });
@@ -470,18 +497,53 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dataPreventivo" className="text-sm font-medium flex items-center gap-1.5">
+            <Label className="text-sm font-medium flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              Data preventivo <span className="text-destructive">*</span>
+              Data preventivo
+            </Label>
+            <div className="h-11 rounded-xl border border-border bg-muted/40 px-3 flex items-center text-sm font-semibold text-foreground">
+              {formatDate(quotationInfo.dataPreventivo)}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="dataConsegnaPrevista" className="text-sm font-medium flex items-center gap-1.5">
+              <Truck className="h-3.5 w-3.5 text-muted-foreground" />
+              Data consegna prevista
             </Label>
             <Input
-              id="dataPreventivo"
+              id="dataConsegnaPrevista"
               type="date"
-              value={quotationInfo.dataPreventivo}
-              onChange={(event) => setQuotationInfo({ dataPreventivo: event.target.value })}
+              min={quotationInfo.dataPreventivo}
+              value={dataConsegnaPrevista}
+              onChange={(event) => setQuotationInfo({ dataConsegnaPrevista: event.target.value })}
               className="h-11 rounded-xl text-base bg-background"
               style={{ fontSize: "16px" }}
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-sm font-medium flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+              Validità preventivo
+            </Label>
+            <div className="grid grid-cols-3 gap-2">
+              {VALIDITA_PREVENTIVO_GIORNI.map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setQuotationInfo({ validitaGiorni: days })}
+                  className={`h-10 rounded-xl border text-sm font-semibold transition-colors ${
+                    validitaGiorni === days
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {days} giorni
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Scade il {formatDate(dataScadenza)}</p>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -535,8 +597,24 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Data</p>
-              <p className="font-semibold">{new Date(`${quotationInfo.dataPreventivo}T00:00:00`).toLocaleDateString("it-IT")}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Data preventivo</p>
+              <p className="font-semibold">{formatDate(quotationInfo.dataPreventivo)}</p>
+            </div>
+          </div>
+          {dataConsegnaPrevista && (
+            <div className="flex items-center gap-2">
+              <Truck className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Consegna prevista</p>
+                <p className="font-semibold">{formatDate(dataConsegnaPrevista)}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Validità</p>
+              <p className="font-semibold">{validitaGiorni} giorni · scade il {formatDate(dataScadenza)}</p>
             </div>
           </div>
           {quotationInfo.note && (

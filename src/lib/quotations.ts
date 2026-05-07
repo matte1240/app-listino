@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { normalizeUtcTimestamp } from "@/lib/datetime";
-import type { Quotation, QuotationItem } from "@/types";
+import type { Quotation, QuotationItem, ValiditaPreventivoGiorni } from "@/types";
 
 export interface DbQuotation {
   id: number;
@@ -8,6 +8,8 @@ export interface DbQuotation {
   cliente: string;
   cliente_id: number | null;
   data_preventivo: string;
+  data_consegna_prevista: string | null;
+  validita_giorni: number | null;
   note: string;
   agente: string;
   items: string;
@@ -19,6 +21,8 @@ export interface QuotationWriteData {
   cliente: string;
   clienteId: number | null;
   dataPreventivo: string;
+  dataConsegnaPrevista: string;
+  validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
   agente: string;
   items: QuotationItem[];
@@ -33,6 +37,10 @@ function parseQuotationItems(rawItems: string): QuotationItem[] {
   }
 }
 
+function normalizeValiditaGiorni(value: number | null | undefined): ValiditaPreventivoGiorni {
+  return value === 7 || value === 15 || value === 30 ? value : 30;
+}
+
 export function dbQuotationToQuotation(row: DbQuotation): Quotation {
   return {
     id: row.id,
@@ -40,6 +48,8 @@ export function dbQuotationToQuotation(row: DbQuotation): Quotation {
     clienteId: row.cliente_id ?? null,
     cliente: row.cliente,
     dataPreventivo: row.data_preventivo,
+    dataConsegnaPrevista: row.data_consegna_prevista ?? "",
+    validitaGiorni: normalizeValiditaGiorni(row.validita_giorni),
     note: row.note,
     agente: row.agente,
     items: parseQuotationItems(row.items),
@@ -81,14 +91,16 @@ export function createQuotation(db: Database.Database, data: QuotationWriteData)
   const quotationNumber = nextQuotationNumber(db, data.dataPreventivo);
   const result = db
     .prepare(
-      `INSERT INTO quotations (numero, cliente, cliente_id, data_preventivo, note, agente, items)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO quotations (numero, cliente, cliente_id, data_preventivo, data_consegna_prevista, validita_giorni, note, agente, items)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       quotationNumber,
       data.cliente,
       data.clienteId,
       data.dataPreventivo,
+      data.dataConsegnaPrevista,
+      data.validitaGiorni,
       data.note,
       data.agente,
       JSON.stringify(data.items)
@@ -100,13 +112,12 @@ export function createQuotation(db: Database.Database, data: QuotationWriteData)
 }
 
 export function updateQuotation(db: Database.Database, id: number, data: Omit<QuotationWriteData, "agente">): Quotation | null {
-  const result = db
-    .prepare(
-      `UPDATE quotations
-       SET cliente = ?, cliente_id = ?, data_preventivo = ?, note = ?, items = ?, updated_at = datetime('now')
-       WHERE id = ?`
-    )
-    .run(data.cliente, data.clienteId, data.dataPreventivo, data.note, JSON.stringify(data.items), id);
+  const stmt = db.prepare(
+    `UPDATE quotations
+     SET cliente = ?, cliente_id = ?, data_preventivo = ?, data_consegna_prevista = ?, validita_giorni = ?, note = ?, items = ?, updated_at = datetime('now')
+     WHERE id = ?`
+  );
+  const result = stmt.run(data.cliente, data.clienteId, data.dataPreventivo, data.dataConsegnaPrevista, data.validitaGiorni, data.note, JSON.stringify(data.items), id);
 
   if (result.changes === 0) return null;
   return getQuotation(db, id);

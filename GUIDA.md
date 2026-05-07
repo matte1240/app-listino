@@ -244,12 +244,11 @@ Ogni volta che invii o modifichi un ordine, parte una mail. Vediamo a chi arriva
 
 ## 10. Listino in PDF
 
-Il menu **Listino PDF** (icona stampante) apre una versione del listino pensata per la stampa.
+Nella pagina **Listino** usa il pulsante **Esporta PDF** per aprire una versione del listino pensata per la stampa.
 
 - Tabella desktop / cards mobile con: codice, descrizione (AI se disponibile), prezzo listino, prezzo scontato 8%, prezzo scontato 15%.
 - Articoli obsoleti: barrati.
-- Pulsante **Esporta PDF** (in alto): apre il dialog di stampa del browser. Scegli "Salva come PDF" per ottenere il file.
-- Pulsante **Aggiorna**: ricarica il listino dal server.
+- Pulsante **Esporta PDF** (in alto nella pagina Listino): apre il dialog di stampa del browser. Scegli "Salva come PDF" per ottenere il file.
 
 > Se hai una stampante puoi stampare direttamente; il layout è ottimizzato per A4.
 
