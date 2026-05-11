@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search, Truck, CheckCircle, XCircle, Flag, Undo2 } from "lucide-react";
+import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search, Truck, CheckCircle, XCircle, Flag, Undo2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
@@ -174,7 +174,13 @@ export default function OrdersPage() {
   return (
     <div className="min-h-dvh bg-background">
       <main className="max-w-2xl mx-auto px-4 pt-5 pb-6 flex flex-col gap-3">
-        <h1 className="font-bold text-lg">Cronologia Ordini</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-bold text-lg">Cronologia Ordini</h1>
+          <Button size="sm" className="gap-1.5" onClick={() => router.push("/orders/new")}>
+            <Plus className="h-4 w-4" />
+            Nuovo ordine
+          </Button>
+        </div>
           {/* Search Box */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />

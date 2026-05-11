@@ -148,20 +148,6 @@ export default function Navbar() {
 
           {/* Right section: tools + badge */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-
-
-            {/* New order button (outside wizard) */}
-            {!isWizardMode && (
-              <Button
-                size="sm"
-                className="gap-1.5 h-8 rounded-xl font-semibold bg-white text-primary hover:bg-white/90"
-                onClick={() => router.push(pathname.startsWith("/quotations") ? "/quotations/new" : "/orders/new")}
-              >
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">{pathname.startsWith("/quotations") ? "Crea preventivo" : "Nuovo ordine"}</span>
-              </Button>
-            )}
-
             {/* Wizard: exit button */}
             {isWizardMode && (
               <>

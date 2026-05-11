@@ -31,6 +31,17 @@ function formatNumber(n: number): string {
   return fixed.replace(/\.?0+$/, "") || "0";
 }
 
+const METODO_WAREHOUSE_NUMBERS: Record<string, string> = {
+  Pordenone: "0",
+  "Fossalta di Portogruaro": "1",
+  Udine: "2",
+  Trieste: "3",
+};
+
+function getMetodoWarehouseNumber(magazzino: string): string {
+  return METODO_WAREHOUSE_NUMBERS[magazzino] ?? "0";
+}
+
 export interface BuildMetodoOrderXmlInput {
   order: Order;
   codiceCliente: string;
@@ -42,6 +53,7 @@ export function buildMetodoOrderXml({ order, codiceCliente }: BuildMetodoOrderXm
   lines.push("<dati>");
   lines.push("  <testa>");
   lines.push(`    <numana>${escapeXmlText(codiceCliente)}</numana>`);
+  lines.push(`    <nummag>${getMetodoWarehouseNumber(order.magazzino)}</nummag>`);
 
   const dataDoc = formatDateItalian(order.createdAt);
   if (dataDoc) lines.push(`    <data>${dataDoc}</data>`);

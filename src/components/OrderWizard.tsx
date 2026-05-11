@@ -70,7 +70,6 @@ export default function OrderWizard({ editingOrder }: Props) {
   const [recentDestinationsLoading, setRecentDestinationsLoading] = useState(false);
   const [selectedRecentDestination, setSelectedRecentDestination] = useState("");
   const [openArticleRequest, setOpenArticleRequest] = useState<{ codice: string; requestId: number } | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const openArticleRequestIdRef = useRef(0);
 
   const isEditing = !!editingOrder;
@@ -201,16 +200,6 @@ export default function OrderWizard({ editingOrder }: Props) {
 
   const handleArticleConfirmed = useCallback(() => {
     setSearchQuery("");
-
-    const focusSearch = () => {
-      const input = searchInputRef.current;
-      if (!input) return;
-      input.focus({ preventScroll: true });
-    };
-
-    focusSearch();
-    window.requestAnimationFrame(focusSearch);
-    window.setTimeout(focusSearch, 120);
   }, [setSearchQuery]);
 
   useEffect(() => {
@@ -582,7 +571,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         <div className="sticky top-14 z-30 bg-background/80 backdrop-blur-md border-b border-border">
           <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 sm:gap-3">
             <div className="flex-1">
-              <SearchBar ref={searchInputRef} autoFocus />
+              <SearchBar autoFocus />
             </div>
           </div>
         </div>
