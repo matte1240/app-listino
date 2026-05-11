@@ -9,14 +9,14 @@ import { Toaster } from "sonner";
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Listino Materiali",
-  description: "Consulta e ordina materiali dal listino aziendale",
+  title: "Ordini Ivicolors",
+  description: "Gestione ordini e consultazione listino Ivicolors",
   manifest: "/manifest.webmanifest",
-  applicationName: "Listino Materiali",
+  applicationName: "Ordini Ivicolors",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black",
-    title: "Listino",
+    title: "Ordini Ivicolors",
   },
   formatDetection: {
     telephone: false,

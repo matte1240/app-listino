@@ -3,6 +3,8 @@ import type { Order, OrderHistoryItem } from "@/types";
 import { getDb } from "@/lib/db";
 import { buildMetodoOrderXmlForOrder } from "@/lib/metodo-xml";
 
+const APP_NAME = "Ordini Ivicolors";
+
 type MailAttachment = {
   filename: string;
   content: string;
@@ -425,7 +427,7 @@ function buildOrderHtml(
     </tr>`
     }
     <tr>
-      <td style="padding-top:12px;font-size:12px;color:#444444;">Email generata automaticamente da App Listino.</td>
+      <td style="padding-top:12px;font-size:12px;color:#444444;">Email generata automaticamente da ${APP_NAME}.</td>
     </tr>
   </table>
 </body>
@@ -468,6 +470,7 @@ function buildOrderText(
 
   if (mode === "cancelled") {
     lines.push("", "Questo ordine e stato cancellato.");
+    lines.push("", `Email generata automaticamente da ${APP_NAME}.`);
     return lines.join("\n");
   }
 
@@ -500,6 +503,7 @@ function buildOrderText(
     }
   }
   lines.push(`Totale pezzi (attuale): ${order.items.reduce((sum, item) => sum + item.qty, 0)}`);
+  lines.push("", `Email generata automaticamente da ${APP_NAME}.`);
 
   return lines.join("\n");
 }
@@ -512,7 +516,7 @@ export async function sendOrderEmail(order: Order, agenteEmail?: string): Promis
   }
 
   await getTransporter().sendMail({
-    from: `"App Listino" <${process.env.GMAIL_USER}>`,
+    from: `"${APP_NAME}" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to: branch.to,
     cc: buildCcValue(branch.cc, agenteEmail),
@@ -537,7 +541,7 @@ export async function sendOrderUpdatedEmail(
   const diff = computeOrderDiff(previous, order);
 
   await getTransporter().sendMail({
-    from: `"App Listino" <${process.env.GMAIL_USER}>`,
+    from: `"${APP_NAME}" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to: branch.to,
     cc: buildCcValue(branch.cc, agenteEmail),
@@ -556,7 +560,7 @@ export async function sendOrderCancelledEmail(order: Order, agenteEmail?: string
   }
 
   await getTransporter().sendMail({
-    from: `"App Listino" <${process.env.GMAIL_USER}>`,
+    from: `"${APP_NAME}" <${process.env.GMAIL_USER}>`,
     replyTo: agenteEmail || undefined,
     to: branch.to,
     cc: buildCcValue(branch.cc, agenteEmail),

@@ -1,4 +1,4 @@
-const CACHE_NAME = "listino-materiali-v4";
+const CACHE_NAME = "ordini-ivicolors-v1";
 const APP_SHELL = [
   "/",
   "/login",

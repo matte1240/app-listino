@@ -1,4 +1,4 @@
-# Guida all'uso di App Listino
+# Guida all'uso di Ordini Ivicolors
 
 Manuale d'uso passo-passo per agenti commerciali e amministratori. Questa guida copre tutto quello che serve sapere per usare l'app: dal primo accesso alla creazione di un ordine, dalla gestione delle bozze fino alle funzioni amministrative.
 
@@ -8,7 +8,7 @@ Manuale d'uso passo-passo per agenti commerciali e amministratori. Questa guida 
 
 ## Indice
 
-1. [Cos'è App Listino e come accedere](#1-cosè-app-listino-e-come-accedere)
+1. [Cos'è Ordini Ivicolors e come accedere](#1-cosè-ordini-ivicolors-e-come-accedere)
 2. [Installare l'app sul telefono (PWA)](#2-installare-lapp-sul-telefono-pwa)
 3. [Il listino materiali](#3-il-listino-materiali)
 4. [Creare un ordine](#4-creare-un-ordine)
@@ -23,9 +23,9 @@ Manuale d'uso passo-passo per agenti commerciali e amministratori. Questa guida 
 
 ---
 
-## 1. Cos'è App Listino e come accedere
+## 1. Cos'è Ordini Ivicolors e come accedere
 
-App Listino è lo strumento che usi per:
+Ordini Ivicolors è lo strumento che usi per:
 
 - consultare il **listino materiali** sempre aggiornato,
 - creare **ordini** per i tuoi clienti,
@@ -46,7 +46,7 @@ Solo l'amministratore può cambiare la tua password (vedi sezione 11.7). Se l'ha
 
 ## 2. Installare l'app sul telefono (PWA)
 
-App Listino è una **PWA**: la puoi installare sulla home del telefono e usarla come un'app nativa. Conviene farlo subito, prima di iniziare a usarla quotidianamente.
+Ordini Ivicolors è una **PWA**: la puoi installare sulla home del telefono e usarla come un'app nativa. Conviene farlo subito, prima di iniziare a usarla quotidianamente.
 
 ### Su Android (Chrome / Edge)
 

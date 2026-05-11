@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Listino Materiali",
-    short_name: "Listino",
-    description: "Consulta e ordina materiali dal listino aziendale",
+    name: "Ordini Ivicolors",
+    short_name: "Ordini",
+    description: "Gestione ordini e consultazione listino Ivicolors",
     start_url: "/",
     scope: "/",
     display: "standalone",

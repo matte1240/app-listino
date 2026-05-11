@@ -1,6 +1,6 @@
-# App Listino
+# Ordini Ivicolors
 
-**Applicazione web per la consultazione del listino materiali, creazione ordini e flusso commerciale.**
+**Applicazione web per la consultazione del listino materiali, creazione ordini e flusso commerciale Ivicolors.**
 
 Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e **shadcn/ui**. Ottimizzata per tablet e desktop, con supporto **PWA** per l'uso offline.
 
