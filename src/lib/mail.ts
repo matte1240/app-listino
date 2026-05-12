@@ -44,6 +44,13 @@ function getBranchEmail(magazzino: string): { to: string; cc: string } {
 
 let _transporter: nodemailer.Transporter | null = null;
 
+function getMailFromValue(): { name: string; address: string } {
+  return {
+    name: process.env.GMAIL_FROM_NAME?.trim() || APP_NAME,
+    address: process.env.GMAIL_FROM_ALIAS?.trim() || process.env.GMAIL_USER?.trim() || "",
+  };
+}
+
 function getTransporter(): nodemailer.Transporter {
   if (!_transporter) {
     _transporter = nodemailer.createTransport({
@@ -516,7 +523,7 @@ export async function sendOrderEmail(order: Order, agenteEmail?: string): Promis
   }
 
   await getTransporter().sendMail({
-    from: `"${APP_NAME}" <${process.env.GMAIL_USER}>`,
+    from: getMailFromValue(),
     replyTo: agenteEmail || undefined,
     to: branch.to,
     cc: buildCcValue(branch.cc, agenteEmail),
@@ -541,7 +548,7 @@ export async function sendOrderUpdatedEmail(
   const diff = computeOrderDiff(previous, order);
 
   await getTransporter().sendMail({
-    from: `"${APP_NAME}" <${process.env.GMAIL_USER}>`,
+    from: getMailFromValue(),
     replyTo: agenteEmail || undefined,
     to: branch.to,
     cc: buildCcValue(branch.cc, agenteEmail),
@@ -560,7 +567,7 @@ export async function sendOrderCancelledEmail(order: Order, agenteEmail?: string
   }
 
   await getTransporter().sendMail({
-    from: `"${APP_NAME}" <${process.env.GMAIL_USER}>`,
+    from: getMailFromValue(),
     replyTo: agenteEmail || undefined,
     to: branch.to,
     cc: buildCcValue(branch.cc, agenteEmail),

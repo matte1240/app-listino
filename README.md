@@ -71,7 +71,7 @@ Tutte le chiavi sono documentate in [`.env.example`](.env.example). Sintesi:
 | Categoria | Variabili | Obbligatoria? |
 |---|---|---|
 | Sicurezza | `JWT_SECRET`, `COOKIE_SECURE` | **Sì** in produzione |
-| Email | `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ORDER_EMAIL_TO` | Opzionale (senza, l'invio mail è disabilitato) |
+| Email | `GMAIL_USER`, `GMAIL_FROM_ALIAS`, `GMAIL_FROM_NAME`, `GMAIL_APP_PASSWORD`, `ORDER_EMAIL_TO` | Opzionale (senza credenziali Gmail, l'invio mail è disabilitato) |
 | Google Places | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Opzionale (autocomplete indirizzi) |
 | OpenAI | `OPENAI_API_KEY`, `AI_MODEL` | Opzionale (AI enrichment descrizioni) |
 | Backup S3 | `DB_BACKUP_S3_*`, `DB_BACKUP_AUTO_*` | Opzionale (backup remoti) |
@@ -144,6 +144,7 @@ src/
 - **"Failed to load materials"** — il file `data/listino.db` non esiste o non è scrivibile. Riavvia: la DDL viene applicata in idempotenza.
 - **Google Maps non funziona** — chiave mancante o senza Places API abilitata in Google Cloud Console.
 - **Email non inviate** — `GMAIL_USER` / `GMAIL_APP_PASSWORD` mancanti o invalidi; controlla i log server (`[mail] Invio email disabilitato: ...`).
+- **Mittente Gmail non corretto** — `GMAIL_FROM_ALIAS` deve essere un alias già configurato nell'account `GMAIL_USER` in Gmail → Impostazioni → Account → "Invia messaggio come". `GMAIL_FROM_NAME` controlla solo il nome visibile del mittente.
 - **XML Metodo non allegato** — l'ordine non ha cliente collegato a un'anagrafica con `codice`. Log: `[mail] XML Metodo non allegato per ordine #N: no_cliente | no_codice_anagrafica`.
 - **Import anagrafiche fallisce con UNIQUE constraint** — risolto: la chiave applicativa è `codice` (normalizzato). Se vedi ancora l'errore, verifica che il file non abbia codici duplicati.
 - **Backup S3 fallisce** — verifica `DB_BACKUP_S3_ENDPOINT`, credenziali, `DB_BACKUP_S3_FORCE_PATH_STYLE=true` per Hetzner.

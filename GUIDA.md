@@ -219,6 +219,7 @@ Ogni volta che invii o modifichi un ordine, parte una mail. Vediamo a chi arriva
 - **A**: la casella email del **magazzino** scelto nello step 3 (configurata dall'admin, vedi sezione 11.4).
 - **CC**: la tua email (quella registrata sul tuo account agente) + eventuali indirizzi in CC configurati per il magazzino.
 - **Reply-to**: la tua email, così se il magazzino risponde la risposta torna a te.
+- **Da**: il mittente configurato dall'admin nelle variabili `.env` (`GMAIL_FROM_NAME` + `GMAIL_FROM_ALIAS`).
 
 ### Tipi di mail
 
@@ -297,6 +298,8 @@ Per ogni magazzino imposti:
 - **Email in CC** (uno o più indirizzi separati da virgola).
 
 Le mail di ordine usano queste impostazioni in base al magazzino scelto. Se per un magazzino non hai configurato il "To", il sistema usa il fallback `ORDER_EMAIL_TO` da `.env`; se manca anche quello, l'email **non viene inviata** (con warning nei log).
+
+Il mittente visibile non si configura qui: usa `GMAIL_FROM_NAME` per il nome (es. `Ordini App`) e `GMAIL_FROM_ALIAS` per l'indirizzo alias già abilitato in Gmail. L'account `GMAIL_USER` resta quello usato per autenticarsi.
 
 ### 11.5 Backup database
 
