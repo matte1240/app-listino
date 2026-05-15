@@ -8,7 +8,7 @@ import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { useAuth } from "@/lib/auth-context";
 import type { Material } from "@/types";
-import { cn } from "@/lib/utils";
+import { cn, parseLocalizedNumber } from "@/lib/utils";
 
 interface Props {
   material: Material;
@@ -78,6 +78,7 @@ export default function MaterialCard({
 
   const [expanded, setExpanded] = useState(false);
   const [draftQty, setDraftQty] = useState(0);
+  const [draftQtyInput, setDraftQtyInput] = useState("");
   const [draftSconto, setDraftSconto] = useState<0 | 8 | 15>(0);
   const [editorMode, setEditorMode] = useState<"add" | "edit">("add");
   const qtyInputRef = useRef<HTMLInputElement>(null);
@@ -94,9 +95,16 @@ export default function MaterialCard({
 
   const resetDraft = () => {
     setDraftQty(0);
+    setDraftQtyInput("");
     setDraftSconto(0);
     setEditorMode("add");
     setExpanded(false);
+  };
+
+  const setDraftQtyValue = (qty: number) => {
+    const nextQty = Math.max(0, qty);
+    setDraftQty(nextQty);
+    setDraftQtyInput(nextQty === 0 ? "" : String(nextQty));
   };
 
   const openEditor = ({ resetValues = true, mode = "add" }: { resetValues?: boolean; mode?: "add" | "edit" } = {}) => {
@@ -104,10 +112,10 @@ export default function MaterialCard({
     setEditorMode(mode);
     if (resetValues) {
       if (mode === "edit") {
-        setDraftQty(cartQty);
+        setDraftQtyValue(cartQty);
         setDraftSconto(cartSconto);
       } else {
-        setDraftQty(0);
+        setDraftQtyValue(0);
         setDraftSconto(isInCart ? cartSconto : 0);
       }
     }
@@ -115,8 +123,9 @@ export default function MaterialCard({
   };
 
   const handleQtyChange = (value: string) => {
-    const parsed = parseInt(value, 10);
-    setDraftQty(isNaN(parsed) ? 0 : Math.max(0, parsed));
+    setDraftQtyInput(value);
+    const parsed = parseLocalizedNumber(value);
+    setDraftQty(Math.max(0, parsed));
   };
 
   const handleConfirm = () => {
@@ -315,7 +324,7 @@ export default function MaterialCard({
                 <button
                   onClick={() => {
                     dismissKeyboard();
-                    setDraftQty((prev) => Math.max(0, prev - 1));
+                    setDraftQtyValue(draftQty - 1);
                   }}
                   className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
                   aria-label="Diminuisci quantità"
@@ -324,24 +333,25 @@ export default function MaterialCard({
                 </button>
                 <input
                   ref={qtyInputRef}
-                  type="number"
-                  min={0}
-                  value={draftQty === 0 ? "" : draftQty}
+                  type="text"
+                  value={draftQtyInput}
                   onChange={(e) => handleQtyChange(e.target.value)}
                   onBlur={(e) => {
                     if (e.target.value === "" || e.target.value === "0") {
-                      setDraftQty(0);
+                      setDraftQtyValue(0);
+                      return;
                     }
+                    setDraftQtyValue(parseLocalizedNumber(e.target.value));
                   }}
                   placeholder="0"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   className="w-14 h-10 text-center font-bold bg-background border-x border-primary/30 focus:outline-none focus:bg-primary/5"
                   style={{ fontSize: "16px" }}
                 />
                 <button
                   onClick={() => {
                     dismissKeyboard();
-                    setDraftQty((prev) => prev + 1);
+                    setDraftQtyValue(draftQty + 1);
                   }}
                   className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
                   aria-label="Aumenta quantità"

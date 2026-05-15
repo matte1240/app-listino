@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { parseLocalizedNumber } from "@/lib/utils";
 import type { Material } from "@/types";
 
 type MaterialField =
@@ -119,32 +120,6 @@ function normalizeIdentifier(value: string): string {
     .trim();
 }
 
-function parseNumber(value: unknown): number {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  const text = String(value ?? "").trim();
-  if (!text) return 0;
-
-  const compact = text.replace(/\s+/g, "");
-  const cleaned = compact.replace(/[^0-9,.-]/g, "");
-  if (!cleaned) return 0;
-
-  let normalized = cleaned;
-  if (cleaned.includes(",") && cleaned.includes(".")) {
-    normalized =
-      cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".")
-        ? cleaned.replace(/\./g, "").replace(",", ".")
-        : cleaned.replace(/,/g, "");
-  } else if (cleaned.includes(",")) {
-    normalized = cleaned.replace(",", ".");
-  }
-
-  const parsed = Number.parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function parseObsolete(value: unknown): boolean {
   const normalized = normalizeHeader(String(value ?? ""));
   if (!normalized) return false;
@@ -262,10 +237,10 @@ export function parseExcel(buffer: ArrayBuffer): Material[] {
       categoria: readTextCell(row, indexes.categoria),
       raggr: readTextCell(row, indexes.raggr),
       um: readTextCell(row, indexes.um),
-      prezzoListino: parseNumber(readRawCell(row, indexes.prezzoListino)),
-      prezzoRiservato: parseNumber(readRawCell(row, indexes.prezzoRiservato)),
-      prezzoPublico: parseNumber(readRawCell(row, indexes.prezzoPublico)),
-      pzConfezione: parseNumber(readRawCell(row, indexes.pzConfezione)),
+      prezzoListino: parseLocalizedNumber(readRawCell(row, indexes.prezzoListino)),
+      prezzoRiservato: parseLocalizedNumber(readRawCell(row, indexes.prezzoRiservato)),
+      prezzoPublico: parseLocalizedNumber(readRawCell(row, indexes.prezzoPublico)),
+      pzConfezione: parseLocalizedNumber(readRawCell(row, indexes.pzConfezione)),
       nota: readTextCell(row, indexes.nota),
       obsoleto: parseObsolete(readRawCell(row, indexes.obsoleto)),
     });
