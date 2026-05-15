@@ -81,6 +81,10 @@ export default function OrderWizard({ editingOrder }: Props) {
   // On mount: if editing, populate store with order data
   useEffect(() => {
     if (!editingSource) return;
+    const initialNote = editingOrder?.draft?.note?.trim()
+      ? editingOrder.draft.note
+      : editingOrder?.note ?? editingSource.note;
+
     // Populate orderInfo
     setOrderInfo({
       quotationId: editingOrder?.quotationId ?? null,
@@ -89,7 +93,7 @@ export default function OrderWizard({ editingOrder }: Props) {
       magazzino: editingSource.magazzino as typeof orderInfo.magazzino,
       luogoConsegna: editingSource.luogoConsegna,
       dataConsegna: editingSource.dataConsegna,
-      note: editingSource.note,
+      note: initialNote,
     });
     // Populate orderItems from order
     for (const item of editingSource.items) {

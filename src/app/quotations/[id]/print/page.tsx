@@ -40,10 +40,6 @@ function quotationTotal(quotation: Quotation) {
   return quotation.items.reduce((sum, item) => sum + discountedPrice(item) * item.qty, 0);
 }
 
-function splitLines(value: string) {
-  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-}
-
 function displayDiscount(item: QuotationItem) {
   return item.sconto ? `${item.sconto}` : "*";
 }
@@ -54,20 +50,24 @@ function estimateWrappedLines(value: string, charsPerLine: number) {
   return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
 }
 
-function estimateItemRowHeightMm(item: QuotationItem, index: number, note: string) {
-  const noteLines = index === 0 && note ? splitLines(note).slice(1).length : 0;
-  const descriptionLines = estimateWrappedLines(item.descrizione, 46) + noteLines;
+function estimateItemRowHeightMm(item: QuotationItem) {
+  const descriptionLines = estimateWrappedLines(item.descrizione, 46);
   const codeLines = estimateWrappedLines(item.codice, 22);
   const visibleLines = Math.max(descriptionLines, codeLines, 1);
   return 3 + visibleLines * 4.1;
 }
 
+function estimateNotesRowHeightMm(note: string) {
+  if (!note.trim()) return 0;
+  return 4 + (1 + estimateWrappedLines(note, 115)) * 4.1;
+}
+
 function quotationFillerHeightMm(quotation: Quotation) {
   const rowsHeight = quotation.items.reduce(
-    (sum, item, index) => sum + estimateItemRowHeightMm(item, index, quotation.note),
+    (sum, item) => sum + estimateItemRowHeightMm(item),
     0
   );
-  return Math.max(MIN_FILLER_ROW_MM, TABLE_BODY_AVAILABLE_MM - rowsHeight);
+  return Math.max(MIN_FILLER_ROW_MM, TABLE_BODY_AVAILABLE_MM - rowsHeight - estimateNotesRowHeightMm(quotation.note));
 }
 
 export default function QuotationPrintPage() {
@@ -362,6 +362,23 @@ export default function QuotationPrintPage() {
           border-top: 0;
         }
 
+        .notes-row td {
+          padding: 1.3mm 1.2mm;
+          font-size: 9.2pt;
+          line-height: 1.22;
+        }
+
+        .notes-label {
+          display: block;
+          margin-bottom: 0.8mm;
+          font-weight: 800;
+        }
+
+        .notes-content {
+          margin: 0;
+          white-space: pre-wrap;
+        }
+
         .totals-row td {
           height: 11mm;
           padding: 0.9mm 1.1mm;
@@ -525,7 +542,7 @@ export default function QuotationPrintPage() {
                 <p className="customer-vat"><span>P.I.</span><span>{customer.partitaIva}</span></p>
               )}
               <p className="customer-ref">Alla C.A.</p>
-              <p className="customer-ref">Ns. Rif.: <span>{quotation.note ? splitLines(quotation.note)[0] : quotation.numero}</span></p>
+              <p className="customer-ref">Ns. Rif.: <span>{quotation.numero}</span></p>
               <p className="page-number">Pagina N. &nbsp;&nbsp;&nbsp;&nbsp; 1</p>
             </div>
           </section>
@@ -556,14 +573,10 @@ export default function QuotationPrintPage() {
             <tbody>
               {quotation.items.map((item, index) => {
                 const rowPrice = discountedPrice(item);
-                const noteContinuationLines = index === 0 && quotation.note ? splitLines(quotation.note).slice(1) : [];
                 return (
                   <tr key={`${item.codice}-${index}`}>
                     <td className="code-cell">{item.codice}</td>
-                    <td className="description-lines">
-                      {noteContinuationLines.length > 0 ? `${noteContinuationLines.join("\n")}\n` : ""}
-                      {item.descrizione}
-                    </td>
+                    <td className="description-lines">{item.descrizione}</td>
                     <td>{item.um}</td>
                     <td className="text-right">{item.qty % 1 === 0 ? item.qty : item.qty.toLocaleString("it-IT")}</td>
                     <td className="text-right">{formatUnitPrice(item.prezzoListino)}</td>
@@ -573,6 +586,14 @@ export default function QuotationPrintPage() {
                   </tr>
                 );
               })}
+              {quotation.note.trim() && (
+                <tr className="notes-row">
+                  <td colSpan={8}>
+                    <span className="notes-label">Note</span>
+                    <p className="notes-content">{quotation.note.trim()}</p>
+                  </td>
+                </tr>
+              )}
               <tr className="filler-row" aria-hidden="true" style={{ "--quotation-filler-height": `${fillerHeightMm}mm` } as CSSProperties}>
                 <td />
                 <td />
