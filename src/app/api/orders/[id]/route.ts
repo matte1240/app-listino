@@ -120,6 +120,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const existingStatus = resolveOrderStatus(existing.status);
+  if (existingStatus === "annullato") {
+    return NextResponse.json({ error: "L'ordine annullato non può essere modificato" }, { status: 409 });
+  }
   const existingParentOrderId = existing.parent_order_id ?? null;
   const isLinkedDraft = existingStatus === "bozza" && existingParentOrderId !== null;
   const isStandaloneDraft = existingStatus === "bozza" && existingParentOrderId === null;
@@ -173,7 +176,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     db.transaction(() => {
       db.prepare(
         `UPDATE orders
-         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL
          WHERE id = ?`
       ).run(
         resolvedCliente,
@@ -234,7 +237,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     db.transaction(() => {
       db.prepare(
         `UPDATE orders
-         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL
          WHERE id = ?`
       ).run(
         resolvedCliente,
@@ -318,6 +321,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   const order = dbOrderToOrder(existing);
+  const isDraft = order.status === "bozza";
   const shouldSendCancellationEmail = order.status !== "bozza" && order.parentOrderId === null;
 
   const txResult = db.transaction(() => {
@@ -325,11 +329,27 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const legacyLinkedDraftsDelete = db
       .prepare("DELETE FROM orders WHERE parent_order_id = ? AND status = 'bozza'")
       .run(orderId);
-    const orderDelete = db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
+
+    if (isDraft) {
+      const orderDelete = db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
+
+      return {
+        orderChanges: orderDelete.changes,
+        linkedDraftChanges: attachedDraftChanges + legacyLinkedDraftsDelete.changes,
+        cancelled: false,
+      };
+    }
+
+    const orderCancel = db.prepare(
+      `UPDATE orders
+       SET status = 'annullato', updated_at = datetime('now'), cancelled_at = datetime('now'), cancelled_by = ?
+       WHERE id = ?`
+    ).run(payload.username, orderId);
 
     return {
-      orderChanges: orderDelete.changes,
+      orderChanges: orderCancel.changes,
       linkedDraftChanges: attachedDraftChanges + legacyLinkedDraftsDelete.changes,
+      cancelled: true,
     };
   })();
 
@@ -338,12 +358,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   if (!shouldSendCancellationEmail) {
-    return NextResponse.json({ ok: true, deletedLinkedDrafts: txResult.linkedDraftChanges, cancellationEmailSent: false });
+    return NextResponse.json({ ok: true, cancelled: txResult.cancelled, deletedLinkedDrafts: txResult.linkedDraftChanges, cancellationEmailSent: false });
   }
 
   sendOrderCancelledEmail(order, payload.email).catch((err) =>
     console.error("[mail] Errore invio email cancellazione ordine:", err)
   );
 
-  return NextResponse.json({ ok: true, deletedLinkedDrafts: txResult.linkedDraftChanges, cancellationEmailSent: true });
+  return NextResponse.json({ ok: true, cancelled: txResult.cancelled, deletedLinkedDrafts: txResult.linkedDraftChanges, cancellationEmailSent: true });
 }

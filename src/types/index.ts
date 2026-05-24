@@ -91,6 +91,8 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   updatedAt?: string;
+  cancelledAt?: string | null;
+  cancelledBy?: string | null;
   hasDraft?: boolean;
   draftUpdatedAt?: string | null;
   draft?: OrderDraft | null;

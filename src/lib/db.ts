@@ -98,7 +98,10 @@ function createDb() {
       status TEXT NOT NULL DEFAULT 'confermato',
       parent_order_id INTEGER,
       quotation_id INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      cancelled_at TEXT,
+      cancelled_by TEXT
     )
   `);
 
@@ -115,6 +118,16 @@ function createDb() {
   }
   if (!orderCols.some((c) => c.name === "quotation_id")) {
     db.exec("ALTER TABLE orders ADD COLUMN quotation_id INTEGER");
+  }
+  if (!orderCols.some((c) => c.name === "updated_at")) {
+    db.exec("ALTER TABLE orders ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
+    db.exec("UPDATE orders SET updated_at = created_at WHERE updated_at = '' OR updated_at IS NULL");
+  }
+  if (!orderCols.some((c) => c.name === "cancelled_at")) {
+    db.exec("ALTER TABLE orders ADD COLUMN cancelled_at TEXT");
+  }
+  if (!orderCols.some((c) => c.name === "cancelled_by")) {
+    db.exec("ALTER TABLE orders ADD COLUMN cancelled_by TEXT");
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_quotation_id ON orders(quotation_id)");

@@ -17,6 +17,9 @@ export interface DbOrder {
   items: string;
   status: string;
   created_at: string;
+  updated_at: string;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
 }
 
 export interface DbOrderDraft {
@@ -91,6 +94,9 @@ export function dbOrderToOrder(
     items: JSON.parse(row.items) as OrderHistoryItem[],
     status: resolveOrderStatus(row.status),
     createdAt: normalizeUtcTimestamp(row.created_at),
+    updatedAt: normalizeUtcTimestamp(row.updated_at),
+    cancelledAt: row.cancelled_at ? normalizeUtcTimestamp(row.cancelled_at) : null,
+    cancelledBy: row.cancelled_by ?? null,
     hasDraft: !!draftRow,
     draftUpdatedAt: draftRow ? normalizeUtcTimestamp(draftRow.updated_at) : null,
     draft: options?.includeDraft && draftRow ? dbDraftToOrderDraft(draftRow) : null,

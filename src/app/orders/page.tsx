@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search, Truck, CheckCircle, XCircle, Flag, Undo2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 import { calculateOrderDiscountedTotal, formatOrderCurrency, getDiscountedUnitPrice } from "@/lib/order-totals";
 import type { Order, OrderStatus } from "@/types";
+
+type OrderTab = "attivi" | "annullati";
 
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
@@ -20,6 +22,7 @@ export default function OrdersPage() {
   const [submittingDraftId, setSubmittingDraftId] = useState<number | null>(null);
   const [discardingDraftId, setDiscardingDraftId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<OrderTab>("attivi");
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -55,9 +58,13 @@ export default function OrdersPage() {
     try {
       const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
       if (res.ok) {
-        setOrders((prev) => prev.filter((o) => o.id !== id));
+        const data = await res.json().catch(() => null);
         setDeleteConfirm(null);
         setExpanded(null);
+        if (data?.cancelled) {
+          setActiveTab("annullati");
+        }
+        await loadOrders();
       } else {
         alert("Errore nella cancellazione dell'ordine");
       }
@@ -155,14 +162,33 @@ export default function OrdersPage() {
     return `${order.id} ${order.parentOrderId ?? ""} ${order.cliente} ${order.luogoConsegna} ${order.agenteFullName || order.agente} ${order.agente}`.toLowerCase();
   }
 
-  function matchesSearch(order: Order): boolean {
-    if (!searchQuery.trim()) return true;
-    const searchText = orderSearchText(order);
-    const tokens = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
-    return tokens.every((token) => searchText.includes(token));
-  }
+  const searchTokens = useMemo(
+    () => searchQuery.toLowerCase().split(/\s+/).filter(Boolean),
+    [searchQuery]
+  );
 
-  const filteredOrders = orders.filter(matchesSearch);
+  const orderCounts = useMemo(() => ({
+    attivi: orders.filter((order) => order.status !== "annullato").length,
+    annullati: orders.filter((order) => order.status === "annullato").length,
+  }), [orders]);
+
+  const filteredOrders = useMemo(() => {
+    const statusFiltered = orders.filter((order) =>
+      activeTab === "annullati" ? order.status === "annullato" : order.status !== "annullato"
+    );
+
+    return statusFiltered
+      .filter((order) => {
+        if (searchTokens.length === 0) return true;
+        const searchText = orderSearchText(order);
+        return searchTokens.every((token) => searchText.includes(token));
+      })
+      .sort((left, right) => {
+        const leftDate = activeTab === "annullati" ? left.cancelledAt || left.updatedAt || left.createdAt : left.createdAt;
+        const rightDate = activeTab === "annullati" ? right.cancelledAt || right.updatedAt || right.createdAt : right.createdAt;
+        return new Date(rightDate).getTime() - new Date(leftDate).getTime();
+      });
+  }, [activeTab, orders, searchTokens]);
 
   if (authLoading || loading) {
     return (
@@ -202,6 +228,22 @@ export default function OrdersPage() {
               </button>
             )}
           </div>
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/40 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("attivi")}
+              className={`h-10 rounded-lg px-3 text-sm font-semibold transition-colors ${activeTab === "attivi" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Attivi <span className="ml-1 text-xs font-normal">{orderCounts.attivi}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("annullati")}
+              className={`h-10 rounded-lg px-3 text-sm font-semibold transition-colors ${activeTab === "annullati" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Annullati <span className="ml-1 text-xs font-normal">{orderCounts.annullati}</span>
+            </button>
+          </div>
           {filteredOrders.length === 0 && orders.length > 0 ? (
             <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
@@ -210,7 +252,11 @@ export default function OrdersPage() {
               <div>
                 <p className="font-semibold text-foreground">Nessun ordine trovato</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Prova a modificare i criteri di ricerca
+                  {searchQuery.trim()
+                    ? "Prova a modificare i criteri di ricerca"
+                    : activeTab === "annullati"
+                      ? "Gli ordini annullati appariranno qui"
+                      : "Gli ordini attivi appariranno qui"}
                 </p>
               </div>
             </div>
@@ -236,12 +282,13 @@ export default function OrdersPage() {
             const canSendDraft = isDraft || hasAttachedDraft;
             const isSendingThisDraft = submittingDraftId === order.id;
             const isDiscardingThisDraft = discardingDraftId === order.id;
-            const deleteTitle = isDraft ? "Conferma eliminazione bozza" : "Conferma cancellazione";
+            const isCancelled = order.status === "annullato";
+            const deleteTitle = isDraft ? "Conferma eliminazione bozza" : "Conferma annullamento ordine";
             const deleteMessage = isDraft
               ? `La bozza #${order.id} per ${order.cliente} verrà eliminata. Non sarà inviata alcuna email al magazzino.`
-              : `L'ordine #${order.id} per ${order.cliente} verrà eliminato e sarà inviata una email di cancellazione.${hasAttachedDraft ? " L'eventuale bozza di modifica collegata verrà eliminata automaticamente." : ""} Questa azione non è reversibile.`;
+              : `L'ordine #${order.id} per ${order.cliente} verrà annullato e resterà nello storico. Sarà inviata una email di cancellazione.${hasAttachedDraft ? " L'eventuale bozza di modifica collegata verrà eliminata automaticamente." : ""}`;
             const editActionLabel = hasAttachedDraft ? "Apri bozza" : isDraft ? "Modifica bozza" : "Modifica ordine";
-            const deleteActionLabel = isDraft ? "Elimina bozza" : "Elimina ordine";
+            const deleteActionLabel = isDraft ? "Elimina bozza" : "Annulla ordine";
             const showDeleteConfirm = deleteConfirm === order.id;
             return (
               <div
@@ -307,6 +354,23 @@ export default function OrdersPage() {
                         {order.note && (
                           <span><strong>Note:</strong> {order.note}</span>
                         )}
+                        {order.cancelledAt && (
+                          <span><strong>Annullato il:</strong> {formatDate(order.cancelledAt)}</span>
+                        )}
+                        {user?.role === "admin" && order.cancelledBy && (
+                          <span><strong>Annullato da:</strong> {order.cancelledBy}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {!order.luogoConsegna && !order.note && (order.cancelledAt || (user?.role === "admin" && order.cancelledBy)) && (
+                      <div className="px-4 py-3 bg-muted/30 flex flex-col gap-1 text-xs text-muted-foreground border-b border-border">
+                        {order.cancelledAt && (
+                          <span><strong>Annullato il:</strong> {formatDate(order.cancelledAt)}</span>
+                        )}
+                        {user?.role === "admin" && order.cancelledBy && (
+                          <span><strong>Annullato da:</strong> {order.cancelledBy}</span>
+                        )}
                       </div>
                     )}
 
@@ -366,9 +430,9 @@ export default function OrdersPage() {
                                 className="text-xs h-8 w-full justify-center sm:w-auto"
                               >
                                 {deleting ? (
-                                  <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Cancellazione…</>
+                                  <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Operazione in corso…</>
                                 ) : (
-                                  <><Trash2 className="h-3 w-3 mr-1.5" /> Sì, conferma eliminazione</>
+                                  <><Trash2 className="h-3 w-3 mr-1.5" /> {isDraft ? "Sì, elimina bozza" : "Sì, annulla ordine"}</>
                                 )}
                               </Button>
                               <Button
@@ -387,7 +451,7 @@ export default function OrdersPage() {
                     )}
 
                     {/* Actions */}
-                    {canEditOrder(order) && !showDeleteConfirm && (
+                    {canEditOrder(order) && !isCancelled && !showDeleteConfirm && (
                       <div className="px-4 py-3 border-t border-border flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
                         {hasAttachedDraft && !isDraft && (
                           <Button
