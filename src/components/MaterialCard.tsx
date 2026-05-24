@@ -27,7 +27,7 @@ export default function MaterialCard({
   openArticleRequest,
   onOpenArticleRequestHandled,
 }: Props) {
-  const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto } = material;
+  const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto, mqConfezione, pzBancale, mqBancale } = material;
   const orderItem = useOrderStore((s) => s.orderItems[codice]);
   const orderSetQty = useOrderStore((s) => s.setQty);
   const orderSetSconto = useOrderStore((s) => s.setSconto);
@@ -83,6 +83,23 @@ export default function MaterialCard({
   const [editorMode, setEditorMode] = useState<"add" | "edit">("add");
   const qtyInputRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const formatMetricValue = (value: number) => new Intl.NumberFormat("it-IT", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(value);
+
+  const materialMetrics = [
+    mqConfezione !== null && mqConfezione !== undefined
+      ? { label: "mq/conf.", value: formatMetricValue(mqConfezione) }
+      : null,
+    pzBancale !== null && pzBancale !== undefined
+      ? { label: "pz/bancale", value: formatMetricValue(pzBancale) }
+      : null,
+    mqBancale !== null && mqBancale !== undefined
+      ? { label: "mq/bancale", value: formatMetricValue(mqBancale) }
+      : null,
+  ].filter((metric): metric is { label: string; value: string } => metric !== null);
 
   const showQtyRow = expanded;
 
@@ -318,6 +335,20 @@ export default function MaterialCard({
         {/* Quantity + discount rows — shown when expanded or flagged, hidden in catalog mode */}
         {!isReadOnlyCatalog && showQtyRow && (
           <div className="mt-4 flex flex-col gap-3">
+            {materialMetrics.length > 0 && (
+              <div className="flex flex-wrap gap-2 pl-8">
+                {materialMetrics.map((metric) => (
+                  <div
+                    key={metric.label}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1 text-xs"
+                  >
+                    <span className="font-medium text-muted-foreground">{metric.label}</span>
+                    <span className="font-semibold text-foreground">{metric.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-3 pl-8">
               <span className="text-sm font-medium text-muted-foreground shrink-0">Qtà ordine:</span>
               <div className="flex items-center rounded-xl border border-primary/30 bg-background overflow-hidden shadow-sm">

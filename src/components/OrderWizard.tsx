@@ -19,6 +19,7 @@ import AddressAutocompleteInput, {
   type AddressAutocompleteInputHandle,
   type AddressData,
 } from "@/components/AddressAutocompleteInput";
+import { calculateOrderDiscountedTotal, formatOrderCurrency, getDiscountedUnitPrice } from "@/lib/order-totals";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI, type AnagraficaSearchItem, type OrderHistoryItem } from "@/types";
 import type { Order } from "@/types";
@@ -242,6 +243,9 @@ export default function OrderWizard({ editingOrder }: Props) {
       sconto: orderItems[m.codice]?.sconto ?? 0,
     }));
   }, [flaggedItems, orderItems]);
+
+  const summaryItems = buildOrderItems();
+  const totalImponibile = calculateOrderDiscountedTotal(summaryItems);
 
   const getRequestConfig = useCallback((status: "bozza" | "confermato") => {
     const items = buildOrderItems();
@@ -914,7 +918,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             {flaggedItems.map((m) => {
               const qty = orderItems[m.codice]?.qty ?? 0;
               const sconto = orderItems[m.codice]?.sconto ?? 0;
-              const prezzoScontato = sconto > 0 ? m.prezzoListino * (1 - sconto / 100) : null;
+              const prezzoScontato = getDiscountedUnitPrice({ prezzoListino: m.prezzoListino, sconto });
               return (
                 <div key={m.codice} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
                   <div className="flex-1 min-w-0">
@@ -927,7 +931,7 @@ export default function OrderWizard({ editingOrder }: Props) {
                     {sconto > 0 ? (
                       <span className="flex flex-wrap items-center gap-1 sm:justify-end">
                         <span className="line-through text-muted-foreground/50">€{m.prezzoListino.toFixed(3)}</span>
-                        <span className="font-semibold text-primary">€{prezzoScontato!.toFixed(3)}</span>
+                        <span className="font-semibold text-primary">€{prezzoScontato.toFixed(3)}</span>
                         <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{sconto}%</span>
                       </span>
                     ) : (
@@ -938,9 +942,15 @@ export default function OrderWizard({ editingOrder }: Props) {
               );
             })}
           </div>
-          <div className="px-4 py-2.5 border-t border-border bg-muted/30 flex justify-between text-sm">
-            <span className="text-muted-foreground">Totale pezzi</span>
-            <span className="font-bold">{totalPz} pz</span>
+          <div className="px-4 py-2.5 border-t border-border bg-muted/30 flex flex-col gap-1.5 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Totale pezzi</span>
+              <span className="font-bold">{totalPz} pz</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-semibold">Totale imponibile</span>
+              <span className="font-bold text-base">{formatOrderCurrency(totalImponibile)}</span>
+            </div>
           </div>
         </div>
 

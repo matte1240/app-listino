@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { userOwnsCustomerByRap } from "@/lib/rap";
 
 interface DestinationRow {
   luogo_consegna: string;
@@ -23,21 +24,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const db = getDb();
 
+  // Admin or agente whose Rap owns the customer sees all destinations; other agenti only see their own.
+  const seesAll = payload.role === "admin" || userOwnsCustomerByRap(db, payload.id, clienteId);
+
   const baseSql = `
     SELECT luogo_consegna
     FROM orders
     WHERE cliente_id = ?
       AND TRIM(luogo_consegna) <> ''
-      ${payload.role === "admin" ? "" : "AND agente = ?"}
+      ${seesAll ? "" : "AND agente = ?"}
     GROUP BY luogo_consegna
     ORDER BY MAX(created_at) DESC
     LIMIT ?
   `;
 
-  const rows =
-    payload.role === "admin"
-      ? (db.prepare(baseSql).all(clienteId, limit) as DestinationRow[])
-      : (db.prepare(baseSql).all(clienteId, payload.username, limit) as DestinationRow[]);
+  const rows = seesAll
+    ? (db.prepare(baseSql).all(clienteId, limit) as DestinationRow[])
+    : (db.prepare(baseSql).all(clienteId, payload.username, limit) as DestinationRow[]);
 
   return NextResponse.json({
     destinations: rows.map((r) => r.luogo_consegna).filter(Boolean),

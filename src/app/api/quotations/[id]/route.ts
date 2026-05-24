@@ -2,8 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotation } from "@/lib/quotations";
+import { userOwnsCustomerByRap } from "@/lib/rap";
 import { parseLocalizedNumber } from "@/lib/utils";
 import type { QuotationItem, ValiditaPreventivoGiorni } from "@/types";
+
+function canManageQuotation(
+  db: ReturnType<typeof getDb>,
+  payload: { id: number; username: string; role: "admin" | "agente" },
+  quotation: { agente: string; cliente_id: number | null }
+): boolean {
+  if (payload.role === "admin") return true;
+  if (quotation.agente === payload.username) return true;
+  return userOwnsCustomerByRap(db, payload.id, quotation.cliente_id);
+}
 
 async function getAuthPayload(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -74,7 +85,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const db = getDb();
   const row = getDbQuotation(db, quotationId);
   if (!row) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
-  if (payload.role !== "admin" && row.agente !== payload.username) {
+  if (!canManageQuotation(db, payload, row)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -92,7 +103,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const db = getDb();
   const existing = getDbQuotation(db, quotationId);
   if (!existing) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
-  if (payload.role !== "admin" && existing.agente !== payload.username) {
+  if (!canManageQuotation(db, payload, existing)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -136,7 +147,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = getDb();
   const existing = getDbQuotation(db, quotationId);
   if (!existing) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
-  if (payload.role !== "admin" && existing.agente !== payload.username) {
+  if (!canManageQuotation(db, payload, existing)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 

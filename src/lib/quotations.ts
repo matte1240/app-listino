@@ -80,15 +80,23 @@ export function nextQuotationNumber(db: Database.Database, dateValue: string): s
   return `${prefix}${String(nextProgressive).padStart(4, "0")}`;
 }
 
-export function listQuotations(db: Database.Database, options: { agente?: string | null } = {}): Quotation[] {
+export function listQuotations(
+  db: Database.Database,
+  options: { agente?: string | null; userId?: number | null } = {}
+): Quotation[] {
   const rows = options.agente
     ? (db.prepare(
         `SELECT quotations.*, users.full_name AS agente_full_name
          FROM quotations
          LEFT JOIN users ON users.username = quotations.agente
          WHERE quotations.agente = ?
+            OR EXISTS (
+              SELECT 1 FROM anagrafiche a
+              JOIN rap_assignments ra ON ra.rap = a.rap
+              WHERE a.id = quotations.cliente_id AND ra.user_id = ?
+            )
          ORDER BY datetime(quotations.created_at) DESC, quotations.id DESC`
-      ).all(options.agente) as DbQuotation[])
+      ).all(options.agente, options.userId ?? -1) as DbQuotation[])
     : (db.prepare(
         `SELECT quotations.*, users.full_name AS agente_full_name
          FROM quotations

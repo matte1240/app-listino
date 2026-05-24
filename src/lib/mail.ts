@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import type { Order, OrderHistoryItem } from "@/types";
 import { getDb } from "@/lib/db";
 import { buildMetodoOrderXmlForOrder } from "@/lib/metodo-xml";
+import { calculateOrderDiscountedTotal, formatOrderCurrency, getDiscountedUnitPrice } from "@/lib/order-totals";
 
 const APP_NAME = "Ordini Ivicolors";
 
@@ -350,15 +351,14 @@ function buildOrderHtml(
         : `Nuovo Ordine #${order.id}`;
 
   const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0);
+  const totalImponibile = calculateOrderDiscountedTotal(order.items);
   const mapsUrl = buildGoogleMapsSearchUrl(order.luogoConsegna);
   const agenteDisplayName = order.agenteFullName || order.agente;
   const rows = mode === "updated" && diff
     ? buildDiffItemsRows(diff)
     : order.items
       .map((item) => {
-        const prezzoEffettivo = item.sconto && item.sconto > 0
-          ? item.prezzoListino * (1 - item.sconto / 100)
-          : item.prezzoListino;
+        const prezzoEffettivo = getDiscountedUnitPrice(item);
         const scontoCell = item.sconto && item.sconto > 0
           ? `<strong>-${item.sconto}%</strong>`
           : `—`;
@@ -428,6 +428,10 @@ function buildOrderHtml(
               <td style="border:1px solid #cccccc;padding:6px;text-align:center;"><strong>${totalQty}</strong></td>
               <td colspan="3" style="border:1px solid #cccccc;padding:6px;"></td>
             </tr>
+            <tr>
+              <td colspan="5" style="border:1px solid #cccccc;padding:6px;"><strong>Totale imponibile</strong></td>
+              <td style="border:1px solid #cccccc;padding:6px;text-align:right;"><strong>${formatOrderCurrency(totalImponibile)}</strong></td>
+            </tr>
           </tbody>
         </table>
       </td>
@@ -442,9 +446,7 @@ function buildOrderHtml(
 }
 
 function formatItemTextLine(item: OrderHistoryItem, prefix: string): string {
-  const prezzoEffettivo = item.sconto && item.sconto > 0
-    ? item.prezzoListino * (1 - item.sconto / 100)
-    : item.prezzoListino;
+  const prezzoEffettivo = getDiscountedUnitPrice(item);
   const scontoLabel = item.sconto && item.sconto > 0 ? ` | Sconto: -${item.sconto}%` : "";
   return `${prefix} ${item.codice} | ${item.descrizione} | Qta: ${item.qty} ${item.um}${scontoLabel} | EUR ${prezzoEffettivo.toFixed(2)}`;
 }
@@ -510,6 +512,7 @@ function buildOrderText(
     }
   }
   lines.push(`Totale pezzi (attuale): ${order.items.reduce((sum, item) => sum + item.qty, 0)}`);
+  lines.push(`Totale imponibile: ${formatOrderCurrency(calculateOrderDiscountedTotal(order.items))}`);
   lines.push("", `Email generata automaticamente da ${APP_NAME}.`);
 
   return lines.join("\n");

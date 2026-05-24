@@ -30,7 +30,8 @@ export async function GET() {
     SELECT
       m.codice, m.descrizione, m.categoria, m.raggr, m.um,
       m.prezzo_listino, m.prezzo_riservato, m.prezzo_pubblico,
-      m.pz_confezione, m.nota, m.obsoleto,
+      m.pz_confezione, m.mq_confezione, m.pz_bancale, m.mq_bancale,
+      m.nota, m.obsoleto,
       e.descrizione_ai
     FROM materials m
     LEFT JOIN enriched_materials e ON e.codice = m.codice
@@ -38,7 +39,8 @@ export async function GET() {
   `).all() as {
     codice: string; descrizione: string; categoria: string; raggr: string; um: string;
     prezzo_listino: number; prezzo_riservato: number; prezzo_pubblico: number;
-    pz_confezione: number; nota: string; obsoleto: number | string; descrizione_ai: string | null;
+    pz_confezione: number; mq_confezione: number | null; pz_bancale: number | null; mq_bancale: number | null;
+    nota: string; obsoleto: number | string; descrizione_ai: string | null;
   }[];
 
   const materials = rows.map((r) => ({
@@ -52,6 +54,9 @@ export async function GET() {
     prezzoRiservato: r.prezzo_riservato,
     prezzoPublico: r.prezzo_pubblico,
     pzConfezione: r.pz_confezione,
+    ...(r.mq_confezione !== null ? { mqConfezione: r.mq_confezione } : {}),
+    ...(r.pz_bancale !== null ? { pzBancale: r.pz_bancale } : {}),
+    ...(r.mq_bancale !== null ? { mqBancale: r.mq_bancale } : {}),
     nota: r.nota,
     obsoleto: toObsoleteFlag(r.obsoleto),
   }));

@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
   const db = getDb();
   const quotations = listQuotations(db, {
     agente: payload.role === "admin" ? null : payload.username,
+    userId: payload.role === "admin" ? null : payload.id,
   });
 
   return NextResponse.json({ quotations });

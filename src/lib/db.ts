@@ -60,6 +60,9 @@ function createDb() {
       prezzo_riservato REAL NOT NULL DEFAULT 0,
       prezzo_pubblico REAL NOT NULL DEFAULT 0,
       pz_confezione REAL NOT NULL DEFAULT 0,
+      mq_confezione REAL,
+      pz_bancale REAL,
+      mq_bancale REAL,
       nota TEXT NOT NULL DEFAULT '',
       obsoleto INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -70,6 +73,15 @@ function createDb() {
   const materialCols = db.pragma("table_info(materials)") as { name: string }[];
   if (!materialCols.some((c) => c.name === "obsoleto")) {
     db.exec("ALTER TABLE materials ADD COLUMN obsoleto INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!materialCols.some((c) => c.name === "mq_confezione")) {
+    db.exec("ALTER TABLE materials ADD COLUMN mq_confezione REAL");
+  }
+  if (!materialCols.some((c) => c.name === "pz_bancale")) {
+    db.exec("ALTER TABLE materials ADD COLUMN pz_bancale REAL");
+  }
+  if (!materialCols.some((c) => c.name === "mq_bancale")) {
+    db.exec("ALTER TABLE materials ADD COLUMN mq_bancale REAL");
   }
 
   db.exec(`
@@ -250,6 +262,7 @@ function createDb() {
       piva TEXT NOT NULL DEFAULT '',
       piva_norm TEXT NOT NULL DEFAULT '',
       search_text TEXT NOT NULL DEFAULT '',
+      rap INTEGER,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -281,10 +294,24 @@ function createDb() {
   if (!anagraficheCols.some((c) => c.name === "updated_at")) {
     db.exec("ALTER TABLE anagrafiche ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
   }
+  if (!anagraficheCols.some((c) => c.name === "rap")) {
+    db.exec("ALTER TABLE anagrafiche ADD COLUMN rap INTEGER");
+  }
 
   db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_codice_piva ON anagrafiche(codice, piva_norm)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_ragione ON anagrafiche(ragione_sociale)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_search ON anagrafiche(search_text)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_anagrafiche_rap ON anagrafiche(rap)");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rap_assignments (
+      rap INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_rap_assignments_user_id ON rap_assignments(user_id)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS branch_emails (

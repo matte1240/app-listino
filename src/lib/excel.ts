@@ -12,10 +12,18 @@ type MaterialField =
   | "prezzoRiservato"
   | "prezzoPublico"
   | "pzConfezione"
+  | "mqConfezione"
+  | "pzBancale"
+  | "mqBancale"
   | "nota"
   | "obsoleto";
 
-type AnagraficaField = "codice" | "ragioneSociale" | "indirizzo" | "capCitta" | "partitaIva";
+export interface ParsedExcelMaterials {
+  materials: Material[];
+  presentFields: Set<MaterialField>;
+}
+
+type AnagraficaField = "codice" | "ragioneSociale" | "indirizzo" | "capCitta" | "partitaIva" | "rap";
 
 interface ColumnMappingErrorDetails {
   missingColumns: string[];
@@ -57,6 +65,9 @@ const FIELD_LABELS: Record<MaterialField, string> = {
   prezzoRiservato: "Prezzo Riservato",
   prezzoPublico: "Prezzo Pubblico",
   pzConfezione: "Pezzi confezione",
+  mqConfezione: "MQ confezione",
+  pzBancale: "Pezzi bancale",
+  mqBancale: "MQ bancale",
   nota: "Note",
   obsoleto: "Obsoleto",
 };
@@ -71,11 +82,14 @@ const COLUMN_ALIASES: Record<MaterialField, string[]> = {
   prezzoRiservato: ["Prezzo Riservato 50", "Prezzo Riservato", "Riservato"],
   prezzoPublico: ["Prezzo Pubblico 52", "Prezzo Pubblico", "Pubblico"],
   pzConfezione: ["PZ x confezione", "PZ confezione", "Pezzi confezione", "Pz x conf"],
+  mqConfezione: ["mq/conf.", "mq/confezione", "mq x confezione", "mq confezione"],
+  pzBancale: ["pz/bancale", "pezzi bancale", "pz bancale"],
+  mqBancale: ["mq/bancale", "mq bancale", "mq x bancale"],
   nota: ["Note", "Nota"],
   obsoleto: ["OBSOLETO", "Obsoleto", "Stato", "Status", "Disponibilita", "Cartongesso"],
 };
 
-const REQUIRED_FIELDS: MaterialField[] = ["codice", "descrizione", "prezzoListino"];
+const REQUIRED_FIELDS: MaterialField[] = ["codice", "descrizione"];
 
 const ANAGRAFICA_FIELD_LABELS: Record<AnagraficaField, string> = {
   codice: "Codice cliente",
@@ -83,6 +97,7 @@ const ANAGRAFICA_FIELD_LABELS: Record<AnagraficaField, string> = {
   indirizzo: "Indirizzo",
   capCitta: "CAP Citta",
   partitaIva: "Partita IVA",
+  rap: "Rap",
 };
 
 const ANAGRAFICA_COLUMN_ALIASES: Record<AnagraficaField, string[]> = {
@@ -91,6 +106,7 @@ const ANAGRAFICA_COLUMN_ALIASES: Record<AnagraficaField, string[]> = {
   indirizzo: ["Indirizzo", "Via", "Indirizzo Sede"],
   capCitta: ["CAP Citta", "CAP/Citta", "Cap Citta", "CAP - Citta", "Comune", "Citta"],
   partitaIva: ["Partita IVA", "Partita Iva", "P.IVA", "P. Iva", "PIVA", "Codice Fiscale/P.IVA"],
+  rap: ["Rap", "Rappresentante", "Cod. Rap", "N. Rap", "Codice Rappresentante"],
 };
 
 const REQUIRED_ANAGRAFICA_FIELDS: AnagraficaField[] = ["codice", "ragioneSociale"];
@@ -198,21 +214,38 @@ function readTextCell(row: unknown[], index?: number): string {
   return String(readRawCell(row, index) ?? "").trim();
 }
 
-export function parseExcel(buffer: ArrayBuffer): Material[] {
+function readOptionalNumberCell(row: unknown[], index?: number): number | null {
+  if (index === undefined) return null;
+  const rawValue = readRawCell(row, index);
+  if (rawValue === null || rawValue === undefined) return null;
+
+  const textValue = String(rawValue).trim();
+  if (!textValue) return null;
+
+  const parsed = parseLocalizedNumber(rawValue);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function parseExcel(buffer: ArrayBuffer): ParsedExcelMaterials {
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return [];
+  if (!sheet) return { materials: [], presentFields: new Set() };
 
   const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     raw: false,
     defval: "",
   });
-  if (matrix.length === 0) return [];
+  if (matrix.length === 0) return { materials: [], presentFields: new Set() };
 
   const headers = (matrix[0] ?? []).map((cell) => String(cell ?? "").trim());
   const indexes = resolveColumnIndexes(headers);
+  const presentFields = new Set(
+    (Object.entries(indexes) as [MaterialField, number | undefined][])
+      .filter(([, index]) => index !== undefined)
+      .map(([field]) => field)
+  );
 
   const missingColumns = REQUIRED_FIELDS
     .filter((field) => indexes[field] === undefined)
@@ -241,12 +274,15 @@ export function parseExcel(buffer: ArrayBuffer): Material[] {
       prezzoRiservato: parseLocalizedNumber(readRawCell(row, indexes.prezzoRiservato)),
       prezzoPublico: parseLocalizedNumber(readRawCell(row, indexes.prezzoPublico)),
       pzConfezione: parseLocalizedNumber(readRawCell(row, indexes.pzConfezione)),
+      mqConfezione: readOptionalNumberCell(row, indexes.mqConfezione),
+      pzBancale: readOptionalNumberCell(row, indexes.pzBancale),
+      mqBancale: readOptionalNumberCell(row, indexes.mqBancale),
       nota: readTextCell(row, indexes.nota),
       obsoleto: parseObsolete(readRawCell(row, indexes.obsoleto)),
     });
   }
 
-  return materials;
+  return { materials, presentFields };
 }
 
 export interface ParsedAnagrafica {
@@ -257,6 +293,18 @@ export interface ParsedAnagrafica {
   partitaIva: string;
   pivaNorm: string;
   searchText: string;
+  rap: number | null;
+  hasRapColumn: boolean;
+}
+
+function parseRapValue(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+  const parsed = parseLocalizedNumber(text);
+  if (!Number.isFinite(parsed)) return null;
+  const intVal = Math.trunc(parsed);
+  return intVal >= 1 ? intVal : null;
 }
 
 export function parseAnagraficheExcel(buffer: ArrayBuffer): ParsedAnagrafica[] {
@@ -286,6 +334,8 @@ export function parseAnagraficheExcel(buffer: ArrayBuffer): ParsedAnagrafica[] {
     });
   }
 
+  const hasRapColumn = indexes.rap !== undefined;
+
   const deduped = new Map<string, ParsedAnagrafica>();
   for (const rawRow of matrix.slice(1)) {
     const row = Array.isArray(rawRow) ? rawRow : [];
@@ -312,6 +362,8 @@ export function parseAnagraficheExcel(buffer: ArrayBuffer): ParsedAnagrafica[] {
         readTextCell(row, indexes.capCitta),
         partitaIva,
       ].join(" ")),
+      rap: hasRapColumn ? parseRapValue(readRawCell(row, indexes.rap)) : null,
+      hasRapColumn,
     };
 
     deduped.set(key, item);

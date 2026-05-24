@@ -10,6 +10,9 @@ export interface Material {
   prezzoRiservato: number;
   prezzoPublico: number;
   pzConfezione: number;
+  mqConfezione?: number | null;
+  pzBancale?: number | null;
+  mqBancale?: number | null;
   nota: string;
 }
 

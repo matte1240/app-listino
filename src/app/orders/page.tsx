@@ -6,6 +6,7 @@ import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTr
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
+import { calculateOrderDiscountedTotal, formatOrderCurrency, getDiscountedUnitPrice } from "@/lib/order-totals";
 import type { Order, OrderStatus } from "@/types";
 
 export default function OrdersPage() {
@@ -229,6 +230,7 @@ export default function OrdersPage() {
             filteredOrders.map((order) => {
             const isOpen = expanded === order.id;
             const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
+            const totalImponibile = calculateOrderDiscountedTotal(order.items);
             const isDraft = order.status === "bozza";
             const hasAttachedDraft = !!order.hasDraft;
             const canSendDraft = isDraft || hasAttachedDraft;
@@ -322,7 +324,7 @@ export default function OrdersPage() {
                             {item.sconto && item.sconto > 0 ? (
                               <span className="flex flex-wrap items-center gap-1 sm:justify-end">
                                 <span className="line-through text-muted-foreground/50">€{item.prezzoListino.toFixed(3)}</span>
-                                <span className="font-semibold text-primary">€{(item.prezzoListino * (1 - item.sconto / 100)).toFixed(3)}</span>
+                                <span className="font-semibold text-primary">€{getDiscountedUnitPrice(item).toFixed(3)}</span>
                                 <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{item.sconto}%</span>
                               </span>
                             ) : (
@@ -331,6 +333,16 @@ export default function OrdersPage() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                    <div className="px-4 py-3 border-t border-border bg-muted/30 flex flex-col gap-1.5 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Totale pezzi</span>
+                        <span className="font-bold text-foreground">{totalQty} pz</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-semibold">Totale imponibile</span>
+                        <span className="font-bold text-base text-foreground">{formatOrderCurrency(totalImponibile)}</span>
+                      </div>
                     </div>
 
                     {/* Delete confirmation dialog */}

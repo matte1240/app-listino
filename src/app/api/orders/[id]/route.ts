@@ -13,7 +13,18 @@ import {
   type OrderWriteData,
 } from "@/lib/orders";
 import { getDbQuotation, markQuotationConverted } from "@/lib/quotations";
+import { userOwnsCustomerByRap } from "@/lib/rap";
 import type { OrderHistoryItem } from "@/types";
+
+function canManageOrder(
+  db: ReturnType<typeof getDb>,
+  payload: { id: number; username: string; role: "admin" | "agente" },
+  order: { agente: string; cliente_id: number | null }
+): boolean {
+  if (payload.role === "admin") return true;
+  if (order.agente === payload.username) return true;
+  return userOwnsCustomerByRap(db, payload.id, order.cliente_id);
+}
 
 /** GET /api/orders/[id] — get single order */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -35,7 +46,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   ).get(orderId) as DbOrder | undefined;
   if (!row) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
-  if (payload.role !== "admin" && row.agente !== payload.username) {
+  if (!canManageOrder(db, payload, row)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -65,7 +76,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   ).get(orderId) as DbOrder | undefined;
   if (!existing) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
-  if (payload.role !== "admin" && existing.agente !== payload.username) {
+  if (!canManageOrder(db, payload, existing)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -146,7 +157,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!parent) {
       return NextResponse.json({ error: "Ordine principale non trovato" }, { status: 409 });
     }
-    if (payload.role !== "admin" && parent.agente !== payload.username) {
+    if (!canManageOrder(db, payload, parent)) {
       return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
     }
 
@@ -302,7 +313,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   ).get(orderId) as DbOrder | undefined;
   if (!existing) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
-  if (payload.role !== "admin" && existing.agente !== payload.username) {
+  if (!canManageOrder(db, payload, existing)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 

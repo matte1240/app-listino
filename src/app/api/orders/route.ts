@@ -4,9 +4,10 @@ import { getDb } from "@/lib/db";
 import { sendOrderEmail } from "@/lib/mail";
 import { dbOrderToOrder, getOrderDraftMap, type DbOrder } from "@/lib/orders";
 import { getDbQuotation, markQuotationConverted } from "@/lib/quotations";
+import { userOwnsCustomerByRap } from "@/lib/rap";
 import type { Order, OrderHistoryItem } from "@/types";
 
-/** GET /api/orders — list orders (admin sees all, agente sees own) */
+/** GET /api/orders — list orders (admin sees all, agente sees own + customers of own Rap) */
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
@@ -30,10 +31,18 @@ export async function GET(req: NextRequest) {
             `SELECT orders.*, users.full_name AS agente_full_name
              FROM orders
              LEFT JOIN users ON users.username = orders.agente
-             WHERE orders.agente = ? AND NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)
+             WHERE NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)
+               AND (
+                 orders.agente = ?
+                 OR EXISTS (
+                   SELECT 1 FROM anagrafiche a
+                   JOIN rap_assignments ra ON ra.rap = a.rap
+                   WHERE a.id = orders.cliente_id AND ra.user_id = ?
+                 )
+               )
              ORDER BY orders.created_at DESC`
           )
-          .all(payload.username) as DbOrder[]);
+          .all(payload.username, payload.id) as DbOrder[]);
 
   const draftMap = getOrderDraftMap(db, rows.map((row) => row.id));
   const orders: Order[] = rows.map((row) =>
@@ -98,7 +107,7 @@ export async function POST(req: NextRequest) {
     if (!sourceQuotation) {
       return NextResponse.json({ error: "Preventivo non trovato" }, { status: 400 });
     }
-    if (payload.role !== "admin" && sourceQuotation.agente !== payload.username) {
+    if (payload.role !== "admin" && sourceQuotation.agente !== payload.username && !userOwnsCustomerByRap(db, payload.id, sourceQuotation.cliente_id)) {
       return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
     }
     if (sourceQuotation.status === "convertito") {

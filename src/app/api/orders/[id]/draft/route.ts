@@ -12,6 +12,7 @@ import {
   type DbOrder,
   type OrderWriteData,
 } from "@/lib/orders";
+import { userOwnsCustomerByRap } from "@/lib/rap";
 import type { OrderHistoryItem } from "@/types";
 
 async function getAuthorizedOrder(req: NextRequest, paramsPromise: Promise<{ id: string }>) {
@@ -42,7 +43,7 @@ async function getAuthorizedOrder(req: NextRequest, paramsPromise: Promise<{ id:
     return { error: NextResponse.json({ error: "Ordine non trovato" }, { status: 404 }) };
   }
 
-  if (payload.role !== "admin" && order.agente !== payload.username) {
+  if (payload.role !== "admin" && order.agente !== payload.username && !userOwnsCustomerByRap(db, payload.id, order.cliente_id)) {
     return { error: NextResponse.json({ error: "Non autorizzato" }, { status: 403 }) };
   }
 

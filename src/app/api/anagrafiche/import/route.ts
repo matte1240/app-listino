@@ -20,6 +20,7 @@ interface ExistingAnagrafica {
   piva: string;
   piva_norm: string;
   search_text: string;
+  rap: number | null;
 }
 
 function normalizeIdentifier(value: string): string {
@@ -30,6 +31,7 @@ function normalizeIdentifier(value: string): string {
 }
 
 function isSameAnagrafica(existing: ExistingAnagrafica, imported: ParsedAnagrafica) {
+  const importedRap = imported.hasRapColumn ? imported.rap : existing.rap;
   return (
     existing.codice === imported.codice &&
     existing.ragione_sociale === imported.ragioneSociale &&
@@ -37,7 +39,8 @@ function isSameAnagrafica(existing: ExistingAnagrafica, imported: ParsedAnagrafi
     existing.cap_citta === imported.capCitta &&
     existing.piva === imported.partitaIva &&
     existing.piva_norm === imported.pivaNorm &&
-    existing.search_text === imported.searchText
+    existing.search_text === imported.searchText &&
+    existing.rap === importedRap
   );
 }
 
@@ -84,7 +87,7 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   const existingRows = db
-    .prepare("SELECT id, codice, ragione_sociale, indirizzo, cap_citta, piva, piva_norm, search_text FROM anagrafiche")
+    .prepare("SELECT id, codice, ragione_sociale, indirizzo, cap_citta, piva, piva_norm, search_text, rap FROM anagrafiche")
     .all() as ExistingAnagrafica[];
 
   const existingByCodice = new Map<string, ExistingAnagrafica>();
@@ -93,8 +96,8 @@ export async function POST(req: NextRequest) {
   }
 
   const insertStmt = db.prepare(`
-    INSERT INTO anagrafiche (codice, ragione_sociale, indirizzo, cap_citta, piva, piva_norm, search_text, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO anagrafiche (codice, ragione_sociale, indirizzo, cap_citta, piva, piva_norm, search_text, rap, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `);
 
   const updateStmt = db.prepare(`
@@ -106,6 +109,7 @@ export async function POST(req: NextRequest) {
         piva = ?,
         piva_norm = ?,
         search_text = ?,
+        rap = ?,
         updated_at = datetime('now')
     WHERE id = ?
   `);
@@ -125,6 +129,8 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        const nextRap = row.hasRapColumn ? row.rap : existing.rap;
+
         updateStmt.run(
           row.codice,
           row.ragioneSociale,
@@ -133,6 +139,7 @@ export async function POST(req: NextRequest) {
           row.partitaIva,
           row.pivaNorm,
           row.searchText,
+          nextRap,
           existing.id
         );
         existingByCodice.set(key, {
@@ -144,6 +151,7 @@ export async function POST(req: NextRequest) {
           piva: row.partitaIva,
           piva_norm: row.pivaNorm,
           search_text: row.searchText,
+          rap: nextRap,
         });
         updated += 1;
         continue;
@@ -156,7 +164,8 @@ export async function POST(req: NextRequest) {
         row.capCitta,
         row.partitaIva,
         row.pivaNorm,
-        row.searchText
+        row.searchText,
+        row.hasRapColumn ? row.rap : null
       );
       imported += 1;
     }

@@ -11,7 +11,7 @@ interface ImportResponse {
   unchanged?: number;
 }
 
-export default function UploadAnagrafiche() {
+export default function UploadAnagrafiche({ onUploaded }: { onUploaded?: () => void } = {}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -42,6 +42,7 @@ export default function UploadAnagrafiche() {
       const unchangedText = payload.unchanged ? `, ${payload.unchanged} invariate` : "";
       setFileName(file.name);
       setMessage(`${payload.total} anagrafiche (${payload.imported} nuove, ${payload.updated} aggiornate${unchangedText})`);
+      onUploaded?.();
     } catch {
       setError("Errore nella lettura del file. Assicurati che sia un file Excel valido.");
     } finally {
