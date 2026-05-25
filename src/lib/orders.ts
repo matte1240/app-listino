@@ -20,6 +20,7 @@ export interface DbOrder {
   updated_at: string;
   cancelled_at: string | null;
   cancelled_by: string | null;
+  cancelled_from_status: string | null;
 }
 
 export interface DbOrderDraft {
@@ -97,6 +98,7 @@ export function dbOrderToOrder(
     updatedAt: normalizeUtcTimestamp(row.updated_at),
     cancelledAt: row.cancelled_at ? normalizeUtcTimestamp(row.cancelled_at) : null,
     cancelledBy: row.cancelled_by ?? null,
+    cancelledFromStatus: row.cancelled_from_status ? resolveOrderStatus(row.cancelled_from_status) : null,
     hasDraft: !!draftRow,
     draftUpdatedAt: draftRow ? normalizeUtcTimestamp(draftRow.updated_at) : null,
     draft: options?.includeDraft && draftRow ? dbDraftToOrderDraft(draftRow) : null,

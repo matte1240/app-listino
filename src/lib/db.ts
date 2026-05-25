@@ -101,7 +101,8 @@ function createDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       cancelled_at TEXT,
-      cancelled_by TEXT
+      cancelled_by TEXT,
+      cancelled_from_status TEXT
     )
   `);
 
@@ -128,6 +129,9 @@ function createDb() {
   }
   if (!orderCols.some((c) => c.name === "cancelled_by")) {
     db.exec("ALTER TABLE orders ADD COLUMN cancelled_by TEXT");
+  }
+  if (!orderCols.some((c) => c.name === "cancelled_from_status")) {
+    db.exec("ALTER TABLE orders ADD COLUMN cancelled_from_status TEXT");
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_quotation_id ON orders(quotation_id)");

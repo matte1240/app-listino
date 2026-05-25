@@ -7,6 +7,18 @@ import { getDbQuotation, markQuotationConverted } from "@/lib/quotations";
 import { userOwnsCustomerByRap } from "@/lib/rap";
 import type { Order, OrderHistoryItem } from "@/types";
 
+type OrderListStatusFilter = "all" | "attivi" | "annullati";
+
+interface OrderListCounts {
+  attivi: number;
+  annullati: number;
+}
+
+function resolveOrderListStatusFilter(value: string | null): OrderListStatusFilter {
+  if (value === "attivi" || value === "annullati") return value;
+  return "all";
+}
+
 /** GET /api/orders — list orders (admin sees all, agente sees own + customers of own Rap) */
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -14,7 +26,33 @@ export async function GET(req: NextRequest) {
   const payload = await verifyToken(token);
   if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
 
+  const statusFilter = resolveOrderListStatusFilter(req.nextUrl.searchParams.get("status"));
+  const statusWhereClause =
+    statusFilter === "attivi"
+      ? "AND orders.status <> 'annullato'"
+      : statusFilter === "annullati"
+        ? "AND orders.status = 'annullato'"
+        : "";
+  const orderByClause =
+    statusFilter === "annullati"
+      ? "ORDER BY COALESCE(orders.cancelled_at, orders.updated_at, orders.created_at) DESC"
+      : "ORDER BY orders.created_at DESC";
+
   const db = getDb();
+  const visibilityWhereClause =
+    payload.role === "admin"
+      ? `WHERE NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)`
+      : `WHERE NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)
+         AND (
+           orders.agente = ?
+           OR EXISTS (
+             SELECT 1 FROM anagrafiche a
+             JOIN rap_assignments ra ON ra.rap = a.rap
+             WHERE a.id = orders.cliente_id AND ra.user_id = ?
+           )
+         )`;
+  const visibilityParams = payload.role === "admin" ? [] : [payload.username, payload.id];
+
   const rows =
     payload.role === "admin"
       ? (db
@@ -22,8 +60,9 @@ export async function GET(req: NextRequest) {
             `SELECT orders.*, users.full_name AS agente_full_name
              FROM orders
              LEFT JOIN users ON users.username = orders.agente
-             WHERE NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)
-             ORDER BY orders.created_at DESC`
+             ${visibilityWhereClause}
+             ${statusWhereClause}
+             ${orderByClause}`
           )
           .all() as DbOrder[])
       : (db
@@ -31,25 +70,26 @@ export async function GET(req: NextRequest) {
             `SELECT orders.*, users.full_name AS agente_full_name
              FROM orders
              LEFT JOIN users ON users.username = orders.agente
-             WHERE NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)
-               AND (
-                 orders.agente = ?
-                 OR EXISTS (
-                   SELECT 1 FROM anagrafiche a
-                   JOIN rap_assignments ra ON ra.rap = a.rap
-                   WHERE a.id = orders.cliente_id AND ra.user_id = ?
-                 )
-               )
-             ORDER BY orders.created_at DESC`
+             ${visibilityWhereClause}
+               ${statusWhereClause}
+             ${orderByClause}`
           )
-          .all(payload.username, payload.id) as DbOrder[]);
+          .all(...visibilityParams) as DbOrder[]);
+
+  const countsRow = db.prepare(
+    `SELECT
+       COALESCE(SUM(CASE WHEN orders.status = 'annullato' THEN 1 ELSE 0 END), 0) AS annullati,
+       COALESCE(SUM(CASE WHEN orders.status <> 'annullato' THEN 1 ELSE 0 END), 0) AS attivi
+     FROM orders
+     ${visibilityWhereClause}`
+  ).get(...visibilityParams) as OrderListCounts;
 
   const draftMap = getOrderDraftMap(db, rows.map((row) => row.id));
   const orders: Order[] = rows.map((row) =>
     dbOrderToOrder(row, { draftRow: draftMap.get(row.id) ?? null })
   );
 
-  return NextResponse.json({ orders });
+  return NextResponse.json({ orders, counts: countsRow });
 }
 
 /** POST /api/orders — save a new order */

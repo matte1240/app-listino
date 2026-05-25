@@ -176,7 +176,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     db.transaction(() => {
       db.prepare(
         `UPDATE orders
-         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL, cancelled_from_status = NULL
          WHERE id = ?`
       ).run(
         resolvedCliente,
@@ -237,7 +237,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     db.transaction(() => {
       db.prepare(
         `UPDATE orders
-         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL, cancelled_from_status = NULL
          WHERE id = ?`
       ).run(
         resolvedCliente,
@@ -322,6 +322,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const order = dbOrderToOrder(existing);
   const isDraft = order.status === "bozza";
+  if (order.status === "annullato") {
+    return NextResponse.json({ error: "L'ordine è già annullato" }, { status: 409 });
+  }
   const shouldSendCancellationEmail = order.status !== "bozza" && order.parentOrderId === null;
 
   const txResult = db.transaction(() => {
@@ -342,7 +345,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const orderCancel = db.prepare(
       `UPDATE orders
-       SET status = 'annullato', updated_at = datetime('now'), cancelled_at = datetime('now'), cancelled_by = ?
+       SET status = 'annullato', updated_at = datetime('now'), cancelled_at = datetime('now'), cancelled_by = ?, cancelled_from_status = status
        WHERE id = ?`
     ).run(payload.username, orderId);
 

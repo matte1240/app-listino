@@ -19,26 +19,31 @@ export default function OrdersPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
   const [submittingDraftId, setSubmittingDraftId] = useState<number | null>(null);
   const [discardingDraftId, setDiscardingDraftId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<OrderTab>("attivi");
+  const [orderCounts, setOrderCounts] = useState({ attivi: 0, annullati: 0 });
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (!authLoading && user) loadOrders();
-  }, [authLoading, user]);
+    if (!authLoading && user) {
+      void loadOrders(activeTab);
+    }
+  }, [activeTab, authLoading, user]);
 
-  async function loadOrders() {
+  async function loadOrders(tab: OrderTab) {
     setLoading(true);
     try {
-      const res = await fetch("/api/orders");
+      const res = await fetch(`/api/orders?status=${tab}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setOrders(data.orders ?? []);
+        setOrderCounts(data.counts ?? { attivi: 0, annullati: 0 });
       }
     } finally {
       setLoading(false);
@@ -59,17 +64,39 @@ export default function OrdersPage() {
       const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
       if (res.ok) {
         const data = await res.json().catch(() => null);
+        const nextTab = data?.cancelled ? "annullati" : activeTab;
         setDeleteConfirm(null);
         setExpanded(null);
-        if (data?.cancelled) {
-          setActiveTab("annullati");
+        if (nextTab !== activeTab) {
+          setActiveTab(nextTab);
         }
-        await loadOrders();
+        await loadOrders(nextTab);
       } else {
         alert("Errore nella cancellazione dell'ordine");
       }
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleRestore(order: Order) {
+    if (!window.confirm(`Vuoi ripristinare l'ordine #${order.id}?`)) return;
+
+    setRestoringId(order.id);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/restore`, { method: "POST" });
+      if (!res.ok) {
+        alert("Errore durante il ripristino dell'ordine");
+        return;
+      }
+
+      setExpanded(null);
+      if (activeTab !== "attivi") {
+        setActiveTab("attivi");
+      }
+      await loadOrders("attivi");
+    } finally {
+      setRestoringId(null);
     }
   }
 
@@ -111,7 +138,7 @@ export default function OrdersPage() {
       }
 
       setExpanded(null);
-      await loadOrders();
+      await loadOrders(activeTab);
     } finally {
       setSubmittingDraftId(null);
     }
@@ -132,7 +159,7 @@ export default function OrdersPage() {
         return;
       }
 
-      await loadOrders();
+      await loadOrders(activeTab);
     } finally {
       setDiscardingDraftId(null);
     }
@@ -167,17 +194,8 @@ export default function OrdersPage() {
     [searchQuery]
   );
 
-  const orderCounts = useMemo(() => ({
-    attivi: orders.filter((order) => order.status !== "annullato").length,
-    annullati: orders.filter((order) => order.status === "annullato").length,
-  }), [orders]);
-
   const filteredOrders = useMemo(() => {
-    const statusFiltered = orders.filter((order) =>
-      activeTab === "annullati" ? order.status === "annullato" : order.status !== "annullato"
-    );
-
-    return statusFiltered
+    return orders
       .filter((order) => {
         if (searchTokens.length === 0) return true;
         const searchText = orderSearchText(order);
@@ -283,6 +301,7 @@ export default function OrdersPage() {
             const isSendingThisDraft = submittingDraftId === order.id;
             const isDiscardingThisDraft = discardingDraftId === order.id;
             const isCancelled = order.status === "annullato";
+            const isRestoring = restoringId === order.id;
             const deleteTitle = isDraft ? "Conferma eliminazione bozza" : "Conferma annullamento ordine";
             const deleteMessage = isDraft
               ? `La bozza #${order.id} per ${order.cliente} verrà eliminata. Non sarà inviata alcuna email al magazzino.`
@@ -293,7 +312,7 @@ export default function OrdersPage() {
             return (
               <div
                 key={order.id}
-                className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm"
+                className={`rounded-2xl border overflow-hidden shadow-sm ${isCancelled ? "border-red-200 bg-red-50/40" : "border-border bg-card"}`}
               >
                 {/* Header row */}
                 <button
@@ -319,12 +338,20 @@ export default function OrdersPage() {
                       )}
                     </div>
                     <div className="flex flex-col gap-1.5 mt-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                      <span className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {isCancelled && order.cancelledAt ? `Annullato ${formatDate(order.cancelledAt)}` : formatDate(order.createdAt)}
+                      </span>
                       <span className="hidden text-xs text-muted-foreground/60 sm:inline">·</span>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Package className="h-3 w-3" />
                         {order.items.length} art. — {totalQty} pz
                       </span>
+                      {isCancelled && order.cancelledFromStatus && (
+                        <>
+                          <span className="hidden text-xs text-muted-foreground/60 sm:inline">·</span>
+                          <span className="text-xs text-muted-foreground">Stato prima: {formatStatusLabel(order.cancelledFromStatus)}</span>
+                        </>
+                      )}
                       {order.dataConsegna && (
                         <>
                           <span className="hidden text-xs text-muted-foreground/60 sm:inline">·</span>
@@ -360,10 +387,13 @@ export default function OrdersPage() {
                         {user?.role === "admin" && order.cancelledBy && (
                           <span><strong>Annullato da:</strong> {order.cancelledBy}</span>
                         )}
+                        {order.cancelledFromStatus && (
+                          <span><strong>Stato precedente:</strong> {formatStatusLabel(order.cancelledFromStatus)}</span>
+                        )}
                       </div>
                     )}
 
-                    {!order.luogoConsegna && !order.note && (order.cancelledAt || (user?.role === "admin" && order.cancelledBy)) && (
+                    {!order.luogoConsegna && !order.note && (order.cancelledAt || (user?.role === "admin" && order.cancelledBy) || order.cancelledFromStatus) && (
                       <div className="px-4 py-3 bg-muted/30 flex flex-col gap-1 text-xs text-muted-foreground border-b border-border">
                         {order.cancelledAt && (
                           <span><strong>Annullato il:</strong> {formatDate(order.cancelledAt)}</span>
@@ -371,6 +401,15 @@ export default function OrdersPage() {
                         {user?.role === "admin" && order.cancelledBy && (
                           <span><strong>Annullato da:</strong> {order.cancelledBy}</span>
                         )}
+                        {order.cancelledFromStatus && (
+                          <span><strong>Stato precedente:</strong> {formatStatusLabel(order.cancelledFromStatus)}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {isCancelled && (
+                      <div className="px-4 py-3 border-b border-red-200 bg-red-100/50 text-xs text-red-800">
+                        L&apos;ordine è nello storico degli annullati e può essere ripristinato mantenendo i dati originali.
                       </div>
                     )}
 
@@ -451,9 +490,23 @@ export default function OrdersPage() {
                     )}
 
                     {/* Actions */}
-                    {canEditOrder(order) && !isCancelled && !showDeleteConfirm && (
+                    {canEditOrder(order) && !showDeleteConfirm && (
                       <div className="px-4 py-3 border-t border-border flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-                        {hasAttachedDraft && !isDraft && (
+                        {isCancelled ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRestore(order)}
+                            disabled={isRestoring}
+                            className="text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/20 text-xs w-full justify-center sm:w-auto"
+                          >
+                            {isRestoring ? (
+                              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Ripristino…</>
+                            ) : (
+                              <><Undo2 className="h-3.5 w-3.5 mr-1.5" /> Ripristina ordine</>
+                            )}
+                          </Button>
+                        ) : hasAttachedDraft && !isDraft ? (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -467,8 +520,8 @@ export default function OrdersPage() {
                               <><Undo2 className="h-3.5 w-3.5 mr-1.5" /> Scarta bozza</>
                             )}
                           </Button>
-                        )}
-                        {canSendDraft && (
+                        ) : null}
+                        {!isCancelled && canSendDraft && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -483,26 +536,30 @@ export default function OrdersPage() {
                             )}
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(order)}
-                          disabled={isSendingThisDraft || isDiscardingThisDraft}
-                          className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto"
-                        >
-                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                          {editActionLabel}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteConfirm(order.id)}
-                          disabled={isSendingThisDraft || isDiscardingThisDraft}
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs w-full justify-center sm:w-auto"
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                          {deleteActionLabel}
-                        </Button>
+                        {!isCancelled && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(order)}
+                              disabled={isSendingThisDraft || isDiscardingThisDraft}
+                              className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto"
+                            >
+                              <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                              {editActionLabel}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteConfirm(order.id)}
+                              disabled={isSendingThisDraft || isDiscardingThisDraft}
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs w-full justify-center sm:w-auto"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                              {deleteActionLabel}
+                            </Button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -564,3 +621,20 @@ export default function OrdersPage() {
       </Badge>
     );
   }
+
+function formatStatusLabel(status: OrderStatus) {
+  switch (status) {
+    case "bozza":
+      return "Bozza";
+    case "confermato":
+      return "Confermato";
+    case "in_lavorazione":
+      return "In lavorazione";
+    case "spedito":
+      return "Spedito";
+    case "consegnato":
+      return "Consegnato";
+    case "annullato":
+      return "Annullato";
+  }
+}
