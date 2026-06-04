@@ -254,8 +254,9 @@ function renderDiffItemRow(
       <tr>
         <td style="${cell}text-align:left">${badge ? `${badge}<br/>` : ""}${escapeHtml(item.codice)}</td>
         <td style="${cell}text-align:left">${escapeHtml(item.descrizione)}</td>
-        <td style="${cell}text-align:center">${item.qty}</td>
         <td style="${cell}text-align:center">${escapeHtml(item.um ?? "")}</td>
+        <td style="${cell}text-align:center">${item.qty}</td>
+        <td style="${cell}text-align:right">EUR ${item.prezzoListino.toFixed(2)}</td>
         <td style="${cell}text-align:center">${scontoCell}</td>
         <td style="${cell}text-align:right">EUR ${prezzoEffettivo.toFixed(2)}</td>
       </tr>`;
@@ -271,20 +272,29 @@ function renderDiffModifiedRow(mod: ModifiedItem): string {
     if (!change) return current;
     return `<span style="color:#b31d28;text-decoration:line-through;">${escapeHtml(change.before)}</span> &rarr; <strong>${escapeHtml(change.after)}</strong>`;
   };
-  const prezzoEffettivo = after.sconto && after.sconto > 0
-    ? after.prezzoListino * (1 - after.sconto / 100)
-    : after.prezzoListino;
-  const prezzoCellContent = changedFields.has("prezzoListino") || changedFields.has("sconto")
-    ? `${changedFields.has("prezzoListino") ? fmtCell("prezzoListino", "") : `EUR ${after.prezzoListino.toFixed(2)}`}${changedFields.has("sconto") ? `<br/>Sconto: ${fmtCell("sconto", "")}` : ""}<br/><em>Effettivo: EUR ${prezzoEffettivo.toFixed(2)}</em>`
-    : `EUR ${prezzoEffettivo.toFixed(2)}`;
+  const listPriceCellContent = changedFields.has("prezzoListino")
+    ? fmtCell("prezzoListino", "")
+    : `EUR ${after.prezzoListino.toFixed(2)}`;
+  const scontoCellContent = changedFields.has("sconto")
+    ? fmtCell("sconto", "")
+    : formatScontoLabel(after.sconto);
+
+  const nettoBefore = mod.before.prezzoListino * (1 - (mod.before.sconto ?? 0) / 100);
+  const nettoAfter = mod.after.prezzoListino * (1 - (mod.after.sconto ?? 0) / 100);
+  const nettoChanged = Math.abs(nettoBefore - nettoAfter) > 0.005;
+  const nettoCellContent = nettoChanged
+    ? `<span style="color:#b31d28;text-decoration:line-through;">EUR ${nettoBefore.toFixed(2)}</span> &rarr; <strong>EUR ${nettoAfter.toFixed(2)}</strong>`
+    : `EUR ${nettoAfter.toFixed(2)}`;
+
   return `
       <tr>
         <td style="${cell}text-align:left"><span style="color:#b08800;font-weight:bold;">~ MODIFICATO</span><br/>${escapeHtml(after.codice)}</td>
         <td style="${cell}text-align:left">${changedFields.has("descrizione") ? fmtCell("descrizione", "") : escapeHtml(after.descrizione)}</td>
-        <td style="${cell}text-align:center">${changedFields.has("qty") ? fmtCell("qty", "") : after.qty}</td>
         <td style="${cell}text-align:center">${changedFields.has("um") ? fmtCell("um", "") : escapeHtml(after.um ?? "")}</td>
-        <td style="${cell}text-align:center">${changedFields.has("sconto") ? fmtCell("sconto", "") : formatScontoLabel(after.sconto)}</td>
-        <td style="${cell}text-align:right">${prezzoCellContent}</td>
+        <td style="${cell}text-align:center">${changedFields.has("qty") ? fmtCell("qty", "") : after.qty}</td>
+        <td style="${cell}text-align:right">${listPriceCellContent}</td>
+        <td style="${cell}text-align:center">${scontoCellContent}</td>
+        <td style="${cell}text-align:right">${nettoCellContent}</td>
       </tr>`;
 }
 
@@ -350,7 +360,6 @@ function buildOrderHtml(
         ? `Ordine Cancellato #${order.id}`
         : `Nuovo Ordine #${order.id}`;
 
-  const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0);
   const totalImponibile = calculateOrderDiscountedTotal(order.items);
   const mapsUrl = buildGoogleMapsSearchUrl(order.luogoConsegna);
   const agenteDisplayName = order.agenteFullName || order.agente;
@@ -364,10 +373,11 @@ function buildOrderHtml(
           : `—`;
         return `
       <tr>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:left">${item.codice}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:left">${item.descrizione}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:left">${escapeHtml(item.codice)}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:left">${escapeHtml(item.descrizione)}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:center">${escapeHtml(item.um ?? "")}</td>
         <td style="border:1px solid #cccccc;padding:6px;text-align:center">${item.qty}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:center">${item.um}</td>
+        <td style="border:1px solid #cccccc;padding:6px;text-align:right">EUR ${item.prezzoListino.toFixed(2)}</td>
         <td style="border:1px solid #cccccc;padding:6px;text-align:center">${scontoCell}</td>
         <td style="border:1px solid #cccccc;padding:6px;text-align:right">EUR ${prezzoEffettivo.toFixed(2)}</td>
       </tr>`;
@@ -415,21 +425,17 @@ function buildOrderHtml(
             <tr>
               <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Codice</th>
               <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Descrizione</th>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">Qta</th>
               <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">UM</th>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">Quantità</th>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:right;background:#f2f2f2;">Prezzo di listino</th>
               <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">Sconto</th>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:right;background:#f2f2f2;">Prezzo</th>
+              <th style="border:1px solid #cccccc;padding:6px;text-align:right;background:#f2f2f2;">Netto</th>
             </tr>
           </thead>
           <tbody>
             ${rows}
             <tr>
-              <td colspan="2" style="border:1px solid #cccccc;padding:6px;"><strong>Totale pezzi (attuale)</strong></td>
-              <td style="border:1px solid #cccccc;padding:6px;text-align:center;"><strong>${totalQty}</strong></td>
-              <td colspan="3" style="border:1px solid #cccccc;padding:6px;"></td>
-            </tr>
-            <tr>
-              <td colspan="5" style="border:1px solid #cccccc;padding:6px;"><strong>Totale imponibile</strong></td>
+              <td colspan="6" style="border:1px solid #cccccc;padding:6px;"><strong>Totale imponibile</strong></td>
               <td style="border:1px solid #cccccc;padding:6px;text-align:right;"><strong>${formatOrderCurrency(totalImponibile)}</strong></td>
             </tr>
           </tbody>
@@ -447,8 +453,8 @@ function buildOrderHtml(
 
 function formatItemTextLine(item: OrderHistoryItem, prefix: string): string {
   const prezzoEffettivo = getDiscountedUnitPrice(item);
-  const scontoLabel = item.sconto && item.sconto > 0 ? ` | Sconto: -${item.sconto}%` : "";
-  return `${prefix} ${item.codice} | ${item.descrizione} | Qta: ${item.qty} ${item.um}${scontoLabel} | EUR ${prezzoEffettivo.toFixed(2)}`;
+  const scontoLabel = item.sconto && item.sconto > 0 ? `-${item.sconto}%` : "—";
+  return `${prefix} ${item.codice} | ${item.descrizione} | UM: ${item.um ?? "—"} | Qta: ${item.qty} | Listino: EUR ${item.prezzoListino.toFixed(2)} | Sconto: ${scontoLabel} | Netto: EUR ${prezzoEffettivo.toFixed(2)}`;
 }
 
 function buildOrderText(
@@ -503,7 +509,7 @@ function buildOrderText(
     for (const u of diff.unchanged) lines.push(formatItemTextLine(u, "="));
 
     if (diff.headerChanges.length === 0 && diff.modified.length === 0 && diff.added.length === 0 && diff.removed.length === 0) {
-      lines.push("(nessuna differenza rilevata rispetto alla versione precedente)");
+      lines.push("(nessuna diferencia rilevata rispetto alla versione precedente)");
     }
   } else {
     lines.push("", "Righe ordine:");
@@ -511,7 +517,6 @@ function buildOrderText(
       lines.push(formatItemTextLine(item, "-"));
     }
   }
-  lines.push(`Totale pezzi (attuale): ${order.items.reduce((sum, item) => sum + item.qty, 0)}`);
   lines.push(`Totale imponibile: ${formatOrderCurrency(calculateOrderDiscountedTotal(order.items))}`);
   lines.push("", `Email generata automaticamente da ${APP_NAME}.`);
 
