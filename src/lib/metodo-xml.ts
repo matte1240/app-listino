@@ -64,7 +64,7 @@ export function buildMetodoOrderXml({ order, codiceCliente }: BuildMetodoOrderXm
   lines.push(`    <riferimento>${escapeXmlText(`Ordine app #${order.id}`)}</riferimento>`);
 
   if (order.luogoConsegna) {
-    lines.push(`    <destdiv1>${escapeXmlText(order.luogoConsegna)}</destdiv1>`);
+    lines.push(`    <destdiv1>${escapeXmlText(order.luogoConsegna.toUpperCase())}</destdiv1>`);
   }
   lines.push("  </testa>");
 
