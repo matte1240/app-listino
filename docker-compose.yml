@@ -21,24 +21,42 @@ services:
       start_period: 40s
 
   # Photon: autocompletamento indirizzi su dati OpenStreetMap (sostituisce Google Places).
-  # Nessuna API key, nessuna quota. Al primo avvio scarica l'indice dell'Italia:
-  # sono diversi GB, il servizio risponde solo a download completato.
-  # Nel frattempo l'app resta usabile — il campo indirizzo accetta testo libero.
+  # Nessuna API key, nessuna quota.
+  #
+  # IMPORTANTE — l'Italia non ha un indice DB precompilato: i soli paesi con
+  # indice pronto sono altri (Germania, Francia, Spagna...). Per l'Italia si usa
+  # IMPORT_MODE=jsonl, che scarica il dump OSM italiano e costruisce l'indice
+  # dentro al container. E' la modalita' che l'autore dell'immagine marca come
+  # sperimentale, ma e' l'unica che scarica solo dati italiani: l'alternativa
+  # stabile e' IMPORT_MODE=db con REGION=europe, ~61 GB compressi.
+  #
+  # Il primo avvio e' lungo (download + import): finche' non e' pronto l'app
+  # resta usabile, il campo indirizzo accetta testo libero.
+  # In jsonl mode gli aggiornamenti automatici non esistono: per rinfrescare i
+  # dati si riavvia con FORCE_UPDATE=TRUE.
   photon:
-    image: rtuszik/photon-docker:latest
+    image: rtuszik/photon-docker:2.3
     container_name: app-listino-photon
     restart: unless-stopped
+    ports:
+      # Solo su loopback: serve per i test con curl, non va esposto in rete.
+      - "127.0.0.1:2322:2322"
     environment:
-      - COUNTRY_CODE=it
+      - IMPORT_MODE=jsonl
+      - REGION=it
+      - LANGUAGES=it,en
+      - LOG_LEVEL=INFO
       - TZ=${TZ:-Europe/Rome}
     volumes:
-      - photon-data:/photon/photon_data
+      - photon-data:/photon/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2322/api?q=roma&limit=1"]
-      interval: 30s
+      interval: 60s
       timeout: 10s
       retries: 3
-      start_period: 600s
+      # L'import iniziale puo' durare ore: in questa finestra i fallimenti
+      # dell'healthcheck non contano.
+      start_period: 14400s
 
 volumes:
   photon-data:

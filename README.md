@@ -142,7 +142,7 @@ src/
 ## Troubleshooting
 
 - **"Failed to load materials"** — il file `data/listino.db` non esiste o non è scrivibile. Riavvia: la DDL viene applicata in idempotenza.
-- **Autocomplete indirizzi senza suggerimenti** — il container `photon` non è ancora pronto (al primo avvio scarica l'indice Italia, diversi GB: `docker compose logs -f photon`) oppure `PHOTON_BASE_URL` è errato. Il campo continua ad accettare testo libero, l'ordine si invia comunque. Per una verifica diretta: `curl "http://localhost:2322/api?q=via+roma+pordenone&lang=it&limit=5"`.
+- **Autocomplete indirizzi senza suggerimenti** — il container `photon` non è ancora pronto (al primo avvio scarica il dump OSM italiano e costruisce l'indice, operazione lunga: `docker compose logs -f photon`) oppure `PHOTON_BASE_URL` è errato. Il campo continua ad accettare testo libero, l'ordine si invia comunque. Per una verifica diretta: `curl "http://127.0.0.1:2322/api?q=via+roma+pordenone&lang=it&limit=5"`. In alternativa, per non ospitare nulla, si può puntare `PHOTON_BASE_URL` all'istanza pubblica `https://photon.komoot.io`.
 - **Email non inviate** — `GMAIL_USER` / `GMAIL_APP_PASSWORD` mancanti o invalidi; controlla i log server (`[mail] Invio email disabilitato: ...`).
 - **Mittente Gmail non corretto** — `GMAIL_FROM_ALIAS` deve essere un alias già configurato nell'account `GMAIL_USER` in Gmail → Impostazioni → Account → "Invia messaggio come". `GMAIL_FROM_NAME` controlla solo il nome visibile del mittente.
 - **XML Metodo non allegato** — l'ordine non ha cliente collegato a un'anagrafica con `codice`. Log: `[mail] XML Metodo non allegato per ordine #N: no_cliente | no_codice_anagrafica`.
