@@ -1,14 +1,6 @@
-import GoogleMapsScript from "@/components/GoogleMapsScript";
-import { getGoogleMapsPublicKey } from "@/lib/google-maps-key";
-
+// Le pagine sotto /orders leggono il DB a runtime: niente prerender in build.
 export const dynamic = "force-dynamic";
 
-export default async function OrdersLayout({ children }: { children: React.ReactNode }) {
-  const gmapsKey = (await getGoogleMapsPublicKey()) ?? "";
-  return (
-    <>
-      <GoogleMapsScript apiKey={gmapsKey} />
-      {children}
-    </>
-  );
+export default function OrdersLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

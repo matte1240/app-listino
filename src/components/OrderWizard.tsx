@@ -748,7 +748,7 @@ export default function OrderWizard({ editingOrder }: Props) {
                 </option>
               ))}
             </select>
-            {/* Manual input with Google Places autocomplete */}
+            {/* Manual input with Photon/OpenStreetMap address autocomplete */}
             <AddressAutocompleteInput
               ref={addressInputRef}
               id="luogo"

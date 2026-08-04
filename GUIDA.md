@@ -100,7 +100,7 @@ Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 ### Step 1 — Cliente
 
 - **Cliente**: digita il nome o il codice. Compaiono i suggerimenti dalle anagrafiche caricate. Se il cliente non è in anagrafica, scegli **Altro / nuovo cliente** e scrivi a mano la ragione sociale.
-- **Luogo di consegna (cantiere)**: inizia a digitare l'indirizzo. Se Google Maps è configurato, vedrai i suggerimenti. Se hai già consegnato a quel cliente, in cima trovi le **destinazioni recenti**.
+- **Luogo di consegna (cantiere)**: inizia a digitare l'indirizzo, dopo tre lettere compaiono i suggerimenti. Puoi scorrerli con le frecce e sceglierne uno con Invio. Se hai già consegnato a quel cliente, in cima trovi le **destinazioni recenti**.
 - **Data consegna**: scegli la data desiderata.
 - **Note**: testo libero (es. "scarico al 3° piano", "campanello A").
 
@@ -338,7 +338,10 @@ Solo gli admin possono creare/eliminare utenti. La password viene salvata cifrat
 ## 12. Domande frequenti
 
 **L'autocomplete del cantiere non mostra suggerimenti — perché?**
-Probabile che la chiave Google Maps non sia configurata o sia esaurita la quota. Puoi sempre digitare l'indirizzo a mano: l'ordine si invia comunque.
+Probabile che il servizio di ricerca indirizzi sia momentaneamente irraggiungibile (chiedi all'amministratore di controllare il container `photon`). Puoi sempre digitare l'indirizzo a mano: l'ordine si invia comunque.
+
+**Ho scritto un indirizzo ma l'app dice che non è valido.**
+I suggerimenti arrivano da OpenStreetMap: per località piccole può capitare che il numero civico non sia mappato. Prova a togliere il civico e a lasciare solo via e comune, oppure scegli il suggerimento più vicino.
 
 **Ho inviato un ordine sbagliato. Posso annullare?**
 Sì, dalla Cronologia premi **Cancella ordine**: parte la mail di cancellazione al magazzino. Avvisa anche per telefono se l'ordine era in lavorazione.

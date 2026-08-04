@@ -5,20 +5,23 @@ import {
   useRef,
   useState,
   useCallback,
+  useId,
   forwardRef,
   useImperativeHandle,
   type ComponentProps,
+  type KeyboardEvent,
 } from "react";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
-import { loadGoogleMapsPlacesApi } from "@/lib/google-maps-loader";
+import type { AddressSearchResult, AddressSuggestion } from "@/lib/address-types";
 
 export interface AddressData {
   address: string;
   lat: number | null;
   lng: number | null;
+  /** Identificativo OSM del risultato (`${osm_type}${osm_id}`) */
   placeId: string | null;
-  source: "google" | "manual" | null;
+  source: "photon" | "manual" | null;
 }
 
 export interface AddressAutocompleteInputHandle {
@@ -33,112 +36,37 @@ interface AddressAutocompleteInputProps
   onValidityChange?: (isValid: boolean) => void;
 }
 
-// Minimal inline types to avoid requiring @types/google.maps
-interface GMapsPrediction {
-  place_id: string;
-  description: string;
-  structured_formatting: {
-    main_text: string;
-    secondary_text: string;
-  };
-}
-
-interface GMapsGeocoderResult {
-  formatted_address: string;
-  place_id: string;
-  geometry: { location: { lat(): number; lng(): number } };
-}
-
-type GMapsAutocompleteSessionToken = object;
-type GMapsPlacesStatus = string;
-
-interface GMapsAutocompleteService {
-  getPlacePredictions(
-    request: {
-      input: string;
-      componentRestrictions?: { country: string };
-      types?: string[];
-      sessionToken?: GMapsAutocompleteSessionToken;
-    },
-    callback: (
-      predictions: GMapsPrediction[] | null,
-      status: GMapsPlacesStatus
-    ) => void
-  ): void;
-}
-
-interface GMapsGeocoder {
-  geocode(
-    request: { placeId?: string; address?: string },
-    callback: (
-      results: GMapsGeocoderResult[] | null,
-      status: string
-    ) => void
-  ): void;
-}
-
-interface GMapsPlaceInstance {
-  fetchFields(options: { fields: string[] }): Promise<{ place: GMapsPlaceInstance }>;
-  formattedAddress?: string;
-  location?: { lat(): number; lng(): number };
-  id?: string;
-}
-
-type GMapsWindow = Window & {
-  google?: {
-    maps?: {
-      places?: {
-        AutocompleteService?: new () => GMapsAutocompleteService;
-        AutocompleteSessionToken?: new () => GMapsAutocompleteSessionToken;
-        PlacesServiceStatus?: { OK: string };
-        /** New Places API (2025) */
-        AutocompleteSuggestion?: {
-          fetchAutocompleteSuggestions(request: {
-            input: string;
-            includedRegionCodes?: string[];
-            sessionToken?: GMapsAutocompleteSessionToken;
-          }): Promise<{
-            suggestions: Array<{
-              placePrediction: {
-                text: { toString(): string };
-                mainText: { toString(): string };
-                secondaryText: { toString(): string };
-                placeId: string;
-              };
-            }>;
-          }>;
-        };
-        /** New Places API (2025) */
-        Place?: new (options: { id: string }) => GMapsPlaceInstance;
-      };
-      Geocoder: new () => GMapsGeocoder;
-      GeocoderStatus: { OK: string };
-    };
-  };
-};
-
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 300;
 const MAX_CACHE_ENTRIES = 50;
-const GOOGLE_MAPS_READY_TIMEOUT_MS = 12000;
-const AUTOCOMPLETE_REQUEST_TIMEOUT_MS = 5000;
+const SUGGESTIONS_LIMIT = 8;
+const REQUEST_TIMEOUT_MS = 6000;
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`Timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
+/**
+ * Interroga la route proxy dell'app (che a sua volta parla con Photon).
+ * Qualunque problema di rete, timeout o risposta inattesa viene riportato come
+ * `unavailable`: il chiamante lo tratta come "non ho potuto verificare" e
+ * lascia passare il testo libero, invece di bloccare l'inserimento dell'ordine.
+ */
+async function requestSuggestions(
+  query: string,
+  limit: number
+): Promise<AddressSearchResult> {
+  try {
+    const res = await fetch(
+      `/api/geocode/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+      { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) }
+    );
+    if (!res.ok) return { status: "unavailable", results: [] };
 
-    promise
-      .then((value) => {
-        clearTimeout(timer);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
-  });
+    const data = (await res.json()) as Partial<AddressSearchResult>;
+    if (data?.status === "ok" && Array.isArray(data.results)) {
+      return { status: "ok", results: data.results };
+    }
+    return { status: "unavailable", results: [] };
+  } catch {
+    return { status: "unavailable", results: [] };
+  }
 }
 
 const AddressAutocompleteInput = forwardRef<
@@ -149,19 +77,17 @@ const AddressAutocompleteInput = forwardRef<
   ref
 ) {
   const [inputValue, setInputValue] = useState(value);
-  const [suggestions, setSuggestions] = useState<GMapsPrediction[]>([]);
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [isAddressValid, setIsAddressValid] = useState(value === "");
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
-  const autocompleteRef = useRef<GMapsAutocompleteService | null>(null);
-  const geocoderRef = useRef<GMapsGeocoder | null>(null);
+  const listboxId = useId();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryChainIdRef = useRef(0);
-  const sessionTokenRef = useRef<GMapsAutocompleteSessionToken | null>(null);
-  const predictionCacheRef = useRef<Map<string, GMapsPrediction[]>>(new Map());
+  const suggestionCacheRef = useRef<Map<string, AddressSuggestion[]>>(new Map());
   const latestRequestRef = useRef(0);
 
   const onChangeRef = useRef(onChange);
@@ -171,65 +97,17 @@ const AddressAutocompleteInput = forwardRef<
   useEffect(() => { onAddressResolvedRef.current = onAddressResolved; }, [onAddressResolved]);
   useEffect(() => { onValidityChangeRef.current = onValidityChange; }, [onValidityChange]);
 
-  const resetAutocompleteSession = useCallback(() => {
-    sessionTokenRef.current = null;
+  /** Invalida le richieste in volo, così una risposta tardiva non sovrascrive lo stato. */
+  const cancelPendingRequests = useCallback(() => {
     latestRequestRef.current += 1;
     setSuggestionsLoading(false);
   }, []);
 
-  const getAutocompleteSessionToken = useCallback((): GMapsAutocompleteSessionToken | undefined => {
-    const win = window as GMapsWindow;
-    const SessionTokenCtor = win.google?.maps?.places?.AutocompleteSessionToken;
-    if (!SessionTokenCtor) return undefined;
-
-    if (!sessionTokenRef.current) {
-      sessionTokenRef.current = new SessionTokenCtor();
-    }
-
-    return sessionTokenRef.current;
-  }, []);
-
-  const initGoogleMapsRefs = useCallback(() => {
-    const win = window as GMapsWindow;
-    const maps = win.google?.maps;
-    if (!maps) return;
-    if (maps.places?.AutocompleteService && !autocompleteRef.current) {
-      autocompleteRef.current = new maps.places.AutocompleteService();
-    }
-    if (maps.Geocoder && !geocoderRef.current) {
-      geocoderRef.current = new maps.Geocoder();
-    }
-  }, []);
-
-  const ensureGoogleMapsReady = useCallback(() => {
-    return withTimeout(loadGoogleMapsPlacesApi(), GOOGLE_MAPS_READY_TIMEOUT_MS)
-      .then(() => {
-        initGoogleMapsRefs();
-      });
-  }, [initGoogleMapsRefs]);
-
-  // Wait for the Google Maps script (loaded in app/orders/layout.tsx) to be ready.
-  // Also listen for the "google-maps-loaded" event in case the script loads after
-  // the initial polling window has already expired (e.g. very slow connections).
-  useEffect(() => {
-    void ensureGoogleMapsReady()
-      .catch(() => {
-        // Google Maps non disponibile: il campo funziona come testo libero
-      });
-
-    const onLateLoad = () => initGoogleMapsRefs();
-    window.addEventListener("google-maps-loaded", onLateLoad);
-    return () => {
-      window.removeEventListener("google-maps-loaded", onLateLoad);
-    };
-  }, [ensureGoogleMapsReady, initGoogleMapsRefs]);
-
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      resetAutocompleteSession();
     };
-  }, [resetAutocompleteSession]);
+  }, []);
 
   // Sync parent value when reset externally (e.g. switching recent destinations)
   const prevValueRef = useRef(value);
@@ -238,7 +116,8 @@ const AddressAutocompleteInput = forwardRef<
       setInputValue(value);
       setSuggestions([]);
       setDropdownOpen(false);
-      resetAutocompleteSession();
+      setHighlightedIndex(-1);
+      cancelPendingRequests();
       const valid = value === "";
       setIsAddressValid(valid);
       setAddressError(null);
@@ -247,7 +126,7 @@ const AddressAutocompleteInput = forwardRef<
     } else {
       prevValueRef.current = value;
     }
-  }, [value, inputValue, resetAutocompleteSession]);
+  }, [value, inputValue, cancelPendingRequests]);
 
   const markValid = useCallback((data: AddressData) => {
     setIsAddressValid(true);
@@ -262,138 +141,47 @@ const AddressAutocompleteInput = forwardRef<
     onValidityChangeRef.current?.(false);
   }, []);
 
-  const fetchSuggestions = useCallback((input: string) => {
-    const retryChainId = ++retryChainIdRef.current;
+  const fetchSuggestions = useCallback(async (input: string) => {
     const normalizedInput = input.trim();
-
-    const win = window as GMapsWindow;
-    const canUseNewApi =
-      typeof win.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions === "function";
-    const canUseLegacyApi = !!autocompleteRef.current;
 
     if (normalizedInput.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
+      setHighlightedIndex(-1);
       setSuggestionsLoading(false);
       return;
     }
 
-    if (!canUseNewApi && !canUseLegacyApi) {
-      setSuggestions([]);
-      setSuggestionsLoading(true);
-      void ensureGoogleMapsReady()
-        .then(() => {
-          if (retryChainId !== retryChainIdRef.current) return;
-
-          const refreshedWin = window as GMapsWindow;
-          const nowCanUseNewApi =
-            typeof refreshedWin.google?.maps?.places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions ===
-            "function";
-          const nowCanUseLegacyApi = !!autocompleteRef.current;
-
-          if (!nowCanUseNewApi && !nowCanUseLegacyApi) {
-            setSuggestionsLoading(false);
-            return;
-          }
-
-          fetchSuggestions(input);
-        })
-        .catch(() => {
-          if (retryChainId === retryChainIdRef.current) {
-            setSuggestionsLoading(false);
-          }
-        });
-      return;
-    }
-
     const cacheKey = normalizedInput.toLocaleLowerCase("it-IT");
-    const cachedSuggestions = predictionCacheRef.current.get(cacheKey);
-    if (cachedSuggestions) {
-      setSuggestions(cachedSuggestions);
+    const cached = suggestionCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSuggestions(cached);
+      setHighlightedIndex(-1);
       setSuggestionsLoading(false);
       return;
     }
 
     setSuggestionsLoading(true);
     const requestId = ++latestRequestRef.current;
-    const sessionToken = getAutocompleteSessionToken();
 
-    const storeSuggestions = (next: GMapsPrediction[]) => {
-      if (requestId !== latestRequestRef.current) return;
-      setSuggestionsLoading(false);
-      setSuggestions(next);
-      predictionCacheRef.current.set(cacheKey, next);
-      if (predictionCacheRef.current.size > MAX_CACHE_ENTRIES) {
-        const firstKey = predictionCacheRef.current.keys().next().value;
+    const result = await requestSuggestions(normalizedInput, SUGGESTIONS_LIMIT);
+
+    // Una risposta più vecchia dell'ultima richiesta partita va ignorata.
+    if (requestId !== latestRequestRef.current) return;
+
+    setSuggestionsLoading(false);
+    setSuggestions(result.results);
+    setHighlightedIndex(-1);
+
+    if (result.status === "ok") {
+      suggestionCacheRef.current.set(cacheKey, result.results);
+      if (suggestionCacheRef.current.size > MAX_CACHE_ENTRIES) {
+        const firstKey = suggestionCacheRef.current.keys().next().value;
         if (typeof firstKey === "string") {
-          predictionCacheRef.current.delete(firstKey);
+          suggestionCacheRef.current.delete(firstKey);
         }
       }
-    };
-
-    if (canUseNewApi) {
-      // New Places API (2025): promise-based AutocompleteSuggestion
-      const autocompleteService = win.google!.maps!.places!.AutocompleteSuggestion!;
-      let settled = false;
-      const finish = (action: () => void) => {
-        if (settled) return;
-        settled = true;
-        action();
-      };
-      const timeoutId = setTimeout(() => {
-        finish(() => storeSuggestions([]));
-      }, AUTOCOMPLETE_REQUEST_TIMEOUT_MS);
-
-      autocompleteService
-        .fetchAutocompleteSuggestions({
-          input: normalizedInput,
-          includedRegionCodes: ["it"],
-          sessionToken,
-        })
-        .then(({ suggestions }) => {
-          clearTimeout(timeoutId);
-          const mapped: GMapsPrediction[] = suggestions.map((s) => ({
-            place_id: s.placePrediction.placeId,
-            description: s.placePrediction.text.toString(),
-            structured_formatting: {
-              main_text: s.placePrediction.mainText.toString(),
-              secondary_text: s.placePrediction.secondaryText.toString(),
-            },
-          }));
-          finish(() => storeSuggestions(mapped));
-        })
-        .catch(() => {
-          clearTimeout(timeoutId);
-          finish(() => storeSuggestions([]));
-        });
-    } else {
-      // Legacy Places API: callback-based AutocompleteService
-      let settled = false;
-      const timeoutId = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        storeSuggestions([]);
-      }, AUTOCOMPLETE_REQUEST_TIMEOUT_MS);
-
-      autocompleteRef.current!.getPlacePredictions(
-        {
-          input: normalizedInput,
-          componentRestrictions: { country: "it" },
-          types: ["address"],
-          sessionToken,
-        },
-        (predictions, status) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeoutId);
-
-          // Note: PlacesServiceStatus may be absent in newer library versions
-          const OK = win.google?.maps?.places?.PlacesServiceStatus?.OK ?? "OK";
-          const next = status === OK && predictions ? predictions : [];
-          storeSuggestions(next);
-        }
-      );
     }
-  }, [getAutocompleteSessionToken, ensureGoogleMapsReady]);
+  }, []);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -405,112 +193,51 @@ const AddressAutocompleteInput = forwardRef<
       setIsAddressValid(false);
       setAddressError(null);
       setDropdownOpen(true);
+      setHighlightedIndex(-1);
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
 
-      if (!normalizedInput) {
-        setSuggestions([]);
-        setSuggestionsLoading(false);
-        resetAutocompleteSession();
-        return;
-      }
-
       if (normalizedInput.length < MIN_QUERY_LENGTH) {
         setSuggestions([]);
-        setSuggestionsLoading(false);
+        cancelPendingRequests();
         return;
       }
 
-      debounceRef.current = setTimeout(() => fetchSuggestions(newVal), DEBOUNCE_MS);
+      debounceRef.current = setTimeout(() => void fetchSuggestions(newVal), DEBOUNCE_MS);
     },
-    [fetchSuggestions, resetAutocompleteSession]
+    [fetchSuggestions, cancelPendingRequests]
   );
 
-  const geocodeRequest = useCallback(
-    (request: { placeId?: string; address?: string }): Promise<GMapsGeocoderResult | null> =>
-      new Promise((resolve) => {
-        if (!geocoderRef.current) { resolve(null); return; }
-        geocoderRef.current.geocode(request, (results, status) => {
-          const win = window as GMapsWindow;
-          const OK = win.google?.maps?.GeocoderStatus.OK ?? "OK";
-          resolve(status === OK && results?.[0] ? results[0] : null);
-        });
-      }),
-    []
-  );
-
+  /**
+   * Photon restituisce coordinate e indirizzo strutturato già nella risposta di
+   * autocompletamento: selezionare un suggerimento non richiede una seconda
+   * chiamata di dettaglio, quindi è immediato.
+   */
   const handleSelectSuggestion = useCallback(
-    async (suggestion: GMapsPrediction) => {
-      resetAutocompleteSession();
+    (suggestion: AddressSuggestion) => {
+      cancelPendingRequests();
       setSuggestions([]);
       setDropdownOpen(false);
+      setHighlightedIndex(-1);
       setInputValue(suggestion.description);
       onChangeRef.current(suggestion.description);
-      try {
-        setIsGeocoding(true);
-        const win = window as GMapsWindow;
-        const PlaceClass = win.google?.maps?.places?.Place;
-
-        if (typeof PlaceClass === "function") {
-          // New Places API (2025): use Place.fetchFields()
-          const place = new PlaceClass({ id: suggestion.place_id });
-          await place.fetchFields({ fields: ["formattedAddress", "location", "id"] });
-          const addr = place.formattedAddress;
-          if (addr && place.location) {
-            setInputValue(addr);
-            onChangeRef.current(addr);
-            markValid({
-              address: addr,
-              lat: place.location.lat(),
-              lng: place.location.lng(),
-              placeId: place.id ?? suggestion.place_id,
-              source: "google",
-            });
-          } else if (addr) {
-            setInputValue(addr);
-            onChangeRef.current(addr);
-            markValid({
-              address: addr,
-              lat: null,
-              lng: null,
-              placeId: place.id ?? suggestion.place_id,
-              source: "google",
-            });
-          } else {
-            markInvalid();
-          }
-        } else {
-          // Legacy: use Geocoder
-          const result = await geocodeRequest({ placeId: suggestion.place_id });
-          if (result) {
-            const addr = result.formatted_address;
-            setInputValue(addr);
-            onChangeRef.current(addr);
-            markValid({
-              address: addr,
-              lat: result.geometry.location.lat(),
-              lng: result.geometry.location.lng(),
-              placeId: suggestion.place_id,
-              source: "google",
-            });
-          } else {
-            markInvalid();
-          }
-        }
-      } catch {
-        markInvalid();
-      } finally {
-        setIsGeocoding(false);
-      }
+      markValid({
+        address: suggestion.description,
+        lat: suggestion.lat,
+        lng: suggestion.lng,
+        placeId: suggestion.id,
+        source: "photon",
+      });
     },
-    [geocodeRequest, markValid, markInvalid, resetAutocompleteSession]
+    [markValid, cancelPendingRequests]
   );
 
   const geocodeManual = useCallback(
     async (address: string): Promise<boolean> => {
-      resetAutocompleteSession();
+      cancelPendingRequests();
+      const trimmed = address.trim();
 
-      if (!address.trim()) {
+      if (!trimmed) {
         setIsAddressValid(true);
         setAddressError(null);
         onAddressResolvedRef.current?.({ address: "", lat: null, lng: null, placeId: null, source: null });
@@ -518,48 +245,48 @@ const AddressAutocompleteInput = forwardRef<
         return true;
       }
 
-      // Fallback: if Google Maps is not available, keep manual text input valid.
-      if (!geocoderRef.current) {
-        const manualAddress = address.trim();
-        setInputValue(manualAddress);
-        onChangeRef.current(manualAddress);
-        markValid({
-          address: manualAddress,
-          lat: null,
-          lng: null,
-          placeId: null,
-          source: "manual",
-        });
-        return true;
-      }
-
       try {
         setIsGeocoding(true);
         setAddressError(null);
-        const result = await geocodeRequest({ address });
-        if (result) {
-          const addr = result.formatted_address;
-          setInputValue(addr);
-          onChangeRef.current(addr);
+        const result = await requestSuggestions(trimmed, 1);
+
+        // Servizio indirizzi non raggiungibile: non possiamo verificare nulla,
+        // quindi accettiamo il testo così com'è e lasciamo proseguire l'ordine.
+        if (result.status === "unavailable") {
+          setInputValue(trimmed);
+          onChangeRef.current(trimmed);
           markValid({
-            address: addr,
-            lat: result.geometry.location.lat(),
-            lng: result.geometry.location.lng(),
-            placeId: result.place_id ?? null,
+            address: trimmed,
+            lat: null,
+            lng: null,
+            placeId: null,
             source: "manual",
           });
           return true;
         }
-        markInvalid();
-        return false;
-      } catch {
+
+        const best = result.results[0];
+        if (best) {
+          setInputValue(best.description);
+          onChangeRef.current(best.description);
+          markValid({
+            address: best.description,
+            lat: best.lat,
+            lng: best.lng,
+            placeId: best.id,
+            source: "manual",
+          });
+          return true;
+        }
+
+        // Il servizio ha risposto ma non conosce questo indirizzo.
         markInvalid();
         return false;
       } finally {
         setIsGeocoding(false);
       }
     },
-    [geocodeRequest, markValid, markInvalid, resetAutocompleteSession]
+    [markValid, markInvalid, cancelPendingRequests]
   );
 
   useImperativeHandle(
@@ -575,6 +302,41 @@ const AddressAutocompleteInput = forwardRef<
 
   const showDropdown = dropdownOpen && (suggestionsLoading || suggestions.length > 0);
 
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Escape") {
+        setDropdownOpen(false);
+        setHighlightedIndex(-1);
+        return;
+      }
+
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (suggestions.length === 0) return;
+        e.preventDefault();
+        setDropdownOpen(true);
+        setHighlightedIndex((current) => {
+          const delta = e.key === "ArrowDown" ? 1 : -1;
+          const next = current + delta;
+          if (next < 0) return suggestions.length - 1;
+          if (next >= suggestions.length) return 0;
+          return next;
+        });
+        return;
+      }
+
+      if (e.key === "Enter" && showDropdown && highlightedIndex >= 0) {
+        const suggestion = suggestions[highlightedIndex];
+        if (suggestion) {
+          e.preventDefault();
+          handleSelectSuggestion(suggestion);
+        }
+      }
+    },
+    [suggestions, highlightedIndex, showDropdown, handleSelectSuggestion]
+  );
+
+  const optionId = (index: number) => `${listboxId}-option-${index}`;
+
   return (
     <div className="relative">
       <div className="relative">
@@ -582,20 +344,29 @@ const AddressAutocompleteInput = forwardRef<
           value={inputValue}
           disabled={disabled || isGeocoding}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
           onFocus={() => {
             setDropdownOpen(true);
             if (inputValue.trim().length >= MIN_QUERY_LENGTH && suggestions.length === 0 && !suggestionsLoading) {
-              fetchSuggestions(inputValue);
+              void fetchSuggestions(inputValue);
             }
           }}
-          onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
+          onBlur={() => setTimeout(() => {
+            setDropdownOpen(false);
+            setHighlightedIndex(-1);
+          }, 150)}
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="words"
           spellCheck={false}
+          role="combobox"
           aria-expanded={showDropdown}
           aria-autocomplete="list"
           aria-haspopup="listbox"
+          aria-controls={showDropdown ? listboxId : undefined}
+          aria-activedescendant={
+            showDropdown && highlightedIndex >= 0 ? optionId(highlightedIndex) : undefined
+          }
           {...inputProps}
           className={`${inputProps.className ?? ""} ${!isAddressValid && addressError ? "border-destructive focus-visible:ring-destructive/50" : ""} ${isGeocoding ? "pr-10" : ""}`.trim()}
         />
@@ -608,6 +379,7 @@ const AddressAutocompleteInput = forwardRef<
 
       {showDropdown && (
         <div
+          id={listboxId}
           role="listbox"
           className="absolute z-30 mt-1 w-full rounded-xl border border-border bg-popover shadow-lg overflow-hidden"
         >
@@ -616,21 +388,23 @@ const AddressAutocompleteInput = forwardRef<
               <Loader2 className="h-3 w-3 animate-spin" /> Ricerca indirizzi…
             </div>
           )}
-          {suggestions.map((suggestion) => (
+          {suggestions.map((suggestion, index) => (
             <button
-              key={suggestion.place_id}
+              key={suggestion.id}
+              id={optionId(index)}
               type="button"
               role="option"
-              aria-selected={false}
+              aria-selected={index === highlightedIndex}
               onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setHighlightedIndex(index)}
               onClick={() => handleSelectSuggestion(suggestion)}
-              className="w-full text-left px-3 py-2.5 border-b border-border/60 last:border-b-0 hover:bg-muted/50 transition-colors"
+              className={`w-full text-left px-3 py-2.5 border-b border-border/60 last:border-b-0 transition-colors ${index === highlightedIndex ? "bg-muted/50" : "hover:bg-muted/50"}`}
             >
               <p className="text-sm font-medium truncate">
-                {suggestion.structured_formatting.main_text}
+                {suggestion.mainText}
               </p>
               <p className="text-xs text-muted-foreground truncate">
-                {suggestion.structured_formatting.secondary_text}
+                {suggestion.secondaryText}
               </p>
             </button>
           ))}

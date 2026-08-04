@@ -17,7 +17,7 @@ Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e *
 - **Diff visivo nelle mail di modifica** — header e righe con indicatori aggiunto/rimosso/modificato (verde/rosso/giallo)
 - **Anagrafiche clienti** — import massivo da Excel con upsert per `Codice` (riconosce header `N.Cli.`, `Codice Cliente`, ecc.)
 - **Export Metodo** — XML scaricabile a richiesta dal pannello admin per ogni ordine
-- **Luogo di consegna** — autocomplete Google Places + memoria delle ultime destinazioni per cliente
+- **Luogo di consegna** — autocomplete indirizzi via Photon/OpenStreetMap (self-hosted, senza API key) + memoria delle ultime destinazioni per cliente
 - **AI Enrichment** — rigenerazione descrizioni materiali via OpenAI (modello configurabile)
 - **Amministrazione** — gestione utenti, listino Excel, anagrafiche, email per filiale, backup/restore
 - **Backup automatici** — scheduler interno + upload su Hetzner Object Storage (S3 compatibile)
@@ -72,7 +72,7 @@ Tutte le chiavi sono documentate in [`.env.example`](.env.example). Sintesi:
 |---|---|---|
 | Sicurezza | `JWT_SECRET`, `COOKIE_SECURE` | **Sì** in produzione |
 | Email | `GMAIL_USER`, `GMAIL_FROM_ALIAS`, `GMAIL_FROM_NAME`, `GMAIL_APP_PASSWORD`, `ORDER_EMAIL_TO` | Opzionale (senza credenziali Gmail, l'invio mail è disabilitato) |
-| Google Places | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Opzionale (autocomplete indirizzi) |
+| Ricerca indirizzi | `PHOTON_BASE_URL` | Opzionale (default `http://photon:2322`, il servizio del docker-compose) |
 | OpenAI | `OPENAI_API_KEY`, `AI_MODEL` | Opzionale (AI enrichment descrizioni) |
 | Backup S3 | `DB_BACKUP_S3_*`, `DB_BACKUP_AUTO_*` | Opzionale (backup remoti) |
 
@@ -142,7 +142,7 @@ src/
 ## Troubleshooting
 
 - **"Failed to load materials"** — il file `data/listino.db` non esiste o non è scrivibile. Riavvia: la DDL viene applicata in idempotenza.
-- **Google Maps non funziona** — chiave mancante o senza Places API abilitata in Google Cloud Console.
+- **Autocomplete indirizzi senza suggerimenti** — il container `photon` non è ancora pronto (al primo avvio scarica l'indice Italia, diversi GB: `docker compose logs -f photon`) oppure `PHOTON_BASE_URL` è errato. Il campo continua ad accettare testo libero, l'ordine si invia comunque. Per una verifica diretta: `curl "http://localhost:2322/api?q=via+roma+pordenone&lang=it&limit=5"`.
 - **Email non inviate** — `GMAIL_USER` / `GMAIL_APP_PASSWORD` mancanti o invalidi; controlla i log server (`[mail] Invio email disabilitato: ...`).
 - **Mittente Gmail non corretto** — `GMAIL_FROM_ALIAS` deve essere un alias già configurato nell'account `GMAIL_USER` in Gmail → Impostazioni → Account → "Invia messaggio come". `GMAIL_FROM_NAME` controlla solo il nome visibile del mittente.
 - **XML Metodo non allegato** — l'ordine non ha cliente collegato a un'anagrafica con `codice`. Log: `[mail] XML Metodo non allegato per ordine #N: no_cliente | no_codice_anagrafica`.

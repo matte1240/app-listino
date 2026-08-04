@@ -9,6 +9,8 @@ services:
       - .env
     environment:
       - TZ=${TZ:-Europe/Rome}
+      # Ricerca indirizzi: punta al servizio photon qui sotto.
+      - PHOTON_BASE_URL=${PHOTON_BASE_URL:-http://photon:2322}
     volumes:
       - ./data:/app/data
     healthcheck:
@@ -17,3 +19,26 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Photon: autocompletamento indirizzi su dati OpenStreetMap (sostituisce Google Places).
+  # Nessuna API key, nessuna quota. Al primo avvio scarica l'indice dell'Italia:
+  # sono diversi GB, il servizio risponde solo a download completato.
+  # Nel frattempo l'app resta usabile — il campo indirizzo accetta testo libero.
+  photon:
+    image: rtuszik/photon-docker:latest
+    container_name: app-listino-photon
+    restart: unless-stopped
+    environment:
+      - COUNTRY_CODE=it
+      - TZ=${TZ:-Europe/Rome}
+    volumes:
+      - photon-data:/photon/photon_data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2322/api?q=roma&limit=1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+
+volumes:
+  photon-data:
