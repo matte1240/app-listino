@@ -4,19 +4,17 @@ export const DISCOUNT_8_MULTIPLIER = 0.92;
 export const DISCOUNT_15_MULTIPLIER = 0.85;
 
 const PRICE_FORMAT = "#,##0.00";
-const PRICE_COLUMNS = [3, 4, 5];
-const COLUMNS = [
-  "Categoria",
-  "Codice articolo",
-  "Descrizione articolo",
-  "Prezzo listino",
-  "Sconto 8%",
-  "Sconto 15%",
-  "Stato",
-];
-const COLUMN_WIDTHS = [28, 16, 60, 14, 12, 12, 12];
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-type Row = (string | number | null)[];
+const COLUMNS = [
+  { header: "Categoria", key: "categoria", width: 28 },
+  { header: "Codice articolo", key: "codice", width: 16 },
+  { header: "Descrizione articolo", key: "descrizione", width: 60 },
+  { header: "Prezzo listino", key: "prezzoListino", width: 14, numFmt: PRICE_FORMAT },
+  { header: "Sconto 8%", key: "sconto8", width: 12, numFmt: PRICE_FORMAT },
+  { header: "Sconto 15%", key: "sconto15", width: 12, numFmt: PRICE_FORMAT },
+  { header: "Stato", key: "stato", width: 12 },
+];
 
 /** Arrotonda ai centesimi, come i prezzi mostrati nel listino stampato. */
 function roundPrice(value: number): number {
@@ -38,47 +36,63 @@ export function buildListinoFileName(date = new Date()): string {
   return `listino-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.xlsx`;
 }
 
-/**
- * Genera il listino in formato Excel: una tabella unica con i filtri attivi
- * sulle intestazioni, ordinata per categoria come nella stampa PDF.
- */
-export async function exportListinoToExcel(materials: Material[], fileName = buildListinoFileName()) {
-  const XLSX = await import("xlsx");
+function downloadBuffer(buffer: ArrayBuffer, fileName: string) {
+  const url = URL.createObjectURL(new Blob([buffer], { type: XLSX_MIME }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
-  const rows: Row[] = [[...COLUMNS]];
+/**
+ * Genera il listino in formato Excel: una tabella unica con intestazione
+ * bloccata e filtri su tutte le colonne, ordinata per categoria come nella
+ * stampa PDF.
+ */
+export async function buildListinoWorkbookBuffer(materials: Material[]): Promise<ArrayBuffer> {
+  const ExcelJS = await import("exceljs");
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Listino");
+  sheet.columns = COLUMNS.map(({ header, key, width }) => ({ header, key, width }));
 
   for (const [categoria, items] of groupByCategoria(materials)) {
     for (const item of items) {
       const prezzo = item.prezzoListino || 0;
-      rows.push([
-        categoria.toUpperCase(),
-        item.codice,
-        item.descrizioneAI || item.descrizione,
-        roundPrice(prezzo),
-        roundPrice(prezzo * DISCOUNT_8_MULTIPLIER),
-        roundPrice(prezzo * DISCOUNT_15_MULTIPLIER),
-        item.obsoleto ? "Obsoleto" : "Attivo",
-      ]);
+      sheet.addRow({
+        categoria: categoria.toUpperCase(),
+        codice: item.codice,
+        descrizione: item.descrizioneAI || item.descrizione,
+        prezzoListino: roundPrice(prezzo),
+        sconto8: roundPrice(prezzo * DISCOUNT_8_MULTIPLIER),
+        sconto15: roundPrice(prezzo * DISCOUNT_15_MULTIPLIER),
+        stato: item.obsoleto ? "Obsoleto" : "Attivo",
+      });
     }
   }
 
-  const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet["!cols"] = COLUMN_WIDTHS.map((wch) => ({ wch }));
-  sheet["!autofilter"] = {
-    ref: XLSX.utils.encode_range({
-      s: { r: 0, c: 0 },
-      e: { r: rows.length - 1, c: COLUMNS.length - 1 },
-    }),
+  COLUMNS.forEach((column, index) => {
+    if (column.numFmt) sheet.getColumn(index + 1).numFmt = column.numFmt;
+  });
+
+  const headerRow = sheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCEBFA" } };
+
+  // Intestazione sempre visibile durante lo scorrimento + filtri su tutte le colonne.
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  sheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: sheet.rowCount, column: COLUMNS.length },
   };
 
-  for (let r = 1; r < rows.length; r += 1) {
-    for (const c of PRICE_COLUMNS) {
-      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
-      if (cell) cell.z = PRICE_FORMAT;
-    }
-  }
+  return workbook.xlsx.writeBuffer() as Promise<ArrayBuffer>;
+}
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, "Listino");
-  XLSX.writeFile(workbook, fileName, { compression: true });
+export async function exportListinoToExcel(materials: Material[], fileName = buildListinoFileName()) {
+  downloadBuffer(await buildListinoWorkbookBuffer(materials), fileName);
 }
