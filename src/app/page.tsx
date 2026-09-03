@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { Printer } from "lucide-react";
+import { FileSpreadsheet, Printer } from "lucide-react";
+import { toast } from "sonner";
 import SearchBar from "@/components/SearchBar";
 import MaterialList from "@/components/MaterialList";
 import { Button } from "@/components/ui/button";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useAuth } from "@/lib/auth-context";
-import type { Material } from "@/types";
-
-const DISCOUNT_8_MULTIPLIER = 0.92;
-const DISCOUNT_15_MULTIPLIER = 0.85;
+import {
+  DISCOUNT_8_MULTIPLIER,
+  DISCOUNT_15_MULTIPLIER,
+  exportListinoToExcel,
+  groupByCategoria,
+} from "@/lib/listino-export";
 
 function formatPrice(value: number): string {
   return value.toLocaleString("it-IT", {
@@ -23,18 +26,24 @@ function formatPrice(value: number): string {
 export default function Home() {
   const materials = useOrderStore((s) => s.materials);
   const setMaterials = useOrderStore((s) => s.setMaterials);
-  const { loading } = useAuth();
+  const { user, loading } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [exporting, setExporting] = useState(false);
   const headerCellClass = "border border-black px-2 py-1";
   const bodyCellClass = "border border-black px-2 py-1";
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, Material[]>();
-    for (const material of materials) {
-      const categoria = material.categoria?.trim() || "SENZA CATEGORIA";
-      if (!map.has(categoria)) map.set(categoria, []);
-      map.get(categoria)!.push(material);
+  const grouped = useMemo(() => groupByCategoria(materials), [materials]);
+
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    try {
+      await exportListinoToExcel(materials);
+    } catch (error) {
+      console.error("[listino] Errore export Excel:", error);
+      toast.error("Errore durante l'esportazione in Excel");
+    } finally {
+      setExporting(false);
     }
-    return Array.from(map.entries());
   }, [materials]);
 
   // Load materials if not yet loaded
@@ -73,6 +82,18 @@ export default function Home() {
               <Printer className="h-4 w-4" />
               Esporta PDF
             </Button>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                disabled={materials.length === 0 || exporting}
+                className="gap-2 justify-center sm:shrink-0"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                {exporting ? "Esportazione..." : "Esporta Excel"}
+              </Button>
+            )}
           </div>
         </div>
 
