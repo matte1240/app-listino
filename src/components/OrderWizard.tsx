@@ -600,8 +600,8 @@ export default function OrderWizard({ editingOrder }: Props) {
         </div>
 
         {/* Mobile cart drawer */}
-        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen} direction="right">
-          <DrawerContent className="lg:hidden w-[88%] p-0">
+        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
+          <DrawerContent className="lg:hidden p-0 rounded-t-2xl">
             <DrawerHeader className="px-4 py-3 border-b border-border">
               <div className="flex items-center justify-between gap-2">
                 <DrawerTitle className="text-sm flex items-center gap-2">
@@ -619,8 +619,8 @@ export default function OrderWizard({ editingOrder }: Props) {
                 </DrawerClose>
               </div>
             </DrawerHeader>
-            <div className="px-4 py-4 flex flex-col gap-3 overflow-y-auto">
-              {renderCartSummary("max-h-[52dvh]")}
+            <div className="min-h-0 flex-1 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex flex-col gap-3 overflow-y-auto">
+              {renderCartSummary("max-h-[50dvh]")}
             </div>
           </DrawerContent>
         </Drawer>
@@ -639,10 +639,20 @@ export default function OrderWizard({ editingOrder }: Props) {
             <ChevronLeft className="h-4 w-4" />
             Indietro
           </Button>
-          <div className="flex-1 text-center text-sm">
-            <span className="font-semibold">{flaggedCount}</span>
-            <span className="text-muted-foreground"> articoli</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setMobileCartOpen(true)}
+            aria-label={`Apri carrello, ${flaggedCount} articoli`}
+            className="flex-1 min-w-0 h-10 rounded-xl border border-border bg-card px-2 flex items-center justify-center gap-2 text-sm hover:border-primary/40 active:bg-muted transition-colors"
+          >
+            <ShoppingCart className="h-4 w-4 text-primary shrink-0" />
+            <span className="flex flex-col items-start leading-tight min-w-0">
+              <span className="font-semibold truncate">
+                {flaggedCount} <span className="font-normal text-muted-foreground">articoli</span>
+              </span>
+              <span className="text-[11px] text-muted-foreground tabular-nums truncate">{formatOrderCurrency(totalImponibile)}</span>
+            </span>
+          </button>
           <Button
             size="sm"
             className="gap-1.5 font-semibold"

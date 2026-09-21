@@ -282,8 +282,20 @@ export function reorderLines(lines: ReadonlyArray<OrderLine>, activeId: string, 
   return ensureTrasportoLast([...next, ...lines.filter(isTrasportoLine)]);
 }
 
-export function makeManualLine(codiceManuale: string = DEFAULT_CODICE_MANUALE): OrderLine {
-  return { id: newLineId(), tipo: "manuale", codice: codiceManuale, descrizione: "", qty: 1, um: "", prezzoListino: 0, sconto: 0 };
+/** Dati iniziali di una riga manuale (dalla casella di inserimento rapido). */
+export type ManualLineInit = Partial<Pick<OrderHistoryItem, "descrizione" | "um" | "qty" | "prezzoListino" | "sconto">>;
+
+export function makeManualLine(codiceManuale: string = DEFAULT_CODICE_MANUALE, init: ManualLineInit = {}): OrderLine {
+  return {
+    id: newLineId(),
+    tipo: "manuale",
+    codice: codiceManuale,
+    descrizione: init.descrizione ?? "",
+    qty: init.qty ?? 1,
+    um: init.um ?? "",
+    prezzoListino: init.prezzoListino ?? 0,
+    sconto: init.sconto ?? 0,
+  };
 }
 
 export function makeCommentLine(testo = ""): OrderLine {

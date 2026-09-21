@@ -1,5 +1,6 @@
 import type { Material, OrderHistoryItem, OrderLine } from "@/types";
 import {
+  DEFAULT_CODICE_MANUALE,
   insertLineBefore,
   itemsToLines,
   makeCommentLine,
@@ -10,6 +11,7 @@ import {
   setTrasportoLine,
   updateLine,
   upsertArticleLine,
+  type ManualLineInit,
 } from "@/lib/order-lines";
 
 /** Azioni sulle righe condivise dagli store di ordine e preventivo. */
@@ -26,10 +28,10 @@ export interface LineActions {
   removeLine: (id: string) => void;
   moveLine: (id: string, direction: "up" | "down") => void;
   reorderLines: (activeId: string, overId: string) => void;
-  /** Inserisce una riga manuale prima di `beforeId` (o in coda); restituisce l'id creato. */
-  addManualLine: (beforeId?: string | null) => string;
-  /** Inserisce una riga nota prima di `beforeId` (o in coda); restituisce l'id creato. */
-  addCommentLine: (beforeId?: string | null) => string;
+  /** Inserisce una riga manuale (vuota o con i dati iniziali) prima di `beforeId` (o in coda); restituisce l'id creato. */
+  addManualLine: (beforeId?: string | null, init?: ManualLineInit) => string;
+  /** Inserisce una riga nota (con testo opzionale) prima di `beforeId` (o in coda); restituisce l'id creato. */
+  addCommentLine: (beforeId?: string | null, testo?: string) => string;
   /** Imposta (importo > 0) o rimuove (null) la riga spese di trasporto. */
   setTrasporto: (importo: number | null) => void;
 }
@@ -48,13 +50,13 @@ export function createLineActions<S extends LinesState>(set: SetState<S>): LineA
     removeLine: (id) => update((lines) => removeLine(lines, id)),
     moveLine: (id, direction) => update((lines) => moveLine(lines, id, direction)),
     reorderLines: (activeId, overId) => update((lines) => reorderLines(lines, activeId, overId)),
-    addManualLine: (beforeId) => {
-      const line = makeManualLine();
+    addManualLine: (beforeId, init) => {
+      const line = makeManualLine(DEFAULT_CODICE_MANUALE, init);
       update((lines) => insertLineBefore(lines, line, beforeId));
       return line.id;
     },
-    addCommentLine: (beforeId) => {
-      const line = makeCommentLine();
+    addCommentLine: (beforeId, testo) => {
+      const line = makeCommentLine(testo);
       update((lines) => insertLineBefore(lines, line, beforeId));
       return line.id;
     },
