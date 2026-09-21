@@ -62,6 +62,15 @@ docker compose -f docker-compose.dev.yml pull
 docker compose -f docker-compose.dev.yml up -d   # porta 3001, dati in ./data-dev
 ```
 
+### CI: runner self-hosted
+
+Il workflow `.github/workflows/docker-publish.yml` gira su un runner **self-hosted** (`runs-on: [self-hosted, vm-ubuntu]`, utente `github-runner` nel gruppo `docker`). Note operative:
+
+- Le PR aperte da **fork** non vengono eseguite sul runner (avrebbero accesso al Docker della VM); girano solo push, tag, avvio manuale e PR da branch interni.
+- A fine build la cache locale di buildx e le immagini penzolanti vengono rimosse (spazio disco limitato sulla VM); la cache dei layer resta quella di GitHub Actions.
+- **Deploy automatico dev**: impostando la variabile di repository `DEV_COMPOSE_DIR` (Settings → Secrets and variables → Actions → Variables) con la cartella della VM che contiene `docker-compose.dev.yml` e `.env.dev`, ogni push su `dev` esegue anche `pull` + `up -d` del container dev subito dopo la pubblicazione dell'immagine. Senza la variabile il job viene saltato.
+- Se il runner è spento i workflow restano in coda: per tornare ai runner GitHub basta rimettere `runs-on: ubuntu-latest`.
+
 ---
 
 ## Comandi
