@@ -16,6 +16,7 @@ import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@
 import SearchBar from "@/components/SearchBar";
 import MaterialList from "@/components/MaterialList";
 import OrderLinesEditor from "@/components/OrderLinesEditor";
+import type { LineComposerRequest } from "@/components/QuickLineComposer";
 import AddressAutocompleteInput, {
   type AddressAutocompleteInputHandle,
   type AddressData,
@@ -25,7 +26,7 @@ import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCu
 import { useAuth } from "@/lib/auth-context";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI, type AnagraficaSearchItem, type OrderHistoryItem } from "@/types";
-import type { Order } from "@/types";
+import type { Order, OrderLine } from "@/types";
 import ExitOrderDialog from "@/components/ExitOrderDialog";
 
 const STEP_LABELS = ["Cliente", "Materiali", "Dettagli", "Riepilogo"] as const;
@@ -74,6 +75,8 @@ export default function OrderWizard({ editingOrder }: Props) {
   const [selectedRecentDestination, setSelectedRecentDestination] = useState("");
   const [openArticleRequest, setOpenArticleRequest] = useState<{ codice: string; requestId: number } | null>(null);
   const openArticleRequestIdRef = useRef(0);
+  const [lineRequest, setLineRequest] = useState<{ request: LineComposerRequest; requestId: number } | null>(null);
+  const lineRequestIdRef = useRef(0);
 
   const { user } = useAuth();
   const isEditing = !!editingOrder;
@@ -236,6 +239,27 @@ export default function OrderWizard({ editingOrder }: Props) {
     });
   }, []);
 
+  /** Righe manuali e note si modificano dalla casella in cima alla lista articoli (step Materiali), come gli articoli. */
+  const openLineComposer = useCallback((request: LineComposerRequest) => {
+    setMobileCartOpen(false);
+    setSearchQuery("");
+    lineRequestIdRef.current += 1;
+    setLineRequest({ request, requestId: lineRequestIdRef.current });
+    setStep(2);
+  }, [setMobileCartOpen, setSearchQuery, setStep]);
+
+  const handleEditLine = useCallback((line: OrderLine) => {
+    openLineComposer({ kind: line.tipo === "commento" ? "nota" : "manuale", line });
+  }, [openLineComposer]);
+
+  const handleAddNoteAbove = useCallback((beforeId: string) => {
+    openLineComposer({ kind: "nota", beforeId });
+  }, [openLineComposer]);
+
+  const handleLineRequestHandled = useCallback((requestId: number) => {
+    setLineRequest((current) => (current && current.requestId === requestId ? null : current));
+  }, []);
+
   // Le righe dello store sono già nel formato persistito (id, tipo, snapshot descrizione/prezzo).
   const buildOrderItems = useCallback((): OrderHistoryItem[] => lines, [lines]);
 
@@ -310,6 +334,8 @@ export default function OrderWizard({ editingOrder }: Props) {
           store="order"
           mode="cart"
           onEditArticle={handleEditItemInCatalog}
+          onEditLine={handleEditLine}
+          onAddNoteAbove={handleAddNoteAbove}
           listHeightClass={itemsHeightClass}
         />
       </div>
@@ -572,6 +598,8 @@ export default function OrderWizard({ editingOrder }: Props) {
               onArticleConfirmed={handleArticleConfirmed}
               openArticleRequest={openArticleRequest}
               onOpenArticleRequestHandled={handleOpenArticleRequestHandled}
+              lineRequest={lineRequest}
+              onLineRequestHandled={handleLineRequestHandled}
             />
           </main>
 
@@ -910,6 +938,8 @@ export default function OrderWizard({ editingOrder }: Props) {
               store="order"
               mode="summary"
               onEditArticle={handleEditItemInCatalog}
+              onEditLine={handleEditLine}
+              onAddNoteAbove={handleAddNoteAbove}
               showTrasportoControl
             />
           </div>

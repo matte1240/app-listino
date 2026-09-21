@@ -135,9 +135,9 @@ Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 Il corpo dell'ordine (pannello **Righe ordine** nel carrello e nel riepilogo) mostra le righe **nell'ordine in cui le hai inserite**, non per codice.
 
 - **Riordinare**: trascina una riga con la maniglia `⋮⋮` (su tablet tieni premuto un attimo, poi trascina) oppure usa le frecce **▲ ▼**.
-- **Nota**: nella casella in cima alla lista articoli tocca **Nota**, scrivi il testo e premi **Aggiungi nota**: la riga va in fondo all'ordine. L'icona "nota sopra" su ogni riga del carrello la inserisce invece sopra quella riga. Serve per intitolare un gruppo di articoli (es. *Materiale per il piano terra*) o dare istruzioni al magazzino. Le note compaiono nella mail, nell'XML Metodo (come sola descrizione) e nel PDF del preventivo.
+- **Nota**: nella casella in cima alla lista articoli tocca **Nota**, scrivi il testo e premi **Aggiungi nota**: la riga va in fondo all'ordine. L'icona "nota sopra" su ogni riga del carrello apre la stessa casella e inserisce la nota sopra quella riga. Serve per intitolare un gruppo di articoli (es. *Materiale per il piano terra*) o dare istruzioni al magazzino. Le note compaiono nella mail, nell'XML Metodo (come sola descrizione) e nel PDF del preventivo.
 - **Articolo manuale**: nella stessa casella tocca **Articolo manuale**, compila **descrizione, U.M., prezzo e quantità** (con lo stesso selettore sconto degli articoli) e premi **Aggiungi**. Se cerchi un articolo che non esiste a listino, sotto "Nessun risultato" trovi **Inseriscilo come articolo manuale** con la descrizione già compilata. Nell'XML Metodo la riga usa il codice generico configurato dall'admin (sezione 11.9).
-- Nel riepilogo (step 4) i pulsanti **+ Articolo manuale** e **+ Nota** sotto le righe permettono di aggiungere una riga all'ultimo momento.
+- **Modificare** una riga manuale o una nota: nel carrello e nel riepilogo le righe sono di sola lettura, come gli articoli; il pulsante **Modifica** riapre la casella in cima alla lista già compilata (premi **Salva modifica** per confermare).
 - Le righe vuote (nota senza testo, articolo manuale senza descrizione o quantità) non vengono salvate.
 
 ### Step 3 — Dettagli

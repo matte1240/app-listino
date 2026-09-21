@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -14,10 +14,9 @@ import {
 import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDown, ArrowUp, GripVertical, MessageSquare, MessageSquarePlus, PackagePlus, Truck, X } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, MessageSquare, MessageSquarePlus, Truck, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import DiscountSelector from "@/components/DiscountSelector";
-import NumberField, { IOS_FONT } from "@/components/NumberField";
+import NumberField from "@/components/NumberField";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { getTrasportoLine, isTrasportoLine } from "@/lib/order-lines";
@@ -34,6 +33,10 @@ interface Props {
   mode: EditorMode;
   /** Apre l'articolo nel catalogo per modificare quantità/sconto. */
   onEditArticle?: (codice: string) => void;
+  /** Apre la casella in cima alla lista per modificare una riga manuale o una nota. */
+  onEditLine?: (line: OrderLine) => void;
+  /** Apre la casella in cima alla lista per inserire una nota sopra la riga indicata. */
+  onAddNoteAbove?: (beforeId: string) => void;
   /** Mostra il blocco "Spese di trasporto" con checkbox e importo. */
   showTrasportoControl?: boolean;
   /** Altezza massima dell'elenco (classe Tailwind), con scroll interno. */
@@ -79,7 +82,20 @@ interface RowProps {
   mode: EditorMode;
   actions: LineActions;
   onEditArticle?: (codice: string) => void;
-  autoFocus: boolean;
+  onEditLine?: (line: OrderLine) => void;
+  onAddNoteAbove?: (beforeId: string) => void;
+}
+
+function EditLineButton({ onClick, label = "Modifica" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-6 px-2 rounded-md border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+    >
+      {label}
+    </button>
+  );
 }
 
 function ArticleRowContent({ line, mode, onEditArticle }: Pick<RowProps, "line" | "mode" | "onEditArticle">) {
@@ -102,107 +118,59 @@ function ArticleRowContent({ line, mode, onEditArticle }: Pick<RowProps, "line" 
           )
         )}
         {mode === "summary" && <span className="ml-auto font-semibold text-foreground">{formatOrderCurrency(getLineTotal(line))}</span>}
-        {onEditArticle && (
-          <button
-            type="button"
-            onClick={() => onEditArticle(line.codice)}
-            className="h-6 px-2 rounded-md border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-          >
-            Modifica
-          </button>
-        )}
+        {onEditArticle && <EditLineButton onClick={() => onEditArticle(line.codice)} />}
       </div>
     </>
   );
 }
 
-function ManualRowContent({ line, mode, actions, autoFocus }: Pick<RowProps, "line" | "mode" | "actions" | "autoFocus">) {
+function ManualRowContent({ line, mode, onEditLine }: Pick<RowProps, "line" | "mode" | "onEditLine">) {
   const sconto = line.sconto ?? 0;
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
-        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">Manuale</span>
-        {mode === "summary" && <span className="ml-auto text-[11px] font-semibold text-foreground">{formatOrderCurrency(getLineTotal(line))}</span>}
+    <>
+      <p className="text-[11px] font-bold font-mono truncate">
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold font-sans uppercase tracking-wide text-primary">Manuale</span>
+      </p>
+      <p className="text-[11px] text-muted-foreground truncate">{line.descrizione || <span className="italic">Senza descrizione</span>}</p>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+        <span className="font-semibold text-foreground">{line.qty} {line.um}</span>
+        {sconto > 0 && <span className="font-semibold text-primary">-{formatSconto(sconto)}%</span>}
+        {mode === "summary" && (
+          sconto > 0 ? (
+            <span className="flex items-center gap-1">
+              <span className="line-through text-muted-foreground/50">€{line.prezzoListino.toFixed(3)}</span>
+              <span className="font-semibold text-primary">€{getDiscountedUnitPrice(line).toFixed(3)}</span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground/70">€{line.prezzoListino.toFixed(3)}</span>
+          )
+        )}
+        {mode === "summary" && <span className="ml-auto font-semibold text-foreground">{formatOrderCurrency(getLineTotal(line))}</span>}
+        {onEditLine && <EditLineButton onClick={() => onEditLine(line)} />}
       </div>
-      <input
-        type="text"
-        value={line.descrizione}
-        placeholder="Descrizione articolo"
-        aria-label="Descrizione articolo manuale"
-        autoFocus={autoFocus}
-        onChange={(event) => actions.updateLine(line.id, { descrizione: event.target.value })}
-        className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm font-medium focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40"
-        style={IOS_FONT}
-      />
-      <div className="grid grid-cols-3 gap-1.5">
-        <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">U.M.</span>
-          <input
-            type="text"
-            value={line.um}
-            placeholder="pz"
-            aria-label="Unità di misura"
-            onChange={(event) => actions.updateLine(line.id, { um: event.target.value })}
-            className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm font-semibold focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40"
-            style={IOS_FONT}
-          />
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Prezzo €</span>
-          <NumberField
-            value={line.prezzoListino}
-            onCommit={(value) => actions.updateLine(line.id, { prezzoListino: value })}
-            placeholder="0,00"
-            ariaLabel="Prezzo unitario"
-            className="w-full"
-          />
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Qtà</span>
-          <NumberField
-            value={line.qty}
-            onCommit={(value) => actions.updateLine(line.id, { qty: value })}
-            placeholder="0"
-            ariaLabel="Quantità"
-            className="w-full"
-          />
-        </label>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Sconto</span>
-        <DiscountSelector size="sm" value={sconto} onChange={(value) => actions.updateLine(line.id, { sconto: value })} />
-      </div>
-      {(line.qty <= 0 || !line.descrizione.trim()) && (
-        <p className="text-[10px] text-amber-700">Inserisci descrizione e quantità per salvare questa riga.</p>
-      )}
-    </div>
+    </>
   );
 }
 
-function CommentRowContent({ line, actions, autoFocus }: Pick<RowProps, "line" | "actions" | "autoFocus">) {
+function CommentRowContent({ line, onEditLine }: Pick<RowProps, "line" | "onEditLine">) {
   return (
     <div className="flex flex-col gap-1">
       <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
         <MessageSquare className="h-3 w-3" /> Nota
       </span>
-      <textarea
-        value={line.descrizione}
-        placeholder="Scrivi una nota (es. titolo di un gruppo di articoli)"
-        aria-label="Testo della nota"
-        autoFocus={autoFocus}
-        rows={2}
-        onChange={(event) => actions.updateLine(line.id, { descrizione: event.target.value })}
-        className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm italic resize-y min-h-[2.5rem] focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40"
-        style={IOS_FONT}
-      />
-      {!line.descrizione.trim() && (
-        <p className="text-[10px] text-amber-700">Le note vuote non vengono salvate.</p>
+      <p className="text-[12px] italic text-foreground/90 whitespace-pre-wrap break-words">
+        {line.descrizione || <span className="text-muted-foreground">Nota vuota (non verrà salvata)</span>}
+      </p>
+      {onEditLine && (
+        <div>
+          <EditLineButton onClick={() => onEditLine(line)} />
+        </div>
       )}
     </div>
   );
 }
 
-function SortableLineRow({ line, index, count, mode, actions, onEditArticle, autoFocus }: RowProps) {
+function SortableLineRow({ line, index, count, mode, actions, onEditArticle, onEditLine, onAddNoteAbove }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: line.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const isComment = line.tipo === "commento";
@@ -231,14 +199,14 @@ function SortableLineRow({ line, index, count, mode, actions, onEditArticle, aut
         </button>
         <div className="flex-1 min-w-0 py-2 pr-1.5">
           {line.tipo === "articolo" && <ArticleRowContent line={line} mode={mode} onEditArticle={onEditArticle} />}
-          {line.tipo === "manuale" && <ManualRowContent line={line} mode={mode} actions={actions} autoFocus={autoFocus} />}
-          {isComment && <CommentRowContent line={line} actions={actions} autoFocus={autoFocus} />}
+          {line.tipo === "manuale" && <ManualRowContent line={line} mode={mode} onEditLine={onEditLine} />}
+          {isComment && <CommentRowContent line={line} onEditLine={onEditLine} />}
         </div>
         <div className="grid grid-cols-2 gap-1 content-center py-1.5 pr-1.5 shrink-0">
           <IconButton label={isComment ? "Rimuovi nota" : `Rimuovi ${line.descrizione || line.codice}`} onClick={() => actions.removeLine(line.id)} destructive>
             <X className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton label="Aggiungi nota sopra" onClick={() => actions.addCommentLine(line.id)}>
+          <IconButton label="Aggiungi nota sopra" onClick={() => onAddNoteAbove?.(line.id)} disabled={!onAddNoteAbove}>
             <MessageSquarePlus className="h-3.5 w-3.5" />
           </IconButton>
           <IconButton label="Sposta su" onClick={() => actions.moveLine(line.id, "up")} disabled={index === 0}>
@@ -292,7 +260,15 @@ function TrasportoControl({ trasporto, setTrasporto }: { trasporto: OrderLine | 
   );
 }
 
-export default function OrderLinesEditor({ store, mode, onEditArticle, showTrasportoControl = false, listHeightClass }: Props) {
+export default function OrderLinesEditor({
+  store,
+  mode,
+  onEditArticle,
+  onEditLine,
+  onAddNoteAbove,
+  showTrasportoControl = false,
+  listHeightClass,
+}: Props) {
   const orderLines = useOrderStore((s) => s.lines);
   const quotationLines = useQuotationStore((s) => s.lines);
   const lines = store === "quotation" ? quotationLines : orderLines;
@@ -301,9 +277,6 @@ export default function OrderLinesEditor({ store, mode, onEditArticle, showTrasp
     () => (store === "quotation" ? useQuotationStore.getState() : useOrderStore.getState()),
     [store]
   );
-
-  const [lastAddedId, setLastAddedId] = useState<string | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
   const movableLines = useMemo(() => lines.filter((line) => !isTrasportoLine(line)), [lines]);
   const trasporto = getTrasportoLine(lines);
@@ -321,29 +294,15 @@ export default function OrderLinesEditor({ store, mode, onEditArticle, showTrasp
     actions.reorderLines(String(active.id), String(over.id));
   }
 
-  function handleAddManual() {
-    const id = actions.addManualLine(null);
-    setLastAddedId(id);
-    window.requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }));
-  }
-
-  function handleAddComment() {
-    const id = actions.addCommentLine(null);
-    setLastAddedId(id);
-    window.requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }));
-  }
-
   return (
     <div className="flex flex-col gap-2" data-vaul-no-drag>
       {movableLines.length === 0 && !trasporto && (
         <p className="text-xs text-muted-foreground px-1 py-2">
-          {mode === "cart"
-            ? "Nessuna riga inserita. Aggiungi articoli dal listino o una riga manuale dalla casella in cima alla lista."
-            : "Nessuna riga inserita."}
+          Nessuna riga inserita. Aggiungi articoli dal listino o una riga manuale dalla casella in cima alla lista.
         </p>
       )}
 
-      <div ref={listRef} className={cn("flex flex-col gap-2 pr-1", listHeightClass, listHeightClass && "overflow-y-auto")}>
+      <div className={cn("flex flex-col gap-2 pr-1", listHeightClass, listHeightClass && "overflow-y-auto")}>
         <DndContext
           id={`lines-dnd-${store}-${mode}`}
           sensors={sensors}
@@ -361,7 +320,8 @@ export default function OrderLinesEditor({ store, mode, onEditArticle, showTrasp
                 mode={mode}
                 actions={actions}
                 onEditArticle={line.tipo === "articolo" ? onEditArticle : undefined}
-                autoFocus={line.id === lastAddedId}
+                onEditLine={onEditLine}
+                onAddNoteAbove={onAddNoteAbove}
               />
             ))}
           </SortableContext>
@@ -383,28 +343,6 @@ export default function OrderLinesEditor({ store, mode, onEditArticle, showTrasp
           </div>
         )}
       </div>
-
-      {/* Nello step Materiali le righe si creano dalla casella in cima alla lista articoli. */}
-      {mode === "summary" && (
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          onClick={handleAddManual}
-          className="h-8 px-2.5 rounded-lg border border-dashed border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors inline-flex items-center gap-1.5"
-        >
-          <PackagePlus className="h-3.5 w-3.5" />
-          Articolo manuale
-        </button>
-        <button
-          type="button"
-          onClick={handleAddComment}
-          className="h-8 px-2.5 rounded-lg border border-dashed border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors inline-flex items-center gap-1.5"
-        >
-          <MessageSquarePlus className="h-3.5 w-3.5" />
-          Nota
-        </button>
-      </div>
-      )}
 
       {showTrasportoControl && <TrasportoControl trasporto={trasporto} setTrasporto={actions.setTrasporto} />}
     </div>
