@@ -2,28 +2,102 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { sendOrderEmail } from "@/lib/mail";
-import type { Order, OrderHistoryItem } from "@/types";
+import { dbOrderToOrder, getOrderDraftMap, type DbOrder } from "@/lib/orders";
+import { getDbQuotation, markQuotationConverted, type DbQuotation } from "@/lib/quotations";
+import { userOwnsCustomerByRap } from "@/lib/rap";
+import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { getLineCodes } from "@/lib/settings";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { getApprovedQuotationItems, quotationUnavailableReason, resolveOrderSubmitState, type OrderSubmitState } from "@/lib/approvals";
+import { notifyAdminsApprovalRequested, orderApprovalDoc } from "@/lib/notifications";
+import type { Order, OrderStatus } from "@/types";
 
-/** GET /api/orders — list orders (admin sees all, agente sees own) */
+type OrderListStatusFilter = "all" | "attivi" | "annullati";
+
+interface OrderListCounts {
+  attivi: number;
+  annullati: number;
+}
+
+function resolveOrderListStatusFilter(value: string | null): OrderListStatusFilter {
+  if (value === "attivi" || value === "annullati") return value;
+  return "all";
+}
+
+/** GET /api/orders — list orders (admin sees all, agente sees own + customers of own Rap) */
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   const payload = await verifyToken(token);
   if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
 
+  const statusFilter = resolveOrderListStatusFilter(req.nextUrl.searchParams.get("status"));
+  const statusWhereClause =
+    statusFilter === "attivi"
+      ? "AND orders.status <> 'annullato'"
+      : statusFilter === "annullati"
+        ? "AND orders.status = 'annullato'"
+        : "";
+  const orderByClause =
+    statusFilter === "annullati"
+      ? "ORDER BY COALESCE(orders.cancelled_at, orders.updated_at, orders.created_at) DESC"
+      : "ORDER BY orders.created_at DESC";
+
   const db = getDb();
+  const visibilityWhereClause =
+    payload.role === "admin"
+      ? `WHERE NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)`
+      : `WHERE NOT (orders.status = 'bozza' AND orders.parent_order_id IS NOT NULL)
+         AND (
+           orders.agente = ?
+           OR EXISTS (
+             SELECT 1 FROM anagrafiche a
+             JOIN rap_assignments ra ON ra.rap = a.rap
+             WHERE a.id = orders.cliente_id AND ra.user_id = ?
+           )
+         )`;
+  const visibilityParams = payload.role === "admin" ? [] : [payload.username, payload.id];
+
   const rows =
     payload.role === "admin"
-      ? (db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all() as DbOrder[])
+      ? (db
+          .prepare(
+            `SELECT orders.*, users.full_name AS agente_full_name
+             FROM orders
+             LEFT JOIN users ON users.username = orders.agente
+             ${visibilityWhereClause}
+             ${statusWhereClause}
+             ${orderByClause}`
+          )
+          .all() as DbOrder[])
       : (db
-          .prepare("SELECT * FROM orders WHERE agente = ? ORDER BY created_at DESC")
-          .all(payload.username) as DbOrder[]);
+          .prepare(
+            `SELECT orders.*, users.full_name AS agente_full_name
+             FROM orders
+             LEFT JOIN users ON users.username = orders.agente
+             ${visibilityWhereClause}
+               ${statusWhereClause}
+             ${orderByClause}`
+          )
+          .all(...visibilityParams) as DbOrder[]);
 
-  const orders: Order[] = rows.map(dbToOrder);
-  return NextResponse.json({ orders });
+  const countsRow = db.prepare(
+    `SELECT
+       COALESCE(SUM(CASE WHEN orders.status = 'annullato' THEN 1 ELSE 0 END), 0) AS annullati,
+       COALESCE(SUM(CASE WHEN orders.status <> 'annullato' THEN 1 ELSE 0 END), 0) AS attivi
+     FROM orders
+     ${visibilityWhereClause}`
+  ).get(...visibilityParams) as OrderListCounts;
+
+  const draftMap = getOrderDraftMap(db, rows.map((row) => row.id));
+  const orders: Order[] = rows.map((row) =>
+    dbOrderToOrder(row, { draftRow: draftMap.get(row.id) ?? null })
+  );
+
+  return NextResponse.json({ orders, counts: countsRow });
 }
 
-/** POST /api/orders — save a new order */
+/** POST /api/orders — save a new order (bozza, confermato oppure in_approvazione se ci sono sconti liberi) */
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
@@ -33,76 +107,141 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { cliente, magazzino, luogoConsegna, dataConsegna, note, items } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items: rawItems, status, quotationId } = body as {
+    quotationId?: number | null;
+    clienteId?: number | null;
     cliente: string;
     magazzino: string;
     luogoConsegna: string;
     dataConsegna: string;
     note: string;
-    items: OrderHistoryItem[];
+    items: unknown;
+    status?: "bozza" | "confermato";
   };
 
-  if (!cliente?.trim() || !magazzino?.trim() || !Array.isArray(items) || items.length === 0) {
+  const requestedStatus: "bozza" | "confermato" = status === "bozza" ? "bozza" : "confermato";
+
+  const db = getDb();
+  const items = normalizeOrderItems(rawItems, getLineCodes());
+  const normalizedClienteId = Number(clienteId);
+  const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
+  const normalizedQuotationId = Number(quotationId);
+  const resolvedQuotationId = Number.isInteger(normalizedQuotationId) && normalizedQuotationId > 0 ? normalizedQuotationId : null;
+
+  let resolvedClienteId: number | null = null;
+  let resolvedCliente = cliente?.trim() ?? "";
+
+  if (hasSelectedCustomer) {
+    const selectedCustomer = db
+      .prepare("SELECT id, ragione_sociale FROM anagrafiche WHERE id = ?")
+      .get(normalizedClienteId) as { id: number; ragione_sociale: string } | undefined;
+
+    if (!selectedCustomer) {
+      return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
+    }
+
+    resolvedClienteId = selectedCustomer.id;
+    resolvedCliente = selectedCustomer.ragione_sociale;
+  }
+
+  if (!resolvedCliente || !magazzino?.trim() || countArticleLines(items) === 0) {
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 
-  const db = getDb();
-  const result = db
-    .prepare(
-      `INSERT INTO orders (cliente, magazzino, luogo_consegna, data_consegna, note, agente, items)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      cliente.trim(),
-      magazzino,
-      luogoConsegna ?? "",
-      dataConsegna ?? "",
-      note ?? "",
-      payload.username,
-      JSON.stringify(items)
-    );
+  let sourceQuotation: DbQuotation | undefined;
+  if (resolvedQuotationId !== null) {
+    sourceQuotation = getDbQuotation(db, resolvedQuotationId);
+    if (!sourceQuotation) {
+      return NextResponse.json({ error: "Preventivo non trovato" }, { status: 400 });
+    }
+    if (payload.role !== "admin" && sourceQuotation.agente !== payload.username && !userOwnsCustomerByRap(db, payload.id, sourceQuotation.cliente_id)) {
+      return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+    }
+    if (requestedStatus === "confermato") {
+      const reason = quotationUnavailableReason(sourceQuotation.status);
+      if (reason) return NextResponse.json({ error: reason }, { status: 409 });
+    }
+  }
 
-  const orderId = result.lastInsertRowid as number;
+  // Lo stato finale lo decide il server: sconti liberi → approvazione admin (salvo admin o preventivo già approvato).
+  const submitState: OrderSubmitState | null =
+    requestedStatus === "confermato"
+      ? resolveOrderSubmitState({ items, user: payload, sourceQuotationItems: getApprovedQuotationItems(sourceQuotation) })
+      : null;
+  const resolvedStatus: OrderStatus = submitState ? submitState.status : "bozza";
 
-  // Send email notification (fire-and-forget, don't block the response)
+  let orderId: number;
+  try {
+    orderId = db.transaction(() => {
+      const result = db
+        .prepare(
+          `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status, parent_order_id, quotation_id,
+                               approval_requested_at, approval_decided_at, approval_decided_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          resolvedCliente,
+          resolvedClienteId,
+          magazzino,
+          luogoConsegna ?? "",
+          dataConsegna ?? "",
+          note ?? "",
+          payload.username,
+          JSON.stringify(items),
+          resolvedStatus,
+          null,
+          resolvedQuotationId,
+          submitState?.approvalRequestedAt ?? null,
+          submitState?.approvalDecidedAt ?? null,
+          submitState?.approvalDecidedBy ?? null
+        );
+
+      const savedOrderId = result.lastInsertRowid as number;
+      if (resolvedStatus === "confermato" && resolvedQuotationId !== null) {
+        const convertedChanges = markQuotationConverted(db, resolvedQuotationId, savedOrderId);
+        if (convertedChanges === 0) throw new Error("QUOTATION_UNAVAILABLE");
+      }
+
+      return savedOrderId;
+    })();
+  } catch (error) {
+    if (error instanceof Error && error.message === "QUOTATION_UNAVAILABLE") {
+      return NextResponse.json({ error: quotationUnavailableReason(sourceQuotation?.status) ?? "Preventivo non disponibile" }, { status: 409 });
+    }
+    throw error;
+  }
+
   const order: Order = {
     id: orderId,
-    cliente: cliente.trim(),
+    parentOrderId: null,
+    quotationId: resolvedQuotationId,
+    clienteId: resolvedClienteId,
+    cliente: resolvedCliente,
     magazzino,
     luogoConsegna: luogoConsegna ?? "",
     dataConsegna: dataConsegna ?? "",
     note: note ?? "",
     agente: payload.username,
+    agenteFullName: payload.fullName || payload.username,
     items,
+    status: resolvedStatus,
     createdAt: new Date().toISOString(),
+    approvalRequestedAt: submitState?.approvalRequestedAt ?? null,
+    approvalDecidedAt: submitState?.approvalDecidedAt ?? null,
+    approvalDecidedBy: submitState?.approvalDecidedBy ?? null,
+    approvalNote: null,
+    hasDraft: false,
+    draftUpdatedAt: null,
+    draft: null,
   };
-  sendOrderEmail(order, payload.email).catch((err) => console.error("[mail] Errore invio email ordine:", err));
 
-  return NextResponse.json({ id: orderId }, { status: 201 });
-}
+  if (resolvedStatus === "confermato") {
+    sendOrderEmail(order, payload.email).catch((err) => console.error("[mail] Errore invio email ordine:", err));
+  } else if (resolvedStatus === "in_approvazione") {
+    notifyAdminsApprovalRequested(db, orderApprovalDoc(order, getAppBaseUrl(req))).catch((err) =>
+      console.error("[approvazioni] Errore notifica admin:", err)
+    );
+  }
 
-interface DbOrder {
-  id: number;
-  cliente: string;
-  magazzino: string;
-  luogo_consegna: string;
-  data_consegna: string;
-  note: string;
-  agente: string;
-  items: string;
-  created_at: string;
-}
-
-function dbToOrder(r: DbOrder): Order {
-  return {
-    id: r.id,
-    cliente: r.cliente,
-    magazzino: r.magazzino,
-    luogoConsegna: r.luogo_consegna,
-    dataConsegna: r.data_consegna,
-    note: r.note,
-    agente: r.agente,
-    items: JSON.parse(r.items) as OrderHistoryItem[],
-    createdAt: r.created_at,
-  };
+  return NextResponse.json({ id: orderId, status: resolvedStatus }, { status: 201 });
 }

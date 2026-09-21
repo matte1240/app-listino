@@ -80,8 +80,8 @@ export async function POST(req: NextRequest) {
 
   // Load materials from DB
   const db = getDb();
-  const totalCount = (db.prepare("SELECT COUNT(*) as c FROM materials").get() as { c: number }).c;
-  if (totalCount === 0) {
+  const totalMaterials = (db.prepare("SELECT COUNT(*) as c FROM materials").get() as { c: number }).c;
+  if (totalMaterials === 0) {
     return NextResponse.json({ error: "Nessun articolo nel database. Carica prima un listino Excel." }, { status: 404 });
   }
 
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
   startEnrichState(totalItems, totalBatches, batchSize);
 
   // Fire-and-forget — runs in background
-  runEnrichment(materialsToEnrich, batchSize, totalItems, totalBatches, totalCount);
+  runEnrichment(materialsToEnrich, batchSize, totalItems, totalBatches);
 
   return NextResponse.json({ message: "Arricchimento avviato", enrichState: getEnrichState() }, { status: 202 });
 }
@@ -124,7 +124,6 @@ async function runEnrichment(
   batchSize: number,
   totalItems: number,
   totalBatches: number,
-  totalCount: number,
 ) {
   const db = getDb();
   const upsert = db.prepare(`
@@ -165,7 +164,7 @@ async function runEnrichment(
       }
     }
 
-    enrichDone(enrichedCount, errorCount, totalCount);
+    enrichDone(enrichedCount, errorCount);
   } catch (e) {
     enrichError(e instanceof Error ? e.message : "Errore fatale durante l'arricchimento");
   }

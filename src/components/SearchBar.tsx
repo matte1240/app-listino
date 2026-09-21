@@ -1,27 +1,50 @@
 "use client";
 
+import { forwardRef } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useOrderStore } from "@/lib/useOrderStore";
+import { useQuotationStore } from "@/lib/useQuotationStore";
 
-export default function SearchBar() {
-  const searchQuery = useOrderStore((s) => s.searchQuery);
-  const setSearchQuery = useOrderStore((s) => s.setSearchQuery);
-  const showObsolete = useOrderStore((s) => s.showObsolete);
-  const setShowObsolete = useOrderStore((s) => s.setShowObsolete);
+interface Props {
+  autoFocus?: boolean;
+  store?: "order" | "quotation";
+}
+
+const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar({ autoFocus = false, store = "order" }, ref) {
+  const orderSearchQuery = useOrderStore((s) => s.searchQuery);
+  const orderSetSearchQuery = useOrderStore((s) => s.setSearchQuery);
+  const orderShowObsolete = useOrderStore((s) => s.showObsolete);
+  const orderSetShowObsolete = useOrderStore((s) => s.setShowObsolete);
+  const quotationSearchQuery = useQuotationStore((s) => s.searchQuery);
+  const quotationSetSearchQuery = useQuotationStore((s) => s.setSearchQuery);
+  const quotationShowObsolete = useQuotationStore((s) => s.showObsolete);
+  const quotationSetShowObsolete = useQuotationStore((s) => s.setShowObsolete);
+
+  const searchQuery = store === "quotation" ? quotationSearchQuery : orderSearchQuery;
+  const setSearchQuery = store === "quotation" ? quotationSetSearchQuery : orderSetSearchQuery;
+  const showObsolete = store === "quotation" ? quotationShowObsolete : orderShowObsolete;
+  const setShowObsolete = store === "quotation" ? quotationSetShowObsolete : orderSetShowObsolete;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
+          ref={ref}
           type="text"
           inputMode="search"
           placeholder="Cerca codice o descrizione..."
           value={searchQuery}
+          autoFocus={autoFocus}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 pr-9 text-base h-12 rounded-2xl bg-card border-border shadow-sm placeholder:text-muted-foreground/55 focus-visible:ring-primary/50"
+          onKeyDown={(e) => {
+            if (e.key === "Backspace" && searchQuery.length === 0) {
+              e.stopPropagation();
+            }
+          }}
+          className="pl-9 pr-9 text-sm h-11 rounded-xl bg-card border-border shadow-sm placeholder:text-muted-foreground/55 focus-visible:ring-ring/50"
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
@@ -55,4 +78,6 @@ export default function SearchBar() {
       </div>
     </div>
   );
-}
+});
+
+export default SearchBar;

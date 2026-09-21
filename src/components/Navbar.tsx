@@ -2,152 +2,286 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { LayoutList, ClipboardList, Users, Sparkles, Menu, X, LogOut, Shield, ShoppingCart, FileText, Bot, Mail } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, Plus, ArrowLeft, ShoppingCart } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import PushToggle from "@/components/PushToggle";
 import { useOrderStore } from "@/lib/useOrderStore";
-import UploadExcel from "@/components/UploadExcel";
+import { useQuotationStore } from "@/lib/useQuotationStore";
+import { countArticleLines } from "@/lib/order-lines";
 
 const navItems = [
-  { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
-  { href: "/admin/users", label: "Utenti", icon: Users, adminOnly: true },
-  { href: "/admin/enrich", label: "AI", icon: Sparkles, adminOnly: true },
-  { href: "/admin/emails", label: "Email", icon: Mail, adminOnly: true },
+  { href: "/quotations", label: "Preventivi", icon: FileText, adminOnly: false },
+  { href: "/", label: "Listino", icon: LayoutList, adminOnly: false },
+  { href: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
+
+function getUserInitials(displayName: string): string {
+  const trimmed = displayName.trim();
+  if (!trimmed) return "U";
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return "U";
+  if (tokens.length === 1) return tokens[0].substring(0, 2).toUpperCase();
+  return (tokens[0][0] + tokens[1][0]).toUpperCase();
+}
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const orderItems = useOrderStore((s) => s.orderItems);
-  const setDrawerOpen = useOrderStore((s) => s.setDrawerOpen);
-  const showOriginalDesc = useOrderStore((s) => s.showOriginalDesc);
-  const toggleShowOriginalDesc = useOrderStore((s) => s.toggleShowOriginalDesc);
-  const flaggedCount = Object.values(orderItems).filter((o) => o.flagged).length;
-  const isHome = pathname === "/";
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  const orderInfo = useOrderStore((s) => s.orderInfo);
+  const orderLines = useOrderStore((s) => s.lines);
+  const currentStep = useOrderStore((s) => s.currentStep);
+  const setMobileCartOpen = useOrderStore((s) => s.setMobileCartOpen);
+  const setExitDialogOpen = useOrderStore((s) => s.setExitDialogOpen);
+  const quotationInfo = useQuotationStore((s) => s.quotationInfo);
+  const quotationLines = useQuotationStore((s) => s.lines);
+  const quotationCurrentStep = useQuotationStore((s) => s.currentStep);
+  const setQuotationMobileCartOpen = useQuotationStore((s) => s.setMobileCartOpen);
+  const resetQuotation = useQuotationStore((s) => s.resetQuotation);
+
+  // Conteggio documenti in attesa di approvazione (solo admin): al mount, ad ogni cambio pagina, ogni 60 s e al focus.
+  const [pendingApprovals, setPendingApprovals] = useState(0);
   const isAdmin = user?.role === "admin";
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    const load = () => {
+      fetch("/api/admin/approvals?count=1", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!cancelled && typeof data?.count === "number") setPendingApprovals(data.count);
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = window.setInterval(load, 60_000);
+    window.addEventListener("focus", load);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", load);
+    };
+  }, [isAdmin, pathname]);
 
   if (!user || pathname === "/login") return null;
 
+  // Detect immersive wizard mode
+  const isNewOrder = pathname === "/orders/new";
+  const editMatch = pathname.match(/^\/orders\/(\d+)\/edit$/);
+  const isEditOrder = !!editMatch;
+  const editOrderId = editMatch ? editMatch[1] : null;
+  const isNewQuotation = pathname === "/quotations/new";
+  const editQuotationMatch = pathname.match(/^\/quotations\/(\d+)\/edit$/);
+  const isEditQuotation = !!editQuotationMatch;
+  const editQuotationId = editQuotationMatch ? editQuotationMatch[1] : null;
+  const isOrderWizardMode = isNewOrder || isEditOrder;
+  const isQuotationWizardMode = isNewQuotation || isEditQuotation;
+  const isWizardMode = isOrderWizardMode || isQuotationWizardMode;
+  const activeStep = isQuotationWizardMode ? quotationCurrentStep : currentStep;
+  const isMaterialsStep = isWizardMode && activeStep === 2;
+  const flaggedCount = countArticleLines(isQuotationWizardMode ? quotationLines : orderLines);
+  const activeCustomer = isQuotationWizardMode ? quotationInfo.cliente : orderInfo.cliente;
+
   const items = navItems.filter((item) => !item.adminOnly || user.role === "admin");
+  const userDisplayName = user.fullName || user.username;
 
   return (
     <>
       {/* Top bar */}
-      <nav className="sticky top-0 z-40 h-14 bg-background/95 backdrop-blur-md border-b border-border flex items-center">
-        <div className="max-w-2xl w-full mx-auto px-4 flex items-center gap-3">
+      <nav className="sticky top-0 z-40 h-14 bg-primary flex items-center">
+        <div className="w-full px-3 sm:px-4 flex items-center justify-between gap-2 sm:gap-3">
 
-          {/* Mobile: hamburger */}
-          <button
-            className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg hover:bg-muted transition-colors shrink-0"
-            onClick={() => setOpen(true)}
-            aria-label="Apri menu"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
+          {/* Left section: Logo + hamburger */}
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3 shrink-0">
+            {/* Mobile: hamburger (only outside wizard) */}
+            {!isWizardMode && (
+              <button
+                className="lg:hidden relative flex items-center justify-center h-8 w-8 rounded-lg text-white hover:bg-white/10 transition-colors shrink-0"
+                onClick={() => setOpen(true)}
+                aria-label="Apri menu"
+              >
+                <Menu className="h-5 w-5" />
+                {pendingApprovals > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-amber-400 px-1 text-[10px] font-bold text-primary leading-4">
+                    {pendingApprovals}
+                  </span>
+                )}
+              </button>
+            )}
 
-          {/* Logo */}
-          <Link href="/" className="flex items-center shrink-0">
-            <Image
-              src="/IVICOLORS_marchio.png"
-              alt="IVI Colors"
-              width={110}
-              height={36}
-              className="h-8 w-auto object-contain dark:hidden"
-              priority
-            />
-            <Image
-              src="/IVI_white_marchio.png"
-              alt="IVI Colors"
-              width={110}
-              height={36}
-              className="h-8 w-auto object-contain hidden dark:block"
-              priority
-            />
-          </Link>
+            {/* Logo (outside wizard) */}
+            {!isWizardMode && (
+              <Link href="/orders" className="flex items-center shrink-0">
+                <Image
+                  src="/IVI_white_marchio.png"
+                  alt="IVI Colors"
+                  width={110}
+                  height={36}
+                  className="h-8 w-auto object-contain"
+                  priority
+                />
+              </Link>
+            )}
 
-          {/* Desktop: nav links */}
-          <div className="hidden md:flex items-center gap-1 ml-2">
-            {items.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href;
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors",
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </Link>
-              );
-            })}
+            {/* Wizard mode: context label */}
+            {isWizardMode && (
+              <div className="flex min-w-0 items-center gap-2">
+                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isEditOrder || isEditQuotation ? "bg-amber-400" : "bg-white/20"} text-white`}>
+                  {isEditOrder || isEditQuotation ? <FileText className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                </div>
+                <span className="font-bold text-sm text-white truncate max-w-[48vw] sm:max-w-none">
+                  {isEditOrder
+                    ? `Modifica ordine #${editOrderId}`
+                    : isEditQuotation
+                      ? `Modifica preventivo #${editQuotationId}`
+                      : isNewQuotation
+                        ? "Nuovo preventivo"
+                        : "Nuovo ordine"}
+                </span>
+                {activeCustomer && (
+                  <span className="hidden lg:inline truncate max-w-[24vw] text-xs text-white/60">— {activeCustomer}</span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Cart + upload (only on listino page) */}
-          {isHome && (
-            <div className="flex items-center gap-1.5">
-              {isAdmin && (
-                <Button
-                  variant={showOriginalDesc ? "default" : "outline"}
-                  size="sm"
-                  onClick={toggleShowOriginalDesc}
-                  className="gap-1.5 h-8 rounded-xl font-semibold text-xs"
-                  title={showOriginalDesc ? "Mostra descrizione AI" : "Mostra descrizione originale"}
-                >
-                  {showOriginalDesc ? <FileText className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                </Button>
-              )}
-              {isAdmin && <UploadExcel />}
-              <Button
-                variant={flaggedCount > 0 ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDrawerOpen(true)}
-                className="gap-1.5 h-8 rounded-xl font-semibold"
-                aria-label="Apri riepilogo ordine"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                {flaggedCount > 0 && <span>{flaggedCount}</span>}
-              </Button>
+          {/* Center section: nav links (outside wizard) */}
+          {!isWizardMode && (
+            <div className="hidden lg:flex items-center gap-1">
+              {items.map(({ href, label, icon: Icon }) => {
+                const active = pathname === href;
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors",
+                      active
+                        ? "bg-white/15 text-white"
+                        : "text-white/70 hover:text-white hover:bg-white/10"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                    {href === "/admin" && pendingApprovals > 0 && (
+                      <span
+                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-primary"
+                        title={`${pendingApprovals} in attesa di approvazione`}
+                      >
+                        {pendingApprovals}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           )}
 
-          {/* User chip + logout */}
-          <div className="flex items-center gap-1.5">
-            <div className="hidden sm:flex items-center gap-1.5 bg-muted rounded-full px-2.5 py-1 text-xs text-muted-foreground">
-              <Shield className="h-3 w-3" />
-              <span className="font-semibold">{user.username}</span>
+          {/* Right section: tools + badge */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Wizard: exit button */}
+            {isWizardMode && (
+              <>
+                {isMaterialsStep && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="lg:hidden gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
+                    onClick={() => isQuotationWizardMode ? setQuotationMobileCartOpen(true) : setMobileCartOpen(true)}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    Carrello
+                    {flaggedCount > 0 && (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/20 px-1.5 text-[10px] font-bold text-white">
+                        {flaggedCount}
+                      </span>
+                    )}
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 h-8 rounded-xl font-semibold border-white/30 text-white/80 hover:bg-white/10 hover:text-white bg-transparent"
+                  onClick={() => {
+                    if (isQuotationWizardMode) {
+                      resetQuotation();
+                      router.push("/quotations");
+                      return;
+                    }
+                    setExitDialogOpen(true);
+                  }}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">Esci</span>
+                </Button>
+              </>
+            )}
+
+            {/* User badge with dropdown menu */}
+            <div className="relative">
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center justify-center h-8 w-8 rounded-full bg-white/20 text-white font-bold text-xs border border-white/30 hover:bg-white/30 transition-colors"
+                aria-expanded={isUserMenuOpen}
+                aria-label={`Menu utente ${userDisplayName}`}
+                title={userDisplayName}
+              >
+                {getUserInitials(userDisplayName)}
+              </button>
+              {isUserMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsUserMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-10 z-50 w-48 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border text-sm">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Utente</p>
+                      <p className="font-semibold text-foreground truncate">{userDisplayName}</p>
+                    </div>
+                    <PushToggle
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed border-b border-border"
+                      onDone={() => setIsUserMenuOpen(false)}
+                    />
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Esci
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl" onClick={logout} aria-label="Esci">
-              <LogOut className="h-4 w-4" />
-            </Button>
           </div>
         </div>
       </nav>
 
-      {/* Mobile sidebar */}
-      {open && (
+      {/* Mobile sidebar (outside wizard only) */}
+      {!isWizardMode && open && (
         <>
           <div
-            className="fixed inset-0 z-50 bg-black/40 md:hidden"
-            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-50 bg-black/40 lg:hidden"
+            onClick={() => { setOpen(false); setIsUserMenuOpen(false); }}
           />
-          <div className="fixed top-0 left-0 z-50 h-full w-60 bg-background border-r border-border shadow-xl md:hidden flex flex-col">
+          <div className="fixed top-0 left-0 z-50 h-full w-[min(15rem,85vw)] bg-background border-r border-border shadow-xl lg:hidden flex flex-col">
             <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
-              <span className="font-bold text-sm">{user.username}</span>
+              <span className="font-bold text-sm text-foreground truncate">{userDisplayName}</span>
               <button
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); setIsUserMenuOpen(false); }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted"
                 aria-label="Chiudi menu"
               >
@@ -155,7 +289,7 @@ export default function Navbar() {
               </button>
             </div>
             <div className="flex flex-col gap-1 p-3 flex-1">
-              {items.map(({ href, label, icon: Icon }) => {
+              {items.map(({ href, label }) => {
                 const active = pathname === href;
                 return (
                   <Link
@@ -169,13 +303,21 @@ export default function Navbar() {
                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     )}
                   >
-                    <Icon className="h-5 w-5" />
                     {label}
+                    {href === "/admin" && pendingApprovals > 0 && (
+                      <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-primary">
+                        {pendingApprovals}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
             </div>
-            <div className="p-3 border-t border-border">
+            <div className="p-3 border-t border-border flex flex-col gap-1">
+              <PushToggle
+                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                onDone={() => setOpen(false)}
+              />
               <button
                 onClick={() => { setOpen(false); logout(); }}
                 className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-semibold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"

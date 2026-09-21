@@ -1,0 +1,161 @@
+import { NextRequest, NextResponse } from "next/server";
+import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getDb } from "@/lib/db";
+import { dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotation } from "@/lib/quotations";
+import { userOwnsCustomerByRap } from "@/lib/rap";
+import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { getLineCodes } from "@/lib/settings";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { resolveQuotationSubmitState } from "@/lib/approvals";
+import { notifyAdminsApprovalRequested, quotationApprovalDoc } from "@/lib/notifications";
+import type { ValiditaPreventivoGiorni } from "@/types";
+
+function canManageQuotation(
+  db: ReturnType<typeof getDb>,
+  payload: { id: number; username: string; role: "admin" | "agente" },
+  quotation: { agente: string; cliente_id: number | null }
+): boolean {
+  if (payload.role === "admin") return true;
+  if (quotation.agente === payload.username) return true;
+  return userOwnsCustomerByRap(db, payload.id, quotation.cliente_id);
+}
+
+async function getAuthPayload(req: NextRequest) {
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (!token) return null;
+  return verifyToken(token);
+}
+
+async function resolveCustomer(db: ReturnType<typeof getDb>, clienteId: unknown, cliente: unknown) {
+  const normalizedClienteId = Number(clienteId);
+  const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
+
+  if (!hasSelectedCustomer) {
+    return { clienteId: null, cliente: String(cliente ?? "").trim() };
+  }
+
+  const selectedCustomer = db
+    .prepare("SELECT id, ragione_sociale FROM anagrafiche WHERE id = ?")
+    .get(normalizedClienteId) as { id: number; ragione_sociale: string } | undefined;
+
+  if (!selectedCustomer) return null;
+  return { clienteId: selectedCustomer.id, cliente: selectedCustomer.ragione_sociale };
+}
+
+function parseQuotationId(id: string) {
+  const quotationId = parseInt(id, 10);
+  return Number.isNaN(quotationId) ? null : quotationId;
+}
+
+function normalizeValiditaGiorni(value: unknown): ValiditaPreventivoGiorni {
+  const normalized = Number(value);
+  return normalized === 7 || normalized === 15 || normalized === 30 ? normalized : 30;
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const payload = await getAuthPayload(req);
+  if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+
+  const { id } = await params;
+  const quotationId = parseQuotationId(id);
+  if (!quotationId) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
+
+  const db = getDb();
+  const row = getDbQuotation(db, quotationId);
+  if (!row) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
+  if (!canManageQuotation(db, payload, row)) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  }
+
+  return NextResponse.json({ quotation: dbQuotationToQuotation(row) });
+}
+
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const payload = await getAuthPayload(req);
+  if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+
+  const { id } = await params;
+  const quotationId = parseQuotationId(id);
+  if (!quotationId) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
+
+  const db = getDb();
+  const existing = getDbQuotation(db, quotationId);
+  if (!existing) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
+  if (!canManageQuotation(db, payload, existing)) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
+
+  const customer = await resolveCustomer(db, body.clienteId, body.cliente);
+  if (!customer) return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
+
+  const items = normalizeOrderItems(body.items, getLineCodes());
+  const dataPreventivo = String(existing.data_preventivo ?? new Date().toISOString().slice(0, 10)).trim();
+  const dataConsegnaPrevista = String(body.dataConsegnaPrevista ?? "").trim() || String(existing.data_consegna_prevista ?? "").trim() || today();
+  const validitaGiorni = normalizeValiditaGiorni(body.validitaGiorni);
+
+  if (!customer.cliente || !dataPreventivo || countArticleLines(items) === 0) {
+    return NextResponse.json({ error: "Dati preventivo incompleti" }, { status: 400 });
+  }
+
+  if (existing.status === "convertito") {
+    return NextResponse.json({ error: "Preventivo già trasformato in ordine: non è più modificabile" }, { status: 409 });
+  }
+
+  // Ogni salvataggio viene rivalutato: sconti liberi → in approvazione (salvo admin), altrimenti attivo.
+  const submitState = resolveQuotationSubmitState(items, payload);
+  const quotation = updateQuotation(
+    db,
+    quotationId,
+    {
+      cliente: customer.cliente,
+      clienteId: customer.clienteId,
+      dataPreventivo,
+      dataConsegnaPrevista,
+      validitaGiorni,
+      note: String(body.note ?? ""),
+      items,
+    },
+    submitState
+  );
+
+  if (!quotation) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
+
+  if (quotation.status === "in_approvazione") {
+    const itemsChanged = existing.items !== JSON.stringify(items);
+    if (existing.status !== "in_approvazione" || itemsChanged) {
+      notifyAdminsApprovalRequested(db, quotationApprovalDoc(quotation, getAppBaseUrl(req))).catch((err) =>
+        console.error("[approvazioni] Errore notifica admin:", err)
+      );
+    }
+  }
+
+  return NextResponse.json({ quotation });
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const payload = await getAuthPayload(req);
+  if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+
+  const { id } = await params;
+  const quotationId = parseQuotationId(id);
+  if (!quotationId) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
+
+  const db = getDb();
+  const existing = getDbQuotation(db, quotationId);
+  if (!existing) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
+  if (!canManageQuotation(db, payload, existing)) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  }
+
+  const changes = deleteQuotation(db, quotationId);
+  if (changes === 0) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
+
+  return NextResponse.json({ ok: true });
+}

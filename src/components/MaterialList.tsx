@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { PackageSearch, Tag } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
+import { useQuotationStore } from "@/lib/useQuotationStore";
 import MaterialCard from "@/components/MaterialCard";
 import type { Material } from "@/types";
 
@@ -10,10 +11,31 @@ function materialSearchText(m: Material): string {
   return `${m.codice} ${m.descrizione} ${m.descrizioneAI ?? ""} ${m.categoria} ${m.raggr} ${m.um}`.toLowerCase();
 }
 
-export default function MaterialList() {
-  const materials = useOrderStore((s) => s.materials);
-  const searchQuery = useOrderStore((s) => s.searchQuery);
-  const showObsolete = useOrderStore((s) => s.showObsolete);
+interface Props {
+  isReadOnlyCatalog?: boolean;
+  store?: "order" | "quotation";
+  onArticleConfirmed?: () => void;
+  openArticleRequest?: { codice: string; requestId: number } | null;
+  onOpenArticleRequestHandled?: (requestId: number) => void;
+}
+
+export default function MaterialList({
+  isReadOnlyCatalog = false,
+  store = "order",
+  onArticleConfirmed,
+  openArticleRequest,
+  onOpenArticleRequestHandled,
+}: Props) {
+  const orderMaterials = useOrderStore((s) => s.materials);
+  const orderSearchQuery = useOrderStore((s) => s.searchQuery);
+  const orderShowObsolete = useOrderStore((s) => s.showObsolete);
+  const quotationMaterials = useQuotationStore((s) => s.materials);
+  const quotationSearchQuery = useQuotationStore((s) => s.searchQuery);
+  const quotationShowObsolete = useQuotationStore((s) => s.showObsolete);
+
+  const materials = store === "quotation" ? quotationMaterials : orderMaterials;
+  const searchQuery = store === "quotation" ? quotationSearchQuery : orderSearchQuery;
+  const showObsolete = store === "quotation" ? quotationShowObsolete : orderShowObsolete;
 
   const filtered = useMemo(() => {
     const source = showObsolete ? materials : materials.filter((m) => !m.obsoleto);
@@ -116,7 +138,15 @@ export default function MaterialList() {
           {/* Cards */}
           <div className="flex flex-col gap-2.5">
             {items.map((material) => (
-              <MaterialCard key={material.codice} material={material} />
+              <MaterialCard
+                key={material.codice}
+                material={material}
+                isReadOnlyCatalog={isReadOnlyCatalog}
+                store={store}
+                onArticleConfirmed={onArticleConfirmed}
+                openArticleRequest={openArticleRequest}
+                onOpenArticleRequestHandled={onOpenArticleRequestHandled}
+              />
             ))}
           </div>
         </div>

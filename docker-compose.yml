@@ -7,6 +7,8 @@ services:
       - "3000:3000"
     env_file:
       - .env
+    environment:
+      - TZ=${TZ:-Europe/Rome}
     volumes:
       - ./data:/app/data
     healthcheck:

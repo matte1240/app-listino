@@ -1,5 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
+/test
+GUIDA.pdf
 # dependencies
 /node_modules
 /.pnp
@@ -30,9 +31,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
+# env files
+# .env.example is committed (template)
+# .env*.local and .env are ignored for security
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.dev
+.env
 # vercel
 .vercel
 
@@ -41,7 +48,9 @@ yarn-error.log*
 
 # SQLite data
 /data
+/data-dev
 next-env.d.ts
 
 # Uploaded Excel files
-/public/PER MATTEO.xlsx
+/public/*.xlsx
+/public/*.xls

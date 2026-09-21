@@ -30,10 +30,12 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { username, password, role, email } = body as {
+  const { username, password, role, fullName, full_name, email } = body as {
     username?: string;
     password?: string;
     role?: string;
+    fullName?: string;
+    full_name?: string;
     email?: string;
   };
 
@@ -59,17 +61,20 @@ export async function PUT(
   const newUsername = username || existing.username;
   const newRole = role || existing.role;
   const newPassword = password ? hashSync(password, 10) : existing.password;
+  const submittedFullName = fullName ?? full_name;
+  const newFullName = submittedFullName !== undefined ? submittedFullName.trim() : existing.full_name;
   const newEmail = email ?? existing.email;
 
-  db.prepare("UPDATE users SET username = ?, password = ?, role = ?, email = ? WHERE id = ?").run(
+  db.prepare("UPDATE users SET username = ?, password = ?, role = ?, full_name = ?, email = ? WHERE id = ?").run(
     newUsername,
     newPassword,
     newRole,
+    newFullName,
     newEmail,
     userId
   );
 
-  return NextResponse.json({ user: { id: userId, username: newUsername, role: newRole, email: newEmail } });
+  return NextResponse.json({ user: { id: userId, username: newUsername, fullName: newFullName || newUsername, role: newRole, email: newEmail } });
 }
 
 export async function DELETE(

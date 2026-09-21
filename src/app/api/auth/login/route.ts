@@ -21,10 +21,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Credenziali non valide" }, { status: 401 });
   }
 
-  const token = await signToken({ id: user.id, username: user.username, role: user.role, email: user.email });
+  const fullName = user.full_name || user.username;
+  const token = await signToken({ id: user.id, username: user.username, role: user.role, fullName, email: user.email });
 
   const response = NextResponse.json({
-    user: { id: user.id, username: user.username, role: user.role, email: user.email },
+    user: { id: user.id, username: user.username, fullName, role: user.role, email: user.email },
   });
 
   response.cookies.set(COOKIE_NAME, token, {
