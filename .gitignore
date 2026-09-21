@@ -38,6 +38,7 @@ yarn-error.log*
 .env.*.local
 .env.production
 .env.development
+.env.dev
 .env
 # vercel
 .vercel
@@ -47,6 +48,7 @@ yarn-error.log*
 
 # SQLite data
 /data
+/data-dev
 next-env.d.ts
 
 # Uploaded Excel files

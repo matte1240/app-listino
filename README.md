@@ -52,6 +52,16 @@ docker compose up -d
 
 I dati (DB SQLite, backup, anagrafiche) vivono in `./data` (volume persistente).
 
+### Ambiente dev
+
+Ogni merge sul branch `dev` pubblica l'immagine `ghcr.io/matte1240/app-listino:dev` (più il tag `dev-<sha>` per tornare a una build precisa); `:latest` resta legato a `main`. Per farla girare accanto alla produzione:
+
+```bash
+cp .env.example .env.dev          # configurazione separata (non committata)
+docker compose -f docker-compose.dev.yml pull
+docker compose -f docker-compose.dev.yml up -d   # porta 3001, dati in ./data-dev
+```
+
 ---
 
 ## Comandi

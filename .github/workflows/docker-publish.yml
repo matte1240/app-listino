@@ -4,12 +4,19 @@ on:
   push:
     branches:
       - main
+      - dev                # immagine di sviluppo: ghcr.io/.../app-listino:dev
     tags:
       - "v*.*.*"           # triggers on version tags like v1.0.0
   pull_request:
     branches:
       - main               # build only (no push) on PRs to main
+      - dev                # build only (no push) on PRs to dev
   workflow_dispatch:       # allow manual trigger from GitHub UI
+
+# Un solo build per branch alla volta: un nuovo push annulla quello in corso
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
@@ -43,8 +50,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # 4. Extract metadata (tags + labels) from Git context
-      #    branch push  → ghcr.io/matte1240/app-listino:main
-      #    tag v1.2.3   → ghcr.io/matte1240/app-listino:1.2.3 + :latest
+      #    branch main  → ghcr.io/matte1240/app-listino:main + :latest
+      #    branch dev   → ghcr.io/matte1240/app-listino:dev + :dev-<sha>
+      #    tag v1.2.3   → ghcr.io/matte1240/app-listino:1.2.3 + :1.2
       #    PR           → ghcr.io/matte1240/app-listino:pr-42 (not pushed)
       - name: Extract Docker metadata
         id: meta
@@ -57,6 +65,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=dev-,enable=${{ github.ref == 'refs/heads/dev' }}
 
       # 5. Build (and push if not a PR)
       #    Layer cache stored in GitHub Actions cache to speed up future builds
