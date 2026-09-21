@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Package,
   Save,
+  ShieldAlert,
   ShoppingCart,
   Truck,
   User,
@@ -27,8 +28,9 @@ import { Textarea } from "@/components/ui/textarea";
 import MaterialList from "@/components/MaterialList";
 import OrderLinesEditor from "@/components/OrderLinesEditor";
 import SearchBar from "@/components/SearchBar";
-import { countArticleLines } from "@/lib/order-lines";
+import { countArticleLines, itemsRequireApproval } from "@/lib/order-lines";
 import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
+import { useAuth } from "@/lib/auth-context";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { VALIDITA_PREVENTIVO_GIORNI, type AnagraficaSearchItem, type Quotation } from "@/types";
 
@@ -80,11 +82,13 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedPendingApproval, setSavedPendingApproval] = useState(false);
   const [openArticleRequest, setOpenArticleRequest] = useState<{ codice: string; requestId: number } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openArticleRequestIdRef = useRef(0);
 
   const isEditing = !!editingQuotation;
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!editingQuotation) return;
@@ -146,6 +150,8 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const totalQty = calculateOrderTotalPieces(lines);
   const quotationRows = lines;
   const total = calculateOrderDiscountedTotal(lines);
+  /** Sconti liberi presenti: il preventivo resterà in attesa di un amministratore (gli admin approvano implicitamente). */
+  const requiresApproval = itemsRequireApproval(lines) && user?.role !== "admin";
 
   const canGoNextStep1 = quotationInfo.cliente.trim() !== "";
   const canGoNextStep2 = flaggedCount > 0;
@@ -196,15 +202,17 @@ export default function QuotationWizard({ editingQuotation }: Props) {
         body: JSON.stringify({ ...quotationInfo, items: quotationRows }),
       });
 
-      if (!res.ok) throw new Error("Errore salvataggio");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Errore salvataggio");
 
-      const data = await res.json();
       const id = data?.quotation?.id ?? data?.id ?? editingQuotation?.id;
+      const pending = data?.quotation?.status === "in_approvazione";
+      setSavedPendingApproval(pending);
       setSaved(true);
       resetQuotation();
-      setTimeout(() => router.push(id ? `/quotations/${id}` : "/quotations"), 900);
-    } catch {
-      alert("Errore nel salvataggio del preventivo");
+      setTimeout(() => router.push(id ? `/quotations/${id}` : "/quotations"), pending ? 1600 : 900);
+    } catch (err) {
+      alert(err instanceof Error && err.message ? err.message : "Errore nel salvataggio del preventivo");
     } finally {
       setSaving(false);
     }
@@ -271,8 +279,10 @@ export default function QuotationWizard({ editingQuotation }: Props) {
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <CheckCircle2 className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="text-xl font-bold">Preventivo salvato</h2>
-        <p className="text-sm text-muted-foreground">Apro il dettaglio...</p>
+        <h2 className="text-xl font-bold">{savedPendingApproval ? "Preventivo inviato per approvazione" : "Preventivo salvato"}</h2>
+        <p className="text-sm text-muted-foreground">
+          {savedPendingApproval ? "Un amministratore deve approvare gli sconti liberi prima che sia utilizzabile. Apro il dettaglio..." : "Apro il dettaglio..."}
+        </p>
       </div>
     );
   }
@@ -591,6 +601,16 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </div>
         </div>
 
+        {requiresApproval && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 flex items-start gap-2.5">
+            <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              Questo preventivo contiene <strong>sconti liberi</strong> (diversi da 0, 8% e 15%): verrà inviato a un amministratore per
+              approvazione. PDF e trasformazione in ordine saranno disponibili dopo il suo via libera.
+            </span>
+          </div>
+        )}
+
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <Button variant="outline" className="w-full h-11 gap-2 sm:flex-1" onClick={() => setStep(3)} disabled={saving}>
             <ChevronLeft className="h-4 w-4" />
@@ -598,7 +618,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </Button>
           <Button className="w-full h-11 gap-2 font-semibold sm:flex-1" onClick={handleSave} disabled={saving || !canGoNextStep1 || !canGoNextStep2 || !canGoNextStep3}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Salvataggio..." : isEditing ? "Salva modifiche" : "Salva preventivo"}
+            {saving ? "Salvataggio..." : requiresApproval ? "Salva e invia per approvazione" : isEditing ? "Salva modifiche" : "Salva preventivo"}
           </Button>
         </div>
 

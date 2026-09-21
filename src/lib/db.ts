@@ -133,8 +133,16 @@ function createDb() {
   if (!orderCols.some((c) => c.name === "cancelled_from_status")) {
     db.exec("ALTER TABLE orders ADD COLUMN cancelled_from_status TEXT");
   }
+  // Migration: approvazione admin (sconti liberi)
+  for (const col of ["approval_requested_at", "approval_decided_at", "approval_decided_by", "approval_note"]) {
+    if (!orderCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE orders ADD COLUMN ${col} TEXT`);
+    }
+  }
+
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_quotation_id ON orders(quotation_id)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS order_drafts (
@@ -151,6 +159,14 @@ function createDb() {
     )
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_order_drafts_updated_at ON order_drafts(updated_at)");
+
+  // Migration: approvazione admin delle bozze di modifica
+  const draftCols = db.pragma("table_info(order_drafts)") as { name: string }[];
+  for (const col of ["approval_status", "approval_requested_at", "approval_note"]) {
+    if (!draftCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE order_drafts ADD COLUMN ${col} TEXT`);
+    }
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS quotations (
@@ -201,6 +217,12 @@ function createDb() {
   }
   if (!quotationCols.some((c) => c.name === "converted_order_id")) {
     db.exec("ALTER TABLE quotations ADD COLUMN converted_order_id INTEGER");
+  }
+  // Migration: approvazione admin (sconti liberi)
+  for (const col of ["approval_requested_at", "approval_decided_at", "approval_decided_by", "approval_note"]) {
+    if (!quotationCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE quotations ADD COLUMN ${col} TEXT`);
+    }
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_numero ON quotations(numero)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_agente_created_at ON quotations(agente, created_at)");

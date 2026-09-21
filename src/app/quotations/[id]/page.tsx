@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, CheckCircle2, Clock, FileText, Package, Pencil, Printer, ShoppingCart, Trash2, Truck, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, Clock, FileText, Hourglass, Package, Pencil, Printer, ShieldAlert, ShoppingCart, Trash2, Truck, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -98,30 +98,40 @@ export default function QuotationDetailPage() {
                 <h1 className="text-lg font-bold">Preventivo {quotation.numero}</h1>
                 <Badge variant="outline">{formatDate(quotation.dataPreventivo)}</Badge>
                 {quotation.status === "convertito" && <Badge className="gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Ordine creato</Badge>}
+                {quotation.status === "in_approvazione" && (
+                  <Badge variant="outline" className="gap-1 text-orange-700 border-orange-300 bg-orange-50"><Hourglass className="h-3.5 w-3.5" /> In approvazione</Badge>
+                )}
+                {quotation.status === "rifiutato" && (
+                  <Badge variant="outline" className="gap-1 text-red-700 border-red-300 bg-red-50"><ShieldAlert className="h-3.5 w-3.5" /> Rifiutato</Badge>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">{quotation.cliente}</p>
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             {quotation.status === "convertito" && quotation.convertedOrderId ? (
-              <Button className="gap-2" onClick={() => router.push(`/orders/${quotation.convertedOrderId}`)}>
+              <Button className="gap-2" onClick={() => router.push(`/orders`)}>
                 <ShoppingCart className="h-4 w-4" />
                 Apri ordine
               </Button>
-            ) : quotation.status !== "convertito" ? (
+            ) : quotation.status === "attivo" ? (
               <Button className="gap-2" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)}>
                 <ShoppingCart className="h-4 w-4" />
                 Trasforma in ordine
               </Button>
             ) : null}
-            <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/print`)}>
-              <Printer className="h-4 w-4" />
-              PDF
-            </Button>
-            <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/edit`)}>
-              <Pencil className="h-4 w-4" />
-              Modifica
-            </Button>
+            {(quotation.status === "attivo" || quotation.status === "convertito" || user?.role === "admin") && (
+              <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/print`)}>
+                <Printer className="h-4 w-4" />
+                PDF
+              </Button>
+            )}
+            {quotation.status !== "convertito" && (
+              <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/edit`)}>
+                <Pencil className="h-4 w-4" />
+                Modifica
+              </Button>
+            )}
             <Button variant="destructive" className="gap-2" onClick={handleDelete} disabled={deleting}>
               <Trash2 className="h-4 w-4" />
               Elimina
@@ -166,6 +176,24 @@ export default function QuotationDetailPage() {
             </div>
           </div>
         </section>
+
+        {quotation.status === "in_approvazione" && (
+          <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800 flex items-start gap-2">
+            <Hourglass className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              Il preventivo contiene sconti liberi ed è in attesa di approvazione di un amministratore
+              {quotation.approvalRequestedAt ? ` (richiesta il ${formatDate(quotation.approvalRequestedAt)})` : ""}. PDF e trasformazione in ordine saranno disponibili dopo l&apos;approvazione.
+            </span>
+          </section>
+        )}
+        {quotation.status === "rifiutato" && (
+          <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 flex items-start gap-2">
+            <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              <strong>Rifiutato{quotation.approvalDecidedBy ? ` da ${quotation.approvalDecidedBy}` : ""}:</strong> {quotation.approvalNote || "nessuna motivazione"}. Modifica gli sconti e salva per una nuova valutazione.
+            </span>
+          </section>
+        )}
 
         {quotation.note && (
           <section className="rounded-2xl border border-border bg-card p-4">

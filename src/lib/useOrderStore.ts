@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Material, OrderInfo, OrderLine } from "@/types";
+import type { Material, OrderHistoryItem, OrderInfo, OrderLine } from "@/types";
 import { hydrateLinesFromMaterials, migrateLegacyCartMap } from "@/lib/order-lines";
 import { createLineActions, type LineActions } from "@/lib/order-lines-store";
 
@@ -8,6 +8,9 @@ interface OrderStore extends LineActions {
   materials: Material[];
   /** Righe del corpo ordine, nell'ordine di inserimento scelto dall'utente. */
   lines: OrderLine[];
+  /** Righe del preventivo approvato da cui nasce l'ordine (per non richiedere una seconda approvazione). */
+  sourceQuotationItems: OrderHistoryItem[] | null;
+  setSourceQuotationItems: (items: OrderHistoryItem[] | null) => void;
   orderInfo: OrderInfo;
   searchQuery: string;
   showObsolete: boolean;
@@ -27,6 +30,7 @@ interface OrderStore extends LineActions {
 
 interface PersistedOrderState {
   lines: OrderLine[];
+  sourceQuotationItems: OrderHistoryItem[] | null;
   orderInfo: OrderInfo;
   currentStep: 1 | 2 | 3 | 4;
 }
@@ -46,6 +50,8 @@ export const useOrderStore = create<OrderStore>()(
     (set) => ({
       materials: [],
       lines: [],
+      sourceQuotationItems: null,
+      setSourceQuotationItems: (sourceQuotationItems) => set({ sourceQuotationItems }),
       orderInfo: defaultOrderInfo,
       searchQuery: "",
       showObsolete: true,
@@ -68,7 +74,8 @@ export const useOrderStore = create<OrderStore>()(
 
       ...createLineActions<OrderStore>(set),
 
-      resetOrder: () => set({ lines: [], orderInfo: { ...defaultOrderInfo }, currentStep: 1, mobileCartOpen: false }),
+      resetOrder: () =>
+        set({ lines: [], sourceQuotationItems: null, orderInfo: { ...defaultOrderInfo }, currentStep: 1, mobileCartOpen: false }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
 
@@ -91,6 +98,7 @@ export const useOrderStore = create<OrderStore>()(
       },
       partialize: (state): PersistedOrderState => ({
         lines: state.lines,
+        sourceQuotationItems: state.sourceQuotationItems,
         orderInfo: state.orderInfo,
         currentStep: state.currentStep,
       }),

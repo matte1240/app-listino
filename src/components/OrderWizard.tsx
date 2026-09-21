@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   User, Warehouse, MapPin, Calendar, MessageSquare,
   ChevronRight, ChevronLeft, CheckCircle2, Loader2,
-  Package, Send, Save, ShoppingCart, X,
+  Package, Send, Save, ShoppingCart, X, ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,8 +20,9 @@ import AddressAutocompleteInput, {
   type AddressAutocompleteInputHandle,
   type AddressData,
 } from "@/components/AddressAutocompleteInput";
-import { countArticleLines } from "@/lib/order-lines";
+import { countArticleLines, itemsRequireApproval, linesCoveredByQuotation } from "@/lib/order-lines";
 import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
+import { useAuth } from "@/lib/auth-context";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI, type AnagraficaSearchItem, type OrderHistoryItem } from "@/types";
 import type { Order } from "@/types";
@@ -39,6 +40,7 @@ export default function OrderWizard({ editingOrder }: Props) {
 
   const materials = useOrderStore((s) => s.materials);
   const lines = useOrderStore((s) => s.lines);
+  const sourceQuotationItems = useOrderStore((s) => s.sourceQuotationItems);
   const orderInfo = useOrderStore((s) => s.orderInfo);
   const currentStep = useOrderStore((s) => s.currentStep);
   const setStep = useOrderStore((s) => s.setStep);
@@ -73,9 +75,12 @@ export default function OrderWizard({ editingOrder }: Props) {
   const [openArticleRequest, setOpenArticleRequest] = useState<{ codice: string; requestId: number } | null>(null);
   const openArticleRequestIdRef = useRef(0);
 
+  const { user } = useAuth();
   const isEditing = !!editingOrder;
   const editingSource = editingOrder?.draft ?? editingOrder;
-  const isStandaloneDraft = editingOrder?.status === "bozza" && editingOrder.parentOrderId === null;
+  /** Ordine mai inviato al magazzino (bozza o in attesa di approvazione): si salva/invia come nuovo, non come modifica. */
+  const isStandaloneDraft =
+    (editingOrder?.status === "bozza" || editingOrder?.status === "in_approvazione") && editingOrder.parentOrderId === null;
   const isModificationEditing = !!editingOrder && !isStandaloneDraft;
   const hasOpenModificationDraft = !!editingOrder?.draft;
 
@@ -191,6 +196,10 @@ export default function OrderWizard({ editingOrder }: Props) {
   // Items derived from store
   const flaggedCount = countArticleLines(lines);
   const totalPz = calculateOrderTotalPieces(lines);
+  /** Sconti liberi presenti: l'invio passerà da un amministratore (gli admin approvano implicitamente,
+   *  e un ordine che ricalca un preventivo già approvato non richiede una seconda approvazione). */
+  const coveredByQuotation = !!sourceQuotationItems && linesCoveredByQuotation(lines, sourceQuotationItems);
+  const requiresApproval = itemsRequireApproval(lines) && user?.role !== "admin" && !coveredByQuotation;
 
   const canGoNextStep1 = orderInfo.cliente.trim() !== "";
   const canGoNextStep2 = flaggedCount > 0;
@@ -258,12 +267,13 @@ export default function OrderWizard({ editingOrder }: Props) {
     };
   }, [buildOrderItems, editingOrder, isEditing, isStandaloneDraft, orderInfo]);
 
-  const getSuccessMessage = useCallback((status: "bozza" | "confermato") => {
+  const getSuccessMessage = useCallback((status: "bozza" | "confermato", pendingApproval: boolean) => {
     if (status === "bozza") return "Bozza salvata!";
+    if (pendingApproval) return isModificationEditing ? "Modifica inviata per approvazione!" : "Ordine inviato per approvazione!";
     if (!isEditing) return "Ordine salvato!";
     if (isStandaloneDraft) return "Ordine inviato!";
     return "Modifica inviata!";
-  }, [isEditing, isStandaloneDraft]);
+  }, [isEditing, isModificationEditing, isStandaloneDraft]);
 
   const renderCartSummary = (itemsHeightClass: string) => (
     <>
@@ -343,17 +353,20 @@ export default function OrderWizard({ editingOrder }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request.body),
       });
-      if (!res.ok) throw new Error("Errore salvataggio");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Errore salvataggio");
 
-      setSavedMessage(getSuccessMessage(status));
+      const resultStatus = data?.status ?? data?.order?.status;
+      const pendingApproval = data?.pendingApproval === true || resultStatus === "in_approvazione";
+      setSavedMessage(getSuccessMessage(status, pendingApproval));
       setSaved(true);
       resetOrder();
       setTimeout(() => {
         setSaved(false);
         router.push("/orders");
-      }, 1200);
-    } catch {
-      alert("Errore nel salvataggio dell'ordine");
+      }, pendingApproval ? 1800 : 1200);
+    } catch (err) {
+      alert(err instanceof Error && err.message ? err.message : "Errore nel salvataggio dell'ordine");
     } finally {
       setSaving(false);
     }
@@ -872,6 +885,16 @@ export default function OrderWizard({ editingOrder }: Props) {
           </div>
         </div>
 
+        {requiresApproval && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 flex items-start gap-2.5">
+            <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              Questo ordine contiene <strong>sconti liberi</strong> (diversi da 0, 8% e 15%): verrà inviato a un amministratore per
+              approvazione e partirà per il magazzino solo dopo il suo via libera.
+            </span>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="flex flex-col-reverse gap-3 mt-2 sm:flex-row">
           <Button
@@ -898,7 +921,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             disabled={saving}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {isModificationEditing ? "Invia modifica" : "Invia a magazzino"}
+            {requiresApproval ? "Invia per approvazione" : isModificationEditing ? "Invia modifica" : "Invia a magazzino"}
           </Button>
         </div>
       </div>

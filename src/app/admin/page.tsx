@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2 } from "lucide-react";
+import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import UploadExcel from "@/components/UploadExcel";
 
 const adminSections = [
+  {
+    href: "/admin/approvazioni",
+    title: "Approvazioni",
+    description: "Ordini, modifiche e preventivi con sconti liberi in attesa di approvazione.",
+    icon: ShieldCheck,
+  },
   {
     href: "/admin/users",
     title: "Utenti",
@@ -55,12 +61,23 @@ const adminSections = [
 export default function AdminHomePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [pendingApprovals, setPendingApprovals] = useState<number | null>(null);
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "admin")) {
       router.replace("/");
     }
   }, [user, loading, router]);
+
+  useEffect(() => {
+    if (loading || user?.role !== "admin") return;
+    fetch("/api/admin/approvals?count=1", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (typeof data?.count === "number") setPendingApprovals(data.count);
+      })
+      .catch(() => {});
+  }, [loading, user]);
 
   if (loading) {
     return (
@@ -100,7 +117,14 @@ export default function AdminHomePage() {
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
                   <Icon className="h-4.5 w-4.5" />
                 </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 mt-0.5" />
+                <div className="flex items-center gap-2">
+                  {href === "/admin/approvazioni" && pendingApprovals !== null && pendingApprovals > 0 && (
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-2 text-xs font-bold text-primary">
+                      {pendingApprovals}
+                    </span>
+                  )}
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 mt-0.5" />
+                </div>
               </div>
               <h2 className="font-semibold text-sm mt-3">{title}</h2>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>

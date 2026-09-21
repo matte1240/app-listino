@@ -4,6 +4,9 @@ import { getDb } from "@/lib/db";
 import { createQuotation, listQuotations } from "@/lib/quotations";
 import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { resolveQuotationSubmitState } from "@/lib/approvals";
+import { notifyAdminsApprovalRequested, quotationApprovalDoc } from "@/lib/notifications";
 import type { ValiditaPreventivoGiorni } from "@/types";
 
 async function getAuthPayload(req: NextRequest) {
@@ -71,18 +74,30 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const quotation = createQuotation(db, {
-      cliente: customer.cliente,
-      clienteId: customer.clienteId,
-      dataPreventivo,
-      dataConsegnaPrevista,
-      validitaGiorni,
-      note: String(body.note ?? ""),
-      agente: payload.username,
-      items,
-    });
+    // Sconti liberi → il preventivo nasce "in approvazione" (salvo admin).
+    const submitState = resolveQuotationSubmitState(items, payload);
+    const quotation = createQuotation(
+      db,
+      {
+        cliente: customer.cliente,
+        clienteId: customer.clienteId,
+        dataPreventivo,
+        dataConsegnaPrevista,
+        validitaGiorni,
+        note: String(body.note ?? ""),
+        agente: payload.username,
+        items,
+      },
+      submitState
+    );
 
-    return NextResponse.json({ quotation, id: quotation.id }, { status: 201 });
+    if (quotation.status === "in_approvazione") {
+      notifyAdminsApprovalRequested(db, quotationApprovalDoc(quotation, getAppBaseUrl(req))).catch((err) =>
+        console.error("[approvazioni] Errore notifica admin:", err)
+      );
+    }
+
+    return NextResponse.json({ quotation, id: quotation.id, status: quotation.status }, { status: 201 });
   } catch (error) {
     console.error("[quotations] Errore creazione preventivo:", error);
     return NextResponse.json({ error: "Errore creazione preventivo" }, { status: 500 });

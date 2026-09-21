@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Package, Truck, CheckCircle, XCircle, Users, TrendingUp } from "lucide-react";
+import { Package, Truck, CheckCircle, XCircle, Users, TrendingUp, Hourglass } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 
 interface DashboardStats {
   totalOrders: number;
   bozze: number;
+  inApprovazione?: number;
   inLavorazione: number;
   spediti: number;
   consegnati: number;
@@ -71,6 +72,12 @@ export default function AdminDashboard() {
       value: stats.totalOrders,
       icon: Package,
       color: "text-blue-600",
+    },
+    {
+      title: "In approvazione",
+      value: stats.inApprovazione ?? 0,
+      icon: Hourglass,
+      color: "text-orange-600",
     },
     {
       title: "In Lavorazione",

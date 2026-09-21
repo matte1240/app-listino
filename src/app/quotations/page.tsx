@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronDown, ChevronUp, Clock, FileText, Loader2, Package, Pencil, Plus, Printer, Search, ShoppingCart, Trash2, Truck, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Clock, FileText, Hourglass, Loader2, Package, Pencil, Plus, Printer, Search, ShieldAlert, ShoppingCart, Trash2, Truck, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -172,6 +172,12 @@ export default function QuotationsPage() {
                       <span className="font-bold text-sm text-foreground leading-tight">{quotation.cliente}</span>
                       <Badge variant="outline" className="text-xs px-2 py-0 h-5">{quotation.numero}</Badge>
                       {quotation.status === "convertito" && <Badge className="text-xs px-2 py-0 h-5 gap-1"><CheckCircle2 className="h-3 w-3" /> Ordine creato</Badge>}
+                      {quotation.status === "in_approvazione" && (
+                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 gap-1 text-orange-700 border-orange-300 bg-orange-50"><Hourglass className="h-3 w-3" /> In approvazione</Badge>
+                      )}
+                      {quotation.status === "rifiutato" && (
+                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 gap-1 text-red-700 border-red-300 bg-red-50"><ShieldAlert className="h-3 w-3" /> Rifiutato</Badge>
+                      )}
                       {user?.role === "admin" && <span className="text-xs text-muted-foreground/70">{quotation.agenteFullName || quotation.agente}</span>}
                     </div>
                     <div className="flex flex-col gap-1.5 mt-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -198,6 +204,16 @@ export default function QuotationsPage() {
 
                 {isOpen && (
                   <div className="border-t border-border">
+                    {quotation.status === "in_approvazione" && (
+                      <div className="px-4 py-3 bg-orange-50 text-xs text-orange-800 border-b border-orange-200">
+                        In attesa di approvazione di un amministratore per gli sconti liberi: PDF e trasformazione in ordine saranno disponibili dopo l&apos;approvazione.
+                      </div>
+                    )}
+                    {quotation.status === "rifiutato" && (
+                      <div className="px-4 py-3 bg-red-50 text-xs text-red-800 border-b border-red-200">
+                        <strong>Rifiutato{quotation.approvalDecidedBy ? ` da ${quotation.approvalDecidedBy}` : ""}:</strong> {quotation.approvalNote || "nessuna motivazione"}. Modifica gli sconti e salva per una nuova valutazione.
+                      </div>
+                    )}
                     {quotation.note && (
                       <div className="px-4 py-3 bg-muted/30 text-xs text-muted-foreground border-b border-border">
                         <strong>Note:</strong> {quotation.note}
@@ -231,20 +247,24 @@ export default function QuotationsPage() {
                           <FileText className="h-3.5 w-3.5 mr-1.5" /> Dettaglio
                         </Button>
                         {quotation.status === "convertito" && quotation.convertedOrderId ? (
-                          <Button variant="ghost" size="sm" onClick={() => router.push(`/orders/${quotation.convertedOrderId}`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
+                          <Button variant="ghost" size="sm" onClick={() => router.push(`/orders`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
                             <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Apri ordine
                           </Button>
-                        ) : quotation.status !== "convertito" ? (
+                        ) : quotation.status === "attivo" ? (
                           <Button variant="ghost" size="sm" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
                             <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Ordine
                           </Button>
                         ) : null}
-                        <Button variant="ghost" size="sm" onClick={() => router.push(`/quotations/${quotation.id}/print`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
-                          <Printer className="h-3.5 w-3.5 mr-1.5" /> PDF
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => router.push(`/quotations/${quotation.id}/edit`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
-                          <Pencil className="h-3.5 w-3.5 mr-1.5" /> Modifica
-                        </Button>
+                        {(quotation.status === "attivo" || quotation.status === "convertito" || user?.role === "admin") && (
+                          <Button variant="ghost" size="sm" onClick={() => router.push(`/quotations/${quotation.id}/print`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
+                            <Printer className="h-3.5 w-3.5 mr-1.5" /> PDF
+                          </Button>
+                        )}
+                        {quotation.status !== "convertito" && (
+                          <Button variant="ghost" size="sm" onClick={() => router.push(`/quotations/${quotation.id}/edit`)} className="text-primary hover:bg-primary/10 hover:text-primary text-xs w-full justify-center sm:w-auto">
+                            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Modifica
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(quotation.id)} className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs w-full justify-center sm:w-auto">
                           <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Elimina
                         </Button>

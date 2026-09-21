@@ -5,6 +5,9 @@ import { dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotatio
 import { userOwnsCustomerByRap } from "@/lib/rap";
 import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { resolveQuotationSubmitState } from "@/lib/approvals";
+import { notifyAdminsApprovalRequested, quotationApprovalDoc } from "@/lib/notifications";
 import type { ValiditaPreventivoGiorni } from "@/types";
 
 function canManageQuotation(
@@ -101,17 +104,38 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Dati preventivo incompleti" }, { status: 400 });
   }
 
-  const quotation = updateQuotation(db, quotationId, {
-    cliente: customer.cliente,
-    clienteId: customer.clienteId,
-    dataPreventivo,
-    dataConsegnaPrevista,
-    validitaGiorni,
-    note: String(body.note ?? ""),
-    items,
-  });
+  if (existing.status === "convertito") {
+    return NextResponse.json({ error: "Preventivo già trasformato in ordine: non è più modificabile" }, { status: 409 });
+  }
+
+  // Ogni salvataggio viene rivalutato: sconti liberi → in approvazione (salvo admin), altrimenti attivo.
+  const submitState = resolveQuotationSubmitState(items, payload);
+  const quotation = updateQuotation(
+    db,
+    quotationId,
+    {
+      cliente: customer.cliente,
+      clienteId: customer.clienteId,
+      dataPreventivo,
+      dataConsegnaPrevista,
+      validitaGiorni,
+      note: String(body.note ?? ""),
+      items,
+    },
+    submitState
+  );
 
   if (!quotation) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
+
+  if (quotation.status === "in_approvazione") {
+    const itemsChanged = existing.items !== JSON.stringify(items);
+    if (existing.status !== "in_approvazione" || itemsChanged) {
+      notifyAdminsApprovalRequested(db, quotationApprovalDoc(quotation, getAppBaseUrl(req))).catch((err) =>
+        console.error("[approvazioni] Errore notifica admin:", err)
+      );
+    }
+  }
+
   return NextResponse.json({ quotation });
 }
 

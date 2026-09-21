@@ -142,6 +142,27 @@ export default function QuotationPrintPage() {
     );
   }
 
+  // Un preventivo con sconti liberi non approvati non è stampabile dagli agenti.
+  const isApproved = quotation.status === "attivo" || quotation.status === "convertito";
+  if (!isApproved && user?.role !== "admin") {
+    return (
+      <div className="min-h-dvh flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border border-orange-200 bg-orange-50 p-5 text-center flex flex-col gap-3">
+          <h1 className="text-lg font-bold text-orange-900">Preventivo non approvato</h1>
+          <p className="text-sm text-orange-800">
+            {quotation.status === "rifiutato"
+              ? `Il preventivo è stato rifiutato${quotation.approvalNote ? `: ${quotation.approvalNote}` : ""}. Correggi gli sconti e salvalo di nuovo.`
+              : "Il preventivo contiene sconti liberi ed è in attesa di approvazione di un amministratore. Il PDF sarà disponibile dopo l'approvazione."}
+          </p>
+          <Button variant="outline" className="gap-2 self-center" onClick={() => router.push(`/quotations/${quotation.id}`)}>
+            <ArrowLeft className="h-4 w-4" />
+            Torna al preventivo
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="quotation-print-page min-h-dvh bg-background">
       <style jsx global>{`

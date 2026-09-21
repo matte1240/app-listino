@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import type { Order, OrderHistoryItem } from "@/types";
 import { getDb } from "@/lib/db";
 import { buildMetodoOrderXmlForOrder } from "@/lib/metodo-xml";
-import { getLineType } from "@/lib/order-lines";
+import { getLineType, lineRequiresApproval } from "@/lib/order-lines";
 import {
   computeOrderDiff,
   orderDiffHasChanges,
@@ -534,5 +534,172 @@ export async function sendOrderCancelledEmail(order: Order, agenteEmail?: string
     subject: buildOrderSubject(order, "cancelled"),
     text: buildOrderText(order, "cancelled"),
     html: buildOrderHtml(order, "cancelled"),
+  });
+}
+
+// ────────────────────────────────────────────
+// Email di approvazione (sconti liberi)
+// ────────────────────────────────────────────
+
+export type ApprovalDocKind = "ordine" | "preventivo" | "modifica";
+
+export interface ApprovalMailDoc {
+  kind: ApprovalDocKind;
+  id: number;
+  /** Numero preventivo (solo per kind = "preventivo"). */
+  numero?: string;
+  cliente: string;
+  agenteUsername: string;
+  agenteFullName: string;
+  items: OrderHistoryItem[];
+  /** URL pubblico dell'app (per i link); vuoto se non configurato. */
+  baseUrl: string;
+}
+
+function approvalDocLabel(doc: ApprovalMailDoc): string {
+  if (doc.kind === "preventivo") return `Preventivo ${doc.numero || `#${doc.id}`}`;
+  if (doc.kind === "modifica") return `Modifica ordine #${doc.id}`;
+  return `Ordine #${doc.id}`;
+}
+
+function approvalDocPath(doc: ApprovalMailDoc): string {
+  return doc.kind === "preventivo" ? `/quotations/${doc.id}` : "/orders";
+}
+
+function renderApprovalLinesTable(items: OrderHistoryItem[]): string {
+  const rows = items
+    .map((item) => renderItemRow(item, { bg: lineRequiresApproval(item) ? "#fff5b1" : undefined }))
+    .join("");
+  return `
+        <table role="table" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Codice</th>
+              <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Descrizione</th>
+              <th style="${CELL_BORDER}text-align:center;background:#f2f2f2;">UM</th>
+              <th style="${CELL_BORDER}text-align:center;background:#f2f2f2;">Quantità</th>
+              <th style="${CELL_BORDER}text-align:right;background:#f2f2f2;">Prezzo di listino</th>
+              <th style="${CELL_BORDER}text-align:center;background:#f2f2f2;">Sconto</th>
+              <th style="${CELL_BORDER}text-align:right;background:#f2f2f2;">Netto</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            <tr>
+              <td colspan="6" style="${CELL_BORDER}"><strong>Totale imponibile</strong></td>
+              <td style="${CELL_BORDER}text-align:right;"><strong>${formatOrderCurrency(calculateOrderDiscountedTotal(items))}</strong></td>
+            </tr>
+          </tbody>
+        </table>`;
+}
+
+function wrapMailHtml(title: string, bodyRows: string): string {
+  return `
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+</head>
+<body style="margin:0;padding:12px;background:#ffffff;color:#000000;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.4;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:700px;margin:0 auto;border-collapse:collapse;">
+    <tr><td style="padding:8px 0 12px 0;font-size:20px;font-weight:bold;">${escapeHtml(title)}</td></tr>
+    ${bodyRows}
+    <tr><td style="padding-top:12px;font-size:12px;color:#444444;">Email generata automaticamente da ${APP_NAME}.</td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** Avvisa gli admin che un documento con sconti liberi attende approvazione. */
+export async function sendApprovalRequestEmail(to: string[], doc: ApprovalMailDoc): Promise<void> {
+  if (to.length === 0 || !isMailConfigured()) {
+    console.warn("[mail] Email richiesta approvazione non inviata: nessun admin con email o credenziali GMAIL mancanti");
+    return;
+  }
+
+  const label = approvalDocLabel(doc);
+  const title = `Richiesta di approvazione: ${label}`;
+  const approvalsUrl = doc.baseUrl ? `${doc.baseUrl}/admin/approvazioni` : "";
+  const approvalLines = doc.items.filter(lineRequiresApproval);
+
+  const html = wrapMailHtml(title, `
+    <tr><td style="padding:0 0 10px 0;">${escapeHtml(doc.agenteFullName || doc.agenteUsername)} ha inviato <strong>${escapeHtml(label)}</strong> per <strong>${escapeHtml(doc.cliente)}</strong> con ${approvalLines.length} ${approvalLines.length === 1 ? "riga" : "righe"} a sconto libero (evidenziate in giallo).</td></tr>
+    ${approvalsUrl ? `<tr><td style="padding:0 0 14px 0;"><a href="${approvalsUrl}" style="display:inline-block;padding:10px 16px;background:#0C2B57;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;">Apri le approvazioni</a></td></tr>` : ""}
+    <tr><td style="padding:0 0 8px 0;">${renderApprovalLinesTable(doc.items)}</td></tr>`);
+
+  const textLines = [
+    title,
+    `${doc.agenteFullName || doc.agenteUsername} ha inviato ${label} per ${doc.cliente} con ${approvalLines.length} righe a sconto libero.`,
+    approvalsUrl ? `Approvazioni: ${approvalsUrl}` : "",
+    "",
+    "Righe:",
+    ...doc.items.map((item) => formatItemTextLine(item, lineRequiresApproval(item) ? "!" : "-")),
+    `Totale imponibile: ${formatOrderCurrency(calculateOrderDiscountedTotal(doc.items))}`,
+    "",
+    `Email generata automaticamente da ${APP_NAME}.`,
+  ].filter((line) => line !== null);
+
+  await getTransporter().sendMail({
+    from: getMailFromValue(),
+    to: to.join(", "),
+    subject: `${title} // ${sanitizeSubjectPart(doc.cliente)}`,
+    text: textLines.join("\n"),
+    html,
+  });
+}
+
+/** Avvisa l'agente dell'esito dell'approvazione. */
+export async function sendApprovalDecisionEmail(
+  to: string,
+  doc: ApprovalMailDoc,
+  decision: "approvato" | "rifiutato",
+  note: string,
+  decidedBy: string
+): Promise<void> {
+  if (!to || !isMailConfigured()) {
+    console.warn("[mail] Email esito approvazione non inviata: agente senza email o credenziali GMAIL mancanti");
+    return;
+  }
+
+  const label = approvalDocLabel(doc);
+  const title = `${label} ${decision === "approvato" ? "approvato" : "rifiutato"}`;
+  const docUrl = doc.baseUrl ? `${doc.baseUrl}${approvalDocPath(doc)}` : "";
+  const outcome =
+    decision === "approvato"
+      ? doc.kind === "preventivo"
+        ? "Il preventivo è ora attivo: puoi stamparlo e trasformarlo in ordine."
+        : doc.kind === "modifica"
+          ? "La modifica è stata applicata e inviata al magazzino."
+          : "L'ordine è stato confermato e inviato al magazzino."
+      : doc.kind === "preventivo"
+        ? "Il preventivo è stato rifiutato: correggi gli sconti e salvalo di nuovo per una nuova valutazione."
+        : doc.kind === "modifica"
+          ? "La modifica è stata rifiutata: l'ordine originale resta invariato. Apri la bozza per correggerla."
+          : "L'ordine è tornato in bozza: correggi gli sconti e reinvialo.";
+
+  const html = wrapMailHtml(title, `
+    <tr><td style="padding:0 0 6px 0;"><strong>${escapeHtml(label)}</strong> per <strong>${escapeHtml(doc.cliente)}</strong> è stato <strong>${decision}</strong> da ${escapeHtml(decidedBy)}.</td></tr>
+    <tr><td style="padding:0 0 10px 0;">${escapeHtml(outcome)}</td></tr>
+    ${note ? `<tr><td style="padding:0 0 10px 0;"><strong>Motivazione:</strong> ${escapeHtml(note).replace(/\n/g, "<br/>")}</td></tr>` : ""}
+    ${docUrl ? `<tr><td style="padding:0 0 14px 0;"><a href="${docUrl}" style="display:inline-block;padding:10px 16px;background:#0C2B57;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;">Apri nell'app</a></td></tr>` : ""}`);
+
+  const text = [
+    title,
+    `${label} per ${doc.cliente} è stato ${decision} da ${decidedBy}.`,
+    outcome,
+    note ? `Motivazione: ${note}` : "",
+    docUrl ? `Apri: ${docUrl}` : "",
+    "",
+    `Email generata automaticamente da ${APP_NAME}.`,
+  ].join("\n");
+
+  await getTransporter().sendMail({
+    from: getMailFromValue(),
+    to,
+    subject: `${title} // ${sanitizeSubjectPart(doc.cliente)}`,
+    text,
+    html,
   });
 }

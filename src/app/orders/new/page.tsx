@@ -27,6 +27,7 @@ export default function NewOrderPage() {
   const setMaterials = useOrderStore((state) => state.setMaterials);
   const setOrderInfo = useOrderStore((state) => state.setOrderInfo);
   const setLines = useOrderStore((state) => state.setLines);
+  const setSourceQuotationItems = useOrderStore((state) => state.setSourceQuotationItems);
   const [queryReady, setQueryReady] = useState(false);
   const [fromQuotationId, setFromQuotationId] = useState<string | null>(null);
   const [prefillState, setPrefillState] = useState<PrefillState>("idle");
@@ -84,6 +85,15 @@ export default function NewOrderPage() {
         const data = await quotationRes.json();
         const quotation = data.quotation as Quotation | undefined;
         if (!quotation) throw new Error("Preventivo non trovato");
+        if (quotation.status === "in_approvazione") {
+          throw new Error("Il preventivo è in attesa di approvazione di un amministratore e non può ancora essere trasformato in ordine.");
+        }
+        if (quotation.status === "rifiutato") {
+          throw new Error("Il preventivo è stato rifiutato: correggi gli sconti e salvalo di nuovo prima di trasformarlo in ordine.");
+        }
+        if (quotation.status === "convertito") {
+          throw new Error("Il preventivo è già stato trasformato in ordine.");
+        }
 
         if (cancelled) return;
 
@@ -101,6 +111,8 @@ export default function NewOrderPage() {
 
         // Copia le righe del preventivo (ordine, note, manuali e trasporto inclusi)
         setLines(quotation.items);
+        // Il preventivo è già approvato: righe scontate identiche non richiedono una seconda approvazione.
+        setSourceQuotationItems(quotation.items);
 
         setStep(3);
         setPrefillState("ready");
@@ -116,7 +128,7 @@ export default function NewOrderPage() {
     return () => {
       cancelled = true;
     };
-  }, [fromQuotationId, loading, queryReady, resetOrder, setLines, setMaterials, setOrderInfo, setStep, user]);
+  }, [fromQuotationId, loading, queryReady, resetOrder, setLines, setMaterials, setOrderInfo, setSourceQuotationItems, setStep, user]);
 
   if (loading || !queryReady || !user) {
     return (

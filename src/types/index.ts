@@ -50,7 +50,22 @@ export type QuotationItem = OrderHistoryItem;
 /** Riga come vive nello store del wizard: id e tipo sempre valorizzati. */
 export type OrderLine = OrderHistoryItem & { id: string; tipo: OrderLineType };
 
-export interface Quotation {
+/**
+ * Esito dell'approvazione admin richiesta dagli sconti liberi.
+ * Sugli ordini e preventivi lo stato "in attesa" è espresso dallo status del documento
+ * (`in_approvazione`); questi campi tracciano richiesta, decisione e motivazione.
+ */
+export interface ApprovalInfo {
+  approvalRequestedAt: string | null;
+  approvalDecidedAt: string | null;
+  approvalDecidedBy: string | null;
+  approvalNote: string | null;
+}
+
+/** Stato di approvazione di una bozza di modifica (ordine già confermato). */
+export type DraftApprovalStatus = 'in_approvazione' | 'rifiutato';
+
+export interface Quotation extends ApprovalInfo {
   id: number;
   numero: string;
   clienteId: number | null;
@@ -68,9 +83,9 @@ export interface Quotation {
   updatedAt: string;
 }
 
-export type QuotationStatus = 'attivo' | 'convertito';
+export type QuotationStatus = 'attivo' | 'in_approvazione' | 'rifiutato' | 'convertito';
 
-export type OrderStatus = 'bozza' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
+export type OrderStatus = 'bozza' | 'in_approvazione' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
 
 export interface OrderDraft {
   orderId: number;
@@ -83,9 +98,12 @@ export interface OrderDraft {
   items: OrderHistoryItem[];
   createdAt: string;
   updatedAt: string;
+  approvalStatus: DraftApprovalStatus | null;
+  approvalRequestedAt: string | null;
+  approvalNote: string | null;
 }
 
-export interface Order {
+export interface Order extends ApprovalInfo {
   id: number;
   parentOrderId: number | null;
   quotationId: number | null;
@@ -106,6 +124,10 @@ export interface Order {
   cancelledFromStatus?: OrderStatus | null;
   hasDraft?: boolean;
   draftUpdatedAt?: string | null;
+  /** Stato di approvazione della bozza di modifica collegata (se presente). */
+  draftApprovalStatus?: DraftApprovalStatus | null;
+  /** Motivazione dell'admin sulla bozza di modifica (se rifiutata). */
+  draftApprovalNote?: string | null;
   draft?: OrderDraft | null;
 }
 

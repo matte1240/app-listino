@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LayoutList, ClipboardList, Menu, X, LogOut, Shield, FileText, Plus, ArrowLeft, ShoppingCart } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
@@ -46,6 +46,30 @@ export default function Navbar() {
   const setQuotationMobileCartOpen = useQuotationStore((s) => s.setMobileCartOpen);
   const resetQuotation = useQuotationStore((s) => s.resetQuotation);
 
+  // Conteggio documenti in attesa di approvazione (solo admin): al mount, ad ogni cambio pagina, ogni 60 s e al focus.
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  const isAdmin = user?.role === "admin";
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    const load = () => {
+      fetch("/api/admin/approvals?count=1", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!cancelled && typeof data?.count === "number") setPendingApprovals(data.count);
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = window.setInterval(load, 60_000);
+    window.addEventListener("focus", load);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", load);
+    };
+  }, [isAdmin, pathname]);
+
   if (!user || pathname === "/login") return null;
 
   // Detect immersive wizard mode
@@ -79,11 +103,16 @@ export default function Navbar() {
             {/* Mobile: hamburger (only outside wizard) */}
             {!isWizardMode && (
               <button
-                className="lg:hidden flex items-center justify-center h-8 w-8 rounded-lg text-white hover:bg-white/10 transition-colors shrink-0"
+                className="lg:hidden relative flex items-center justify-center h-8 w-8 rounded-lg text-white hover:bg-white/10 transition-colors shrink-0"
                 onClick={() => setOpen(true)}
                 aria-label="Apri menu"
               >
                 <Menu className="h-5 w-5" />
+                {pendingApprovals > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-amber-400 px-1 text-[10px] font-bold text-primary leading-4">
+                    {pendingApprovals}
+                  </span>
+                )}
               </button>
             )}
 
@@ -141,6 +170,14 @@ export default function Navbar() {
                   >
                     <Icon className="h-4 w-4" />
                     {label}
+                    {href === "/admin" && pendingApprovals > 0 && (
+                      <span
+                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-primary"
+                        title={`${pendingApprovals} in attesa di approvazione`}
+                      >
+                        {pendingApprovals}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -262,6 +299,11 @@ export default function Navbar() {
                     )}
                   >
                     {label}
+                    {href === "/admin" && pendingApprovals > 0 && (
+                      <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-primary">
+                        {pendingApprovals}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

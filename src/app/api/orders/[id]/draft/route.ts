@@ -3,19 +3,23 @@ import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { sendOrderUpdatedEmail } from "@/lib/mail";
 import {
+  applyOrderDraft,
   dbDraftToOrderDraft,
   dbOrderToOrder,
   deleteOrderDraft,
+  getDbOrder,
   getOrderDraft,
+  isUnsentOrderStatus,
+  parseOrderItems,
   resolveOrderStatus,
   upsertOrderDraft,
-  type DbOrder,
   type OrderWriteData,
 } from "@/lib/orders";
 import { userOwnsCustomerByRap } from "@/lib/rap";
-import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { countArticleLines, itemsRequireApproval, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
-import type { OrderHistoryItem } from "@/types";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { notifyAdminsApprovalRequested, orderApprovalDoc } from "@/lib/notifications";
 
 async function getAuthorizedOrder(req: NextRequest, paramsPromise: Promise<{ id: string }>) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -35,12 +39,7 @@ async function getAuthorizedOrder(req: NextRequest, paramsPromise: Promise<{ id:
   }
 
   const db = getDb();
-  const order = db.prepare(
-    `SELECT orders.*, users.full_name AS agente_full_name
-     FROM orders
-     LEFT JOIN users ON users.username = orders.agente
-     WHERE orders.id = ?`
-  ).get(orderId) as DbOrder | undefined;
+  const order = getDbOrder(db, orderId);
   if (!order) {
     return { error: NextResponse.json({ error: "Ordine non trovato" }, { status: 404 }) };
   }
@@ -52,14 +51,16 @@ async function getAuthorizedOrder(req: NextRequest, paramsPromise: Promise<{ id:
   return { db, orderId, order, payload };
 }
 
+const DRAFT_ROUTE_ERROR = "Questa rotta è riservata alle bozze di modifica di ordini già inviati";
+
 /** PUT /api/orders/[id]/draft — create or update the modification draft attached to an order */
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authorized = await getAuthorizedOrder(req, params);
   if (authorized.error) return authorized.error;
 
   const { db, orderId, order } = authorized;
-  if (resolveOrderStatus(order.status) === "bozza") {
-    return NextResponse.json({ error: "Questa rotta è riservata alle bozze di modifica di ordini esistenti" }, { status: 409 });
+  if (isUnsentOrderStatus(resolveOrderStatus(order.status))) {
+    return NextResponse.json({ error: DRAFT_ROUTE_ERROR }, { status: 409 });
   }
 
   const body = await req.json().catch(() => null);
@@ -110,7 +111,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   };
 
   try {
-    const savedDraft = upsertOrderDraft(db, orderId, orderWriteData);
+    // Un nuovo salvataggio ritira l'eventuale richiesta di approvazione pendente sulla bozza.
+    const savedDraft = upsertOrderDraft(db, orderId, orderWriteData, { approvalStatus: null });
     return NextResponse.json({
       draft: dbDraftToOrderDraft(savedDraft),
       order: dbOrderToOrder(order, { draftRow: savedDraft, includeDraft: true }),
@@ -121,14 +123,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-/** POST /api/orders/[id]/draft — apply the current modification draft to the order */
+/** POST /api/orders/[id]/draft — apply the current modification draft to the order (o inviala in approvazione) */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authorized = await getAuthorizedOrder(req, params);
   if (authorized.error) return authorized.error;
 
   const { db, orderId, order, payload } = authorized;
-  if (resolveOrderStatus(order.status) === "bozza") {
-    return NextResponse.json({ error: "Questa rotta è riservata alle bozze di modifica di ordini esistenti" }, { status: 409 });
+  if (isUnsentOrderStatus(resolveOrderStatus(order.status))) {
+    return NextResponse.json({ error: DRAFT_ROUTE_ERROR }, { status: 409 });
   }
 
   const draftRow = getOrderDraft(db, orderId);
@@ -136,41 +138,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Bozza di modifica non trovata" }, { status: 404 });
   }
 
-  const previousSnapshot = {
-    cliente: order.cliente,
-    magazzino: order.magazzino,
-    luogoConsegna: order.luogo_consegna,
-    dataConsegna: order.data_consegna,
-    note: order.note,
-    items: JSON.parse(order.items) as OrderHistoryItem[],
-  };
-
-  db.transaction(() => {
+  const draftItems = parseOrderItems(draftRow.items);
+  if (itemsRequireApproval(draftItems) && payload.role !== "admin") {
     db.prepare(
-      `UPDATE orders
-       SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?
-       WHERE id = ?`
-    ).run(
-      draftRow.cliente,
-      draftRow.cliente_id,
-      draftRow.magazzino,
-      draftRow.luogo_consegna,
-      draftRow.data_consegna,
-      draftRow.note,
-      draftRow.items,
-      orderId
+      `UPDATE order_drafts SET approval_status = 'in_approvazione', approval_requested_at = ?, approval_note = NULL, updated_at = datetime('now')
+       WHERE order_id = ?`
+    ).run(new Date().toISOString(), orderId);
+    const pendingDraft = getOrderDraft(db, orderId) ?? draftRow;
+    const orderWithDraft = dbOrderToOrder(order, { draftRow: pendingDraft, includeDraft: true });
+    notifyAdminsApprovalRequested(db, orderApprovalDoc(orderWithDraft, getAppBaseUrl(req), "modifica", draftItems)).catch((err) =>
+      console.error("[approvazioni] Errore notifica admin:", err)
     );
+    return NextResponse.json({ order: orderWithDraft, pendingApproval: true });
+  }
 
-    deleteOrderDraft(db, orderId);
-    db.prepare("DELETE FROM orders WHERE parent_order_id = ? AND status = 'bozza'").run(orderId);
-  })();
+  const previousSnapshot = applyOrderDraft(db, order, draftRow);
 
-  const updatedOrder = db.prepare(
-    `SELECT orders.*, users.full_name AS agente_full_name
-     FROM orders
-     LEFT JOIN users ON users.username = orders.agente
-     WHERE orders.id = ?`
-  ).get(orderId) as DbOrder | undefined;
+  const updatedOrder = getDbOrder(db, orderId);
   if (!updatedOrder) {
     return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
   }
@@ -189,8 +173,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (authorized.error) return authorized.error;
 
   const { db, orderId, order } = authorized;
-  if (resolveOrderStatus(order.status) === "bozza") {
-    return NextResponse.json({ error: "Questa rotta è riservata alle bozze di modifica di ordini esistenti" }, { status: 409 });
+  if (isUnsentOrderStatus(resolveOrderStatus(order.status))) {
+    return NextResponse.json({ error: DRAFT_ROUTE_ERROR }, { status: 409 });
   }
 
   const deleted = deleteOrderDraft(db, orderId);

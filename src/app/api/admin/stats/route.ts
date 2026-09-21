@@ -39,6 +39,7 @@ export async function GET() {
     const stats = {
       totalOrders: totalOrders.count,
       bozze: countsMap.bozza || 0,
+      inApprovazione: countsMap.in_approvazione || 0,
       inLavorazione: countsMap.in_lavorazione || 0,
       spediti: countsMap.spedito || 0,
       consegnati: countsMap.consegnato || 0,

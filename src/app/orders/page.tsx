@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search, Truck, CheckCircle, XCircle, Flag, Undo2, Plus } from "lucide-react";
+import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTriangle, Loader2, X, Search, Truck, CheckCircle, XCircle, Flag, Undo2, Plus, Clock, ShieldAlert } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
@@ -134,9 +135,17 @@ export default function OrdersPage() {
             method: "POST",
           });
 
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        alert("Errore durante l'invio della bozza");
+        toast.error(data?.error ?? "Errore durante l'invio della bozza");
         return;
+      }
+
+      const pending = data?.pendingApproval === true || data?.order?.status === "in_approvazione";
+      if (pending) {
+        toast.info("Inviato per approvazione: un amministratore deve approvare gli sconti liberi prima dell'invio al magazzino.");
+      } else {
+        toast.success(isStandaloneDraft ? "Ordine inviato al magazzino" : "Modifica inviata al magazzino");
       }
 
       setExpanded(null);
@@ -299,18 +308,23 @@ export default function OrdersPage() {
             const articleCount = countArticleLines(order.items);
             const totalImponibile = calculateOrderDiscountedTotal(order.items);
             const isDraft = order.status === "bozza";
+            const isPendingApproval = order.status === "in_approvazione";
+            // Ordine mai arrivato al magazzino: eliminazione definitiva invece di annullamento con email.
+            const isUnsent = isDraft || isPendingApproval;
             const hasAttachedDraft = !!order.hasDraft;
-            const canSendDraft = isDraft || hasAttachedDraft;
+            const draftPending = order.draftApprovalStatus === "in_approvazione";
+            const draftRejected = order.draftApprovalStatus === "rifiutato";
+            const canSendDraft = isDraft || (hasAttachedDraft && !draftPending);
             const isSendingThisDraft = submittingDraftId === order.id;
             const isDiscardingThisDraft = discardingDraftId === order.id;
             const isCancelled = order.status === "annullato";
             const isRestoring = restoringId === order.id;
-            const deleteTitle = isDraft ? "Conferma eliminazione bozza" : "Conferma annullamento ordine";
-            const deleteMessage = isDraft
-              ? `La bozza #${order.id} per ${order.cliente} verrà eliminata. Non sarà inviata alcuna email al magazzino.`
+            const deleteTitle = isUnsent ? "Conferma eliminazione" : "Conferma annullamento ordine";
+            const deleteMessage = isUnsent
+              ? `${isPendingApproval ? "L'ordine in attesa di approvazione" : "La bozza"} #${order.id} per ${order.cliente} verrà eliminat${isPendingApproval ? "o" : "a"}. Non sarà inviata alcuna email al magazzino.`
               : `L'ordine #${order.id} per ${order.cliente} verrà annullato e resterà nello storico. Sarà inviata una email di cancellazione.${hasAttachedDraft ? " L'eventuale bozza di modifica collegata verrà eliminata automaticamente." : ""}`;
             const editActionLabel = hasAttachedDraft ? "Apri bozza" : isDraft ? "Modifica bozza" : "Modifica ordine";
-            const deleteActionLabel = isDraft ? "Elimina bozza" : "Annulla ordine";
+            const deleteActionLabel = isPendingApproval ? "Elimina ordine" : isDraft ? "Elimina bozza" : "Annulla ordine";
             const showDeleteConfirm = deleteConfirm === order.id;
             return (
               <div
@@ -334,7 +348,13 @@ export default function OrdersPage() {
                       )}
                       {getStatusBadge(order.status)}
                       {hasAttachedDraft && (
-                        <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700">Bozza aperta</Badge>
+                        draftPending ? (
+                          <Badge variant="outline" className="text-xs px-2 py-0 h-5 gap-1 text-orange-700 border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-700"><Clock className="h-3 w-3" /> Modifica in approvazione</Badge>
+                        ) : draftRejected ? (
+                          <Badge variant="outline" className="text-xs px-2 py-0 h-5 gap-1 text-red-700 border-red-300 bg-red-50 dark:bg-red-950/30 dark:text-red-300 dark:border-red-700"><ShieldAlert className="h-3 w-3" /> Modifica rifiutata</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700">Bozza aperta</Badge>
+                        )
                       )}
                       {user?.role === "admin" && (
                         <span className="text-xs text-muted-foreground/70">{order.agenteFullName || order.agente}</span>
@@ -416,6 +436,41 @@ export default function OrdersPage() {
                       </div>
                     )}
 
+                    {isPendingApproval && (
+                      <div className="px-4 py-3 border-b border-orange-200 bg-orange-50 text-xs text-orange-800 flex items-start gap-2">
+                        <Clock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>
+                          In attesa di approvazione di un amministratore per gli sconti liberi
+                          {order.approvalRequestedAt ? ` (richiesta il ${formatDate(order.approvalRequestedAt)})` : ""}. Il magazzino non ha ancora ricevuto l&apos;ordine.
+                        </span>
+                      </div>
+                    )}
+
+                    {isDraft && order.approvalNote && (
+                      <div className="px-4 py-3 border-b border-red-200 bg-red-50 text-xs text-red-800 flex items-start gap-2">
+                        <ShieldAlert className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>
+                          <strong>Rifiutato{order.approvalDecidedBy ? ` da ${order.approvalDecidedBy}` : ""}:</strong> {order.approvalNote}
+                        </span>
+                      </div>
+                    )}
+
+                    {draftPending && (
+                      <div className="px-4 py-3 border-b border-orange-200 bg-orange-50 text-xs text-orange-800 flex items-start gap-2">
+                        <Clock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>La modifica con sconti liberi è in attesa di approvazione. L&apos;ordine inviato al magazzino resta quello originale.</span>
+                      </div>
+                    )}
+
+                    {draftRejected && (
+                      <div className="px-4 py-3 border-b border-red-200 bg-red-50 text-xs text-red-800 flex items-start gap-2">
+                        <ShieldAlert className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>
+                          <strong>Modifica rifiutata:</strong> {order.draftApprovalNote || "nessuna motivazione"}. Apri la bozza per correggerla oppure scartala.
+                        </span>
+                      </div>
+                    )}
+
                     {/* Items */}
                     <div className="divide-y divide-border/60">
                       {order.items.map((item, idx) => (
@@ -456,7 +511,7 @@ export default function OrdersPage() {
                                 {deleting ? (
                                   <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Operazione in corso…</>
                                 ) : (
-                                  <><Trash2 className="h-3 w-3 mr-1.5" /> {isDraft ? "Sì, elimina bozza" : "Sì, annulla ordine"}</>
+                                  <><Trash2 className="h-3 w-3 mr-1.5" /> {isUnsent ? (isPendingApproval ? "Sì, elimina ordine" : "Sì, elimina bozza") : "Sì, annulla ordine"}</>
                                 )}
                               </Button>
                               <Button
@@ -491,7 +546,7 @@ export default function OrdersPage() {
                               <><Undo2 className="h-3.5 w-3.5 mr-1.5" /> Ripristina ordine</>
                             )}
                           </Button>
-                        ) : hasAttachedDraft && !isDraft ? (
+                        ) : hasAttachedDraft && !isUnsent ? (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -577,6 +632,7 @@ export default function OrdersPage() {
 
     const styles: Record<Exclude<OrderStatus, "confermato">, string> = {
       bozza: "bg-amber-100 text-amber-700 border-amber-200",
+      in_approvazione: "bg-orange-100 text-orange-700 border-orange-200",
       in_lavorazione: "bg-purple-100 text-purple-700 border-purple-200",
       spedito: "bg-indigo-100 text-indigo-700 border-indigo-200",
       consegnato: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -585,6 +641,7 @@ export default function OrdersPage() {
 
     const icons = {
       bozza: <ClipboardList className="h-3.5 w-3.5" />,
+      in_approvazione: <Clock className="h-3.5 w-3.5" />,
       in_lavorazione: <Package className="h-3.5 w-3.5" />,
       spedito: <Truck className="h-3.5 w-3.5" />,
       consegnato: <CheckCircle className="h-3.5 w-3.5" />,
@@ -593,6 +650,7 @@ export default function OrdersPage() {
 
     const labels: Record<Exclude<OrderStatus, "confermato">, string> = {
       bozza: "Bozza",
+      in_approvazione: "In approvazione",
       in_lavorazione: "In Lavorazione",
       spedito: "Spedito",
       consegnato: "Consegnato",
@@ -611,6 +669,8 @@ function formatStatusLabel(status: OrderStatus) {
   switch (status) {
     case "bozza":
       return "Bozza";
+    case "in_approvazione":
+      return "In approvazione";
     case "confermato":
       return "Confermato";
     case "in_lavorazione":

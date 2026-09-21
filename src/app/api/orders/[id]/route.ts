@@ -6,17 +6,23 @@ import {
   dbDraftToOrderDraft,
   dbOrderToOrder,
   deleteOrderDraft,
+  getDbOrder,
   getOrderDraft,
+  isUnsentOrderStatus,
+  parseOrderItems,
   resolveOrderStatus,
   upsertOrderDraft,
   type DbOrder,
   type OrderWriteData,
 } from "@/lib/orders";
-import { getDbQuotation, markQuotationConverted } from "@/lib/quotations";
+import { getDbQuotation, markQuotationConverted, type DbQuotation } from "@/lib/quotations";
 import { userOwnsCustomerByRap } from "@/lib/rap";
-import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { countArticleLines, itemsRequireApproval, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
-import type { OrderHistoryItem } from "@/types";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { getApprovedQuotationItems, quotationUnavailableReason, resolveOrderSubmitState } from "@/lib/approvals";
+import { notifyAdminsApprovalRequested, orderApprovalDoc } from "@/lib/notifications";
+import type { OrderStatus } from "@/types";
 
 function canManageOrder(
   db: ReturnType<typeof getDb>,
@@ -40,12 +46,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (isNaN(orderId)) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
 
   const db = getDb();
-  const row = db.prepare(
-    `SELECT orders.*, users.full_name AS agente_full_name
-     FROM orders
-     LEFT JOIN users ON users.username = orders.agente
-     WHERE orders.id = ?`
-  ).get(orderId) as DbOrder | undefined;
+  const row = getDbOrder(db, orderId);
   if (!row) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   if (!canManageOrder(db, payload, row)) {
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const rowStatus = resolveOrderStatus(row.status);
-  const draftRow = rowStatus !== "bozza" && row.parent_order_id === null ? getOrderDraft(db, orderId) ?? null : null;
+  const draftRow = !isUnsentOrderStatus(rowStatus) && row.parent_order_id === null ? getOrderDraft(db, orderId) ?? null : null;
 
   return NextResponse.json({ order: dbOrderToOrder(row, { draftRow, includeDraft: true }) });
 }
@@ -70,12 +71,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (isNaN(orderId)) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
 
   const db = getDb();
-  const existing = db.prepare(
-    `SELECT orders.*, users.full_name AS agente_full_name
-     FROM orders
-     LEFT JOIN users ON users.username = orders.agente
-     WHERE orders.id = ?`
-  ).get(orderId) as DbOrder | undefined;
+  const existing = getDbOrder(db, orderId);
   if (!existing) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   if (!canManageOrder(db, payload, existing)) {
@@ -96,7 +92,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     status?: "bozza" | "confermato";
   };
 
-  const resolvedStatus: "bozza" | "confermato" = status === "bozza" ? "bozza" : "confermato";
+  const requestedStatus: "bozza" | "confermato" = status === "bozza" ? "bozza" : "confermato";
   const items = normalizeOrderItems(rawItems, getLineCodes());
 
   const normalizedClienteId = Number(clienteId);
@@ -128,7 +124,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const existingParentOrderId = existing.parent_order_id ?? null;
   const isLinkedDraft = existingStatus === "bozza" && existingParentOrderId !== null;
-  const isStandaloneDraft = existingStatus === "bozza" && existingParentOrderId === null;
+  /** Ordine mai inviato al magazzino: bozza o in attesa di approvazione. */
+  const isUnsent = isUnsentOrderStatus(existingStatus) && existingParentOrderId === null;
+  const isConfirmedOrder = !isLinkedDraft && !isUnsent;
   const orderWriteData: OrderWriteData = {
     cliente: resolvedCliente,
     clienteId: resolvedClienteId,
@@ -138,10 +136,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     note: note ?? "",
     items,
   };
+  const baseUrl = getAppBaseUrl(req);
 
-  if (!isLinkedDraft && !isStandaloneDraft && resolvedStatus === "bozza") {
+  // Ordine confermato + "Salva bozza": bozza di modifica (un nuovo salvataggio ritira l'eventuale approvazione pendente).
+  if (isConfirmedOrder && requestedStatus === "bozza") {
     try {
-      const savedDraft = upsertOrderDraft(db, orderId, orderWriteData);
+      const savedDraft = upsertOrderDraft(db, orderId, orderWriteData, { approvalStatus: null });
       return NextResponse.json({
         order: dbOrderToOrder(existing, { draftRow: savedDraft, includeDraft: true }),
         draft: dbDraftToOrderDraft(savedDraft),
@@ -152,14 +152,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
   }
 
-  if (isLinkedDraft && resolvedStatus === "confermato") {
+  // Ordine confermato + "Invia modifica" con sconti liberi: la modifica resta in bozza in attesa dell'admin.
+  if (isConfirmedOrder && requestedStatus === "confermato" && itemsRequireApproval(items) && payload.role !== "admin") {
+    const savedDraft = upsertOrderDraft(db, orderId, orderWriteData, { approvalStatus: "in_approvazione" });
+    const orderWithDraft = dbOrderToOrder(existing, { draftRow: savedDraft, includeDraft: true });
+    notifyAdminsApprovalRequested(db, orderApprovalDoc(orderWithDraft, baseUrl, "modifica", items)).catch((err) =>
+      console.error("[approvazioni] Errore notifica admin:", err)
+    );
+    return NextResponse.json({ order: orderWithDraft, draft: dbDraftToOrderDraft(savedDraft), pendingApproval: true });
+  }
+
+  if (isLinkedDraft && requestedStatus === "confermato") {
     const parentId = existingParentOrderId as number;
-    const parent = db.prepare(
-      `SELECT orders.*, users.full_name AS agente_full_name
-       FROM orders
-       LEFT JOIN users ON users.username = orders.agente
-       WHERE orders.id = ?`
-    ).get(parentId) as DbOrder | undefined;
+    const parent = getDbOrder(db, parentId);
     if (!parent) {
       return NextResponse.json({ error: "Ordine principale non trovato" }, { status: 409 });
     }
@@ -173,7 +178,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       luogoConsegna: parent.luogo_consegna,
       dataConsegna: parent.data_consegna,
       note: parent.note,
-      items: JSON.parse(parent.items) as OrderHistoryItem[],
+      items: parseOrderItems(parent.items),
     };
 
     db.transaction(() => {
@@ -197,12 +202,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       db.prepare("DELETE FROM orders WHERE id = ?").run(orderId);
     })();
 
-    const updatedParent = db.prepare(
-      `SELECT orders.*, users.full_name AS agente_full_name
-       FROM orders
-       LEFT JOIN users ON users.username = orders.agente
-       WHERE orders.id = ?`
-    ).get(parentId) as DbOrder | undefined;
+    const updatedParent = getDbOrder(db, parentId);
     if (!updatedParent) {
       return NextResponse.json({ error: "Ordine principale non trovato" }, { status: 500 });
     }
@@ -221,18 +221,44 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     luogoConsegna: existing.luogo_consegna,
     dataConsegna: existing.data_consegna,
     note: existing.note,
-    items: JSON.parse(existing.items) as OrderHistoryItem[],
+    items: parseOrderItems(existing.items),
   };
   const nextParentOrderId = isLinkedDraft ? existingParentOrderId : null;
-  const nextStatus = isStandaloneDraft || isLinkedDraft ? resolvedStatus : existing.status;
 
-  if (isStandaloneDraft && resolvedStatus === "confermato" && existing.quotation_id !== null) {
-    const sourceQuotation = getDbQuotation(db, existing.quotation_id);
-    if (!sourceQuotation) {
-      return NextResponse.json({ error: "Preventivo non trovato" }, { status: 409 });
-    }
-    if (sourceQuotation.status === "convertito") {
-      return NextResponse.json({ error: "Preventivo già trasformato in ordine" }, { status: 409 });
+  // Stato e campi di approvazione dopo il salvataggio.
+  let nextStatus: OrderStatus = existing.status as OrderStatus;
+  let approvalRequestedAt = existing.approval_requested_at;
+  let approvalDecidedAt = existing.approval_decided_at;
+  let approvalDecidedBy = existing.approval_decided_by;
+  let approvalNote = existing.approval_note;
+  let sourceQuotation: DbQuotation | undefined;
+
+  if (isLinkedDraft) {
+    nextStatus = requestedStatus;
+  } else if (isUnsent) {
+    if (requestedStatus === "bozza") {
+      // Ritiro: torna (o resta) in bozza; l'eventuale motivazione di rifiuto resta visibile all'agente.
+      nextStatus = "bozza";
+      approvalRequestedAt = null;
+    } else {
+      if (existing.quotation_id !== null) {
+        sourceQuotation = getDbQuotation(db, existing.quotation_id);
+        if (!sourceQuotation) {
+          return NextResponse.json({ error: "Preventivo non trovato" }, { status: 409 });
+        }
+        const reason = quotationUnavailableReason(sourceQuotation.status);
+        if (reason) return NextResponse.json({ error: reason }, { status: 409 });
+      }
+      const submitState = resolveOrderSubmitState({
+        items,
+        user: payload,
+        sourceQuotationItems: getApprovedQuotationItems(sourceQuotation),
+      });
+      nextStatus = submitState.status;
+      approvalRequestedAt = submitState.approvalRequestedAt;
+      approvalDecidedAt = submitState.approvalDecidedAt;
+      approvalDecidedBy = submitState.approvalDecidedBy;
+      approvalNote = null;
     }
   }
 
@@ -240,7 +266,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     db.transaction(() => {
       db.prepare(
         `UPDATE orders
-         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL, cancelled_from_status = NULL
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?,
+             approval_requested_at = ?, approval_decided_at = ?, approval_decided_by = ?, approval_note = ?,
+             updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL, cancelled_from_status = NULL
          WHERE id = ?`
       ).run(
         resolvedCliente,
@@ -252,48 +280,53 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         JSON.stringify(items),
         nextStatus,
         nextParentOrderId,
+        approvalRequestedAt,
+        approvalDecidedAt,
+        approvalDecidedBy,
+        approvalNote,
         orderId
       );
 
-      if (!isStandaloneDraft && !isLinkedDraft) {
+      if (isConfirmedOrder) {
         deleteOrderDraft(db, orderId);
         db.prepare("DELETE FROM orders WHERE parent_order_id = ? AND status = 'bozza'").run(orderId);
       }
 
-      if (isStandaloneDraft && resolvedStatus === "confermato" && existing.quotation_id !== null) {
+      if (isUnsent && nextStatus === "confermato" && existing.quotation_id !== null) {
         const convertedChanges = markQuotationConverted(db, existing.quotation_id, orderId);
-        if (convertedChanges === 0) throw new Error("QUOTATION_ALREADY_CONVERTED");
+        if (convertedChanges === 0) throw new Error("QUOTATION_UNAVAILABLE");
       }
     })();
   } catch (error) {
-    if (error instanceof Error && error.message === "QUOTATION_ALREADY_CONVERTED") {
-      return NextResponse.json({ error: "Preventivo già trasformato in ordine" }, { status: 409 });
+    if (error instanceof Error && error.message === "QUOTATION_UNAVAILABLE") {
+      return NextResponse.json({ error: quotationUnavailableReason(sourceQuotation?.status) ?? "Preventivo non disponibile" }, { status: 409 });
     }
     throw error;
   }
 
-  const updated = db.prepare(
-    `SELECT orders.*, users.full_name AS agente_full_name
-     FROM orders
-     LEFT JOIN users ON users.username = orders.agente
-     WHERE orders.id = ?`
-  ).get(orderId) as DbOrder | undefined;
+  const updated = getDbOrder(db, orderId);
   if (!updated) {
     return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
   }
 
   const order = dbOrderToOrder(updated);
 
-  if (resolvedStatus === "confermato") {
-    if (isStandaloneDraft) {
-      sendOrderEmail(order, payload.email).catch((err) =>
-        console.error("[mail] Errore invio email ordine:", err)
-      );
-    } else if (!isLinkedDraft) {
-      sendOrderUpdatedEmail(order, previousSnapshot, payload.email).catch((err) =>
-        console.error("[mail] Errore invio email modifica ordine:", err)
+  if (isUnsent && nextStatus === "confermato") {
+    sendOrderEmail(order, payload.email).catch((err) =>
+      console.error("[mail] Errore invio email ordine:", err)
+    );
+  } else if (isUnsent && nextStatus === "in_approvazione") {
+    // Nuova richiesta o righe cambiate rispetto alla richiesta precedente: avvisa gli admin.
+    const itemsChanged = existing.items !== JSON.stringify(items);
+    if (existingStatus !== "in_approvazione" || itemsChanged) {
+      notifyAdminsApprovalRequested(db, orderApprovalDoc(order, baseUrl)).catch((err) =>
+        console.error("[approvazioni] Errore notifica admin:", err)
       );
     }
+  } else if (isConfirmedOrder && requestedStatus === "confermato") {
+    sendOrderUpdatedEmail(order, previousSnapshot, payload.email).catch((err) =>
+      console.error("[mail] Errore invio email modifica ordine:", err)
+    );
   }
 
   return NextResponse.json({ order });
@@ -311,12 +344,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (isNaN(orderId)) return NextResponse.json({ error: "ID non valido" }, { status: 400 });
 
   const db = getDb();
-  const existing = db.prepare(
-    `SELECT orders.*, users.full_name AS agente_full_name
-     FROM orders
-     LEFT JOIN users ON users.username = orders.agente
-     WHERE orders.id = ?`
-  ).get(orderId) as DbOrder | undefined;
+  const existing: DbOrder | undefined = getDbOrder(db, orderId);
   if (!existing) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   if (!canManageOrder(db, payload, existing)) {
@@ -324,11 +352,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   const order = dbOrderToOrder(existing);
-  const isDraft = order.status === "bozza";
+  // Bozze e ordini in attesa di approvazione non sono mai arrivati al magazzino: eliminazione definitiva senza email.
+  const isDraft = isUnsentOrderStatus(order.status);
   if (order.status === "annullato") {
     return NextResponse.json({ error: "L'ordine è già annullato" }, { status: 409 });
   }
-  const shouldSendCancellationEmail = order.status !== "bozza" && order.parentOrderId === null;
+  const shouldSendCancellationEmail = !isDraft && order.parentOrderId === null;
 
   const txResult = db.transaction(() => {
     const attachedDraftChanges = deleteOrderDraft(db, orderId);
