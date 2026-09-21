@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import PushToggle from "@/components/PushToggle";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { countArticleLines } from "@/lib/order-lines";
@@ -247,6 +248,10 @@ export default function Navbar() {
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">Utente</p>
                       <p className="font-semibold text-foreground truncate">{userDisplayName}</p>
                     </div>
+                    <PushToggle
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed border-b border-border"
+                      onDone={() => setIsUserMenuOpen(false)}
+                    />
                     <button
                       onClick={() => {
                         setIsUserMenuOpen(false);
@@ -308,7 +313,11 @@ export default function Navbar() {
                 );
               })}
             </div>
-            <div className="p-3 border-t border-border">
+            <div className="p-3 border-t border-border flex flex-col gap-1">
+              <PushToggle
+                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                onDone={() => setOpen(false)}
+              />
               <button
                 onClick={() => { setOpen(false); logout(); }}
                 className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-semibold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"

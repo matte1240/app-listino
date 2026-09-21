@@ -50,6 +50,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Su dispositivi condivisi la sottoscrizione push non deve restare legata all'utente uscito.
+    try {
+      const { unsubscribeFromPush } = await import("@/lib/push-client");
+      await unsubscribeFromPush();
+    } catch {
+      // ignora: il logout procede comunque
+    }
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
     window.location.href = "/login";

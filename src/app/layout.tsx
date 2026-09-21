@@ -3,6 +3,7 @@ import { DM_Sans } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
 import Navbar from "@/components/Navbar";
 import PwaRegister from "@/components/PwaRegister";
+import PushSync from "@/components/PushSync";
 import "./globals.css";
 import { Toaster } from "sonner";
 
@@ -54,6 +55,7 @@ export default function RootLayout({
         <PwaRegister />
         <div className="min-h-dvh bg-background text-foreground">
           <AuthProvider>
+            <PushSync />
             <Navbar />
             {children}
           </AuthProvider>

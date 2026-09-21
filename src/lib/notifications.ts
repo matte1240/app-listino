@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { getAdminRecipients } from "@/lib/approvals";
 import { getUserEmailByUsername } from "@/lib/orders";
 import { sendApprovalDecisionEmail, sendApprovalRequestEmail, type ApprovalMailDoc } from "@/lib/mail";
+import type { PushPayload } from "@/lib/push";
 import type { Order, OrderHistoryItem, Quotation } from "@/types";
 
 /**
@@ -25,6 +26,7 @@ export async function notifyAdminsApprovalRequested(db: Database.Database, doc: 
       title: `Approvazione richiesta`,
       body: `${doc.agenteFullName || doc.agenteUsername} · ${docTitle(doc)} · ${doc.cliente}`,
       url: "/admin/approvazioni",
+      tag: `approval-request-${doc.kind}-${doc.id}`,
     }),
   ]);
 }
@@ -50,6 +52,7 @@ export async function notifyAgentApprovalDecided(
           title: `${docTitle(doc)} ${decision}`,
           body: note ? `${doc.cliente} · ${note}` : doc.cliente,
           url: doc.kind === "preventivo" ? `/quotations/${doc.id}` : "/orders",
+          tag: `approval-decision-${doc.kind}-${doc.id}`,
         })
       : Promise.resolve(),
   ]);
@@ -61,13 +64,7 @@ function docTitle(doc: ApprovalNotificationDoc): string {
   return `Ordine #${doc.id}`;
 }
 
-export interface PushPayload {
-  title: string;
-  body: string;
-  url: string;
-}
-
-/** Invio push (implementato con web-push); silenzioso se non configurato. */
+/** Invio push (web-push); silenzioso se non configurato o in caso di errore. */
 async function sendPushToUsersSafe(db: Database.Database, userIds: number[], payload: PushPayload): Promise<void> {
   if (userIds.length === 0) return;
   try {

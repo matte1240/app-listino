@@ -1,4 +1,4 @@
-const CACHE_NAME = "ordini-ivicolors-v1";
+const CACHE_NAME = "ordini-ivicolors-v2";
 const APP_SHELL = [
   "/",
   "/login",
@@ -77,4 +77,49 @@ self.addEventListener("fetch", (event) => {
       return cached || networkFetch;
     })
   );
+});
+
+// ────────────────────────────────────────────
+// Notifiche push (approvazioni sconti liberi)
+// ────────────────────────────────────────────
+self.addEventListener("push", (event) => {
+  let payload = { title: "Ordini Ivicolors", body: "", url: "/", tag: undefined };
+  try {
+    if (event.data) payload = { ...payload, ...event.data.json() };
+  } catch {
+    payload.body = event.data ? event.data.text() : "";
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: payload.tag,
+      renotify: !!payload.tag,
+      data: { url: payload.url || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (new URL(client.url).origin === self.location.origin && "focus" in client) {
+          if ("navigate" in client) client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    })
+  );
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  // La sottoscrizione è cambiata: la pagina la riallinea al prossimo avvio (PushSync).
+  event.waitUntil(Promise.resolve());
 });
