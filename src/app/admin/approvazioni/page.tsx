@@ -85,7 +85,7 @@ function toCards(data: PendingApprovals): PendingCard[] {
     agente: quotation.agenteFullName || quotation.agente,
     requestedAt: quotation.approvalRequestedAt,
     items: quotation.items,
-    extra: `Validità ${quotation.validitaGiorni} giorni`,
+    extra: `Validità ${quotation.validitaGiorni} giorni${quotation.luogoConsegna ? ` · ${quotation.luogoConsegna}` : ""}`,
     endpoint: `/api/quotations/${quotation.id}/approval`,
   }));
 

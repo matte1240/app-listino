@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, CheckCircle2, Clock, FileText, Hourglass, Package, Pencil, Printer, ShieldAlert, ShoppingCart, Trash2, Truck, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, Clock, FileText, Hourglass, MapPin, Package, Pencil, Printer, ShieldAlert, ShoppingCart, Trash2, Truck, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
@@ -139,7 +139,7 @@ export default function QuotationDetailPage() {
           </div>
         </div>
 
-        <section className="rounded-2xl border border-border bg-card p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <section className="rounded-2xl border border-border bg-card p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="flex items-center gap-2 min-w-0">
             <User className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="min-w-0">
@@ -159,6 +159,13 @@ export default function QuotationDetailPage() {
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Consegna</p>
               <p className="font-semibold text-sm">{quotation.dataConsegnaPrevista ? formatDate(quotation.dataConsegnaPrevista) : "-"}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Destinazione cantiere</p>
+              <p className="font-semibold text-sm truncate" title={quotation.luogoConsegna || undefined}>{quotation.luogoConsegna || "Stessa del cliente"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 min-w-0">

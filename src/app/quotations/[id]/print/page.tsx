@@ -48,8 +48,9 @@ function estimateWrappedLines(value: string, charsPerLine: number) {
   return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
 }
 
+// Le stime seguono il CSS della tabella (padding 0.9mm sopra/sotto, interlinea ~4.1mm) per chiudere a fondo pagina.
 function estimateCommentRowHeightMm(item: QuotationItem) {
-  return 2.6 + estimateWrappedLines(item.descrizione, 115) * 4.1;
+  return 1.8 + estimateWrappedLines(item.descrizione, 115) * 4.1;
 }
 
 function estimateItemRowHeightMm(item: QuotationItem) {
@@ -57,12 +58,12 @@ function estimateItemRowHeightMm(item: QuotationItem) {
   const descriptionLines = estimateWrappedLines(item.descrizione, 46);
   const codeLines = estimateWrappedLines(item.codice, 22);
   const visibleLines = Math.max(descriptionLines, codeLines, 1);
-  return 3 + visibleLines * 4.1;
+  return 1.8 + visibleLines * 4.1;
 }
 
 function estimateNotesRowHeightMm(note: string) {
   if (!note.trim()) return 0;
-  return 4 + (1 + estimateWrappedLines(note, 115)) * 4.1;
+  return 3.4 + (1 + estimateWrappedLines(note, 115)) * 4.1;
 }
 
 function quotationFillerHeightMm(quotation: Quotation) {
@@ -285,9 +286,6 @@ export default function QuotationPrintPage() {
           font-size: 8.7pt;
         }
 
-        .destination-box {
-          height: 7.5mm;
-        }
 
         .customer-box {
           padding-top: 0.5mm;
@@ -347,13 +345,23 @@ export default function QuotationPrintPage() {
         }
 
         .items-table td {
-          padding: 1.5mm 1mm;
+          padding: 0.9mm 1mm;
           overflow-wrap: break-word;
         }
 
+        /* Corpo tabella "a colonne": nessun separatore orizzontale fra le righe, solo le linee verticali. */
+        .items-table tbody td {
+          border-top: 0;
+          border-bottom: 0;
+        }
+
+        .items-table tbody tr:first-child td {
+          padding-top: 1.6mm;
+        }
+
         .code-col { width: 43mm; }
-        .description-col { width: 71mm; }
-        .um-col { width: 8mm; }
+        .description-col { width: 68mm; }
+        .um-col { width: 11mm; }
         .qty-col { width: 16mm; }
         .price-col { width: 18mm; }
         .discount-col { width: 14mm; }
@@ -386,13 +394,16 @@ export default function QuotationPrintPage() {
           border-top: 0;
         }
 
-        .notes-row td {
+        .items-table tbody .notes-row td {
+          border-top: 0.25mm solid #000;
           padding: 1.3mm 1.2mm;
           font-size: 9.2pt;
           line-height: 1.22;
         }
 
-        .comment-row td {
+        .items-table tbody .comment-row td {
+          border-top: 0;
+          padding: 0.9mm 1.2mm;
           font-style: italic;
         }
 
@@ -405,6 +416,11 @@ export default function QuotationPrintPage() {
         .notes-content {
           margin: 0;
           white-space: pre-wrap;
+        }
+
+        .items-table tbody .totals-row td {
+          border-top: 0.25mm solid #000;
+          border-bottom: 0.25mm solid #000;
         }
 
         .totals-row td {
@@ -551,8 +567,9 @@ export default function QuotationPrintPage() {
                   <span className="meta-label">Fax</span>
                   <span className="meta-value">&nbsp;</span>
                 </div>
-                <div className="meta-cell meta-wide destination-box">
+                <div className="meta-cell meta-wide">
                   <span className="meta-label">Destinazione diversa</span>
+                  <span className="meta-value meta-value-small">{quotation.luogoConsegna?.trim() || "STESSA"}</span>
                 </div>
               </div>
             </div>

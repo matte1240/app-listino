@@ -11,6 +11,7 @@ export interface DbQuotation {
   converted_order_id: number | null;
   data_preventivo: string;
   data_consegna_prevista: string | null;
+  luogo_consegna: string | null;
   validita_giorni: number | null;
   note: string;
   agente: string;
@@ -29,6 +30,7 @@ export interface QuotationWriteData {
   clienteId: number | null;
   dataPreventivo: string;
   dataConsegnaPrevista: string;
+  luogoConsegna: string;
   validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
   agente: string;
@@ -76,6 +78,7 @@ export function dbQuotationToQuotation(row: DbQuotation): Quotation {
     convertedOrderId: row.converted_order_id ?? null,
     dataPreventivo: row.data_preventivo,
     dataConsegnaPrevista: row.data_consegna_prevista ?? "",
+    luogoConsegna: row.luogo_consegna ?? "",
     validitaGiorni: normalizeValiditaGiorni(row.validita_giorni),
     note: row.note,
     agente: row.agente,
@@ -147,9 +150,9 @@ export function createQuotation(db: Database.Database, data: QuotationWriteData,
   const quotationNumber = nextQuotationNumber(db, data.dataPreventivo);
   const result = db
     .prepare(
-      `INSERT INTO quotations (numero, cliente, cliente_id, data_preventivo, data_consegna_prevista, validita_giorni, note, agente, items,
+      `INSERT INTO quotations (numero, cliente, cliente_id, data_preventivo, data_consegna_prevista, luogo_consegna, validita_giorni, note, agente, items,
                                status, approval_requested_at, approval_decided_at, approval_decided_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       quotationNumber,
@@ -157,6 +160,7 @@ export function createQuotation(db: Database.Database, data: QuotationWriteData,
       data.clienteId,
       data.dataPreventivo,
       data.dataConsegnaPrevista,
+      data.luogoConsegna,
       data.validitaGiorni,
       data.note,
       data.agente,
@@ -180,7 +184,7 @@ export function updateQuotation(
 ): Quotation | null {
   const stmt = db.prepare(
     `UPDATE quotations
-     SET cliente = ?, cliente_id = ?, data_preventivo = ?, data_consegna_prevista = ?, validita_giorni = ?, note = ?, items = ?,
+     SET cliente = ?, cliente_id = ?, data_preventivo = ?, data_consegna_prevista = ?, luogo_consegna = ?, validita_giorni = ?, note = ?, items = ?,
          status = ?, approval_requested_at = ?, approval_decided_at = ?, approval_decided_by = ?, approval_note = NULL,
          updated_at = datetime('now')
      WHERE id = ?`
@@ -190,6 +194,7 @@ export function updateQuotation(
     data.clienteId,
     data.dataPreventivo,
     data.dataConsegnaPrevista,
+    data.luogoConsegna,
     data.validitaGiorni,
     data.note,
     JSON.stringify(data.items),

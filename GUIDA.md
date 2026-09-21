@@ -179,6 +179,16 @@ Regole utili:
 
 > **Suggerimento**: se non vuoi perdere quello che hai compilato, premi **Salva bozza** prima di chiudere. Il wizard non salva da solo: chiudendo la scheda senza salvare, i dati vanno persi.
 
+### 4.2 Preventivi
+
+Il wizard dei preventivi ha gli stessi step dell'ordine (cliente, articoli, dati, riepilogo). Nello step **Dati** trovi:
+
+- **Data consegna prevista** e **validità** (7, 15 o 30 giorni).
+- **Destinazione cantiere** (opzionale): scegli una destinazione recente del cliente o digita l'indirizzo, come nell'ordine. Se la lasci vuota, nel PDF la casella *Destinazione diversa* riporta **STESSA** (la sede del cliente). Trasformando il preventivo in ordine la destinazione viene ricopiata nel luogo di consegna.
+- **Note** che compaiono nel PDF.
+
+Il PDF (pulsante **PDF** nel dettaglio del preventivo) è un foglio A4 in stile Metodo: le righe articolo sono separate solo dalle colonne, le note in corsivo a tutta larghezza, le spese di trasporto per ultime.
+
 ---
 
 ## 5. Bozze: salvare e riprendere un ordine
