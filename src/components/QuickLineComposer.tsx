@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { MessageSquarePlus, PackagePlus, Plus, X } from "lucide-react";
+import { Check, MessageSquarePlus, PackagePlus, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import DiscountSelector from "@/components/DiscountSelector";
 import NumberField, { IOS_FONT } from "@/components/NumberField";
@@ -9,11 +9,21 @@ import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import type { LineActions } from "@/lib/order-lines-store";
 import { cn } from "@/lib/utils";
+import type { OrderLine } from "@/types";
+
+/** Richiesta di apertura della casella: nuova riga (eventualmente precompilata/posizionata) o modifica di una riga esistente. */
+export interface LineComposerRequest {
+  kind: "manuale" | "nota";
+  /** Riga esistente da modificare (manuale o nota). */
+  line?: OrderLine;
+  /** Descrizione iniziale per una nuova riga manuale (es. testo cercato senza risultati). */
+  descrizione?: string;
+  /** Per una nuova nota: id della riga sopra cui inserirla (assente = in coda). */
+  beforeId?: string | null;
+}
 
 export interface QuickLineComposerHandle {
-  /** Apre il form della riga manuale, con la descrizione già compilata (es. testo cercato senza risultati). */
-  openManual: (descrizione?: string) => void;
-  openNote: () => void;
+  open: (request: LineComposerRequest) => void;
 }
 
 interface Props {
@@ -54,6 +64,9 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
   const [qty, setQty] = useState(1);
   const [sconto, setSconto] = useState(0);
   const [nota, setNota] = useState("");
+  /** Riga in modifica (null = inserimento). */
+  const [editingLine, setEditingLine] = useState<OrderLine | null>(null);
+  const [noteBeforeId, setNoteBeforeId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const resetManual = () => {
@@ -64,39 +77,62 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
     setSconto(0);
   };
 
-  const openManual = (initial = "") => {
+  const scrollIntoView = () =>
+    window.requestAnimationFrame(() => rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+
+  const openManual = (initial = "", line: OrderLine | null = null) => {
     resetManual();
-    setDescrizione(initial);
+    if (line) {
+      setDescrizione(line.descrizione);
+      setUm(line.um);
+      setPrezzo(line.prezzoListino);
+      setQty(line.qty);
+      setSconto(line.sconto ?? 0);
+    } else {
+      setDescrizione(initial);
+    }
+    setEditingLine(line);
     setMode("manuale");
-    window.requestAnimationFrame(() => rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    scrollIntoView();
   };
 
-  const openNote = () => {
-    setNota("");
+  const openNote = (line: OrderLine | null = null, beforeId: string | null = null) => {
+    setNota(line?.descrizione ?? "");
+    setEditingLine(line);
+    setNoteBeforeId(line ? null : beforeId);
     setMode("nota");
-    window.requestAnimationFrame(() => rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    scrollIntoView();
   };
 
-  useImperativeHandle(ref, () => ({ openManual, openNote }));
+  const open = (request: LineComposerRequest) => {
+    if (request.kind === "manuale") openManual(request.descrizione ?? "", request.line ?? null);
+    else openNote(request.line ?? null, request.beforeId ?? null);
+  };
+
+  useImperativeHandle(ref, () => ({ open }));
 
   const close = () => {
     dismissKeyboard();
     setMode("closed");
+    setEditingLine(null);
+    setNoteBeforeId(null);
   };
+
+  const isEditing = editingLine !== null;
 
   const canAddManual = descrizione.trim() !== "" && qty > 0;
   const canAddNote = nota.trim() !== "";
 
   const addManual = () => {
     if (!canAddManual) return;
-    actions.addManualLine(null, {
-      descrizione: descrizione.trim(),
-      um: um.trim(),
-      qty,
-      prezzoListino: prezzo,
-      sconto,
-    });
-    toast.success("Articolo manuale aggiunto");
+    const patch = { descrizione: descrizione.trim(), um: um.trim(), qty, prezzoListino: prezzo, sconto };
+    if (editingLine) {
+      actions.updateLine(editingLine.id, patch);
+      toast.success("Articolo manuale aggiornato");
+    } else {
+      actions.addManualLine(null, patch);
+      toast.success("Articolo manuale aggiunto");
+    }
     close();
     resetManual();
     onAdded?.();
@@ -104,8 +140,13 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
 
   const addNote = () => {
     if (!canAddNote) return;
-    actions.addCommentLine(null, nota.trim());
-    toast.success("Nota aggiunta");
+    if (editingLine) {
+      actions.updateLine(editingLine.id, { descrizione: nota.trim() });
+      toast.success("Nota aggiornata");
+    } else {
+      actions.addCommentLine(noteBeforeId, nota.trim());
+      toast.success("Nota aggiunta");
+    }
     close();
     setNota("");
     onAdded?.();
@@ -129,13 +170,13 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
       )}
     >
       <div className="flex items-center gap-2">
-        <button type="button" onClick={() => (mode === "manuale" ? close() : openManual(descrizione))} className={tabClass(mode === "manuale")} aria-pressed={mode === "manuale"}>
+        <button type="button" onClick={() => (mode === "manuale" ? close() : openManual())} className={tabClass(mode === "manuale")} aria-pressed={mode === "manuale"}>
           <PackagePlus className="h-4 w-4" />
-          Articolo manuale
+          {isEditing && mode === "manuale" ? "Modifica articolo manuale" : "Articolo manuale"}
         </button>
         <button type="button" onClick={() => (mode === "nota" ? close() : openNote())} className={tabClass(mode === "nota")} aria-pressed={mode === "nota"}>
           <MessageSquarePlus className="h-4 w-4" />
-          Nota
+          {isEditing && mode === "nota" ? "Modifica nota" : "Nota"}
         </button>
       </div>
 
@@ -191,8 +232,8 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
               disabled={!canAddManual}
               className="flex-1 sm:flex-none h-10 px-4 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground border border-primary hover:opacity-95 disabled:bg-muted disabled:text-muted-foreground disabled:border-border disabled:cursor-not-allowed transition-colors"
             >
-              <Plus className="h-4 w-4" />
-              Aggiungi
+              {isEditing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {isEditing ? "Salva modifica" : "Aggiungi"}
             </button>
             <button
               type="button"
@@ -239,8 +280,8 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
               disabled={!canAddNote}
               className="flex-1 sm:flex-none h-10 px-4 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground border border-primary hover:opacity-95 disabled:bg-muted disabled:text-muted-foreground disabled:border-border disabled:cursor-not-allowed transition-colors"
             >
-              <Plus className="h-4 w-4" />
-              Aggiungi nota
+              {isEditing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {isEditing ? "Salva modifica" : "Aggiungi nota"}
             </button>
             <button
               type="button"

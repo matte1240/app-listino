@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { PackagePlus, PackageSearch, Tag } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import MaterialCard from "@/components/MaterialCard";
-import QuickLineComposer, { type QuickLineComposerHandle } from "@/components/QuickLineComposer";
+import QuickLineComposer, { type LineComposerRequest, type QuickLineComposerHandle } from "@/components/QuickLineComposer";
 import type { Material } from "@/types";
 
 function materialSearchText(m: Material): string {
@@ -18,6 +18,9 @@ interface Props {
   onArticleConfirmed?: () => void;
   openArticleRequest?: { codice: string; requestId: number } | null;
   onOpenArticleRequestHandled?: (requestId: number) => void;
+  /** Richiesta di apertura della casella righe manuali/note (nuova riga o modifica). */
+  lineRequest?: { request: LineComposerRequest; requestId: number } | null;
+  onLineRequestHandled?: (requestId: number) => void;
 }
 
 export default function MaterialList({
@@ -26,6 +29,8 @@ export default function MaterialList({
   onArticleConfirmed,
   openArticleRequest,
   onOpenArticleRequestHandled,
+  lineRequest,
+  onLineRequestHandled,
 }: Props) {
   const orderMaterials = useOrderStore((s) => s.materials);
   const orderSearchQuery = useOrderStore((s) => s.searchQuery);
@@ -35,6 +40,12 @@ export default function MaterialList({
   const quotationShowObsolete = useQuotationStore((s) => s.showObsolete);
 
   const composerRef = useRef<QuickLineComposerHandle>(null);
+
+  useEffect(() => {
+    if (!lineRequest) return;
+    composerRef.current?.open(lineRequest.request);
+    onLineRequestHandled?.(lineRequest.requestId);
+  }, [lineRequest, onLineRequestHandled]);
 
   const materials = store === "quotation" ? quotationMaterials : orderMaterials;
   const searchQuery = store === "quotation" ? quotationSearchQuery : orderSearchQuery;
@@ -116,7 +127,7 @@ export default function MaterialList({
           {!isReadOnlyCatalog && (
             <button
               type="button"
-              onClick={() => composerRef.current?.openManual(searchQuery.trim())}
+              onClick={() => composerRef.current?.open({ kind: "manuale", descrizione: searchQuery.trim() })}
               className="h-10 px-4 rounded-xl border border-primary/40 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-2"
             >
               <PackagePlus className="h-4 w-4" />

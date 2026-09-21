@@ -27,12 +27,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import MaterialList from "@/components/MaterialList";
 import OrderLinesEditor from "@/components/OrderLinesEditor";
+import type { LineComposerRequest } from "@/components/QuickLineComposer";
 import SearchBar from "@/components/SearchBar";
 import { countArticleLines, itemsRequireApproval } from "@/lib/order-lines";
 import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
 import { useAuth } from "@/lib/auth-context";
 import { useQuotationStore } from "@/lib/useQuotationStore";
-import { VALIDITA_PREVENTIVO_GIORNI, type AnagraficaSearchItem, type Quotation } from "@/types";
+import { VALIDITA_PREVENTIVO_GIORNI, type AnagraficaSearchItem, type OrderLine, type Quotation } from "@/types";
 
 const STEP_LABELS = ["Cliente", "Materiali", "Dati", "Riepilogo"] as const;
 
@@ -86,6 +87,8 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const [openArticleRequest, setOpenArticleRequest] = useState<{ codice: string; requestId: number } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openArticleRequestIdRef = useRef(0);
+  const [lineRequest, setLineRequest] = useState<{ request: LineComposerRequest; requestId: number } | null>(null);
+  const lineRequestIdRef = useRef(0);
 
   const isEditing = !!editingQuotation;
   const { user } = useAuth();
@@ -191,6 +194,27 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     });
   }, []);
 
+  /** Righe manuali e note si modificano dalla casella in cima alla lista articoli (step Materiali), come gli articoli. */
+  const openLineComposer = useCallback((request: LineComposerRequest) => {
+    setMobileCartOpen(false);
+    setSearchQuery("");
+    lineRequestIdRef.current += 1;
+    setLineRequest({ request, requestId: lineRequestIdRef.current });
+    setStep(2);
+  }, [setMobileCartOpen, setSearchQuery, setStep]);
+
+  const handleEditLine = useCallback((line: OrderLine) => {
+    openLineComposer({ kind: line.tipo === "commento" ? "nota" : "manuale", line });
+  }, [openLineComposer]);
+
+  const handleAddNoteAbove = useCallback((beforeId: string) => {
+    openLineComposer({ kind: "nota", beforeId });
+  }, [openLineComposer]);
+
+  const handleLineRequestHandled = useCallback((requestId: number) => {
+    setLineRequest((current) => (current && current.requestId === requestId ? null : current));
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (saving) return;
     setSaving(true);
@@ -291,6 +315,8 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           store="quotation"
           mode="cart"
           onEditArticle={handleEditItemInCatalog}
+          onEditLine={handleEditLine}
+          onAddNoteAbove={handleAddNoteAbove}
           listHeightClass={itemsHeightClass}
         />
       </div>
@@ -406,6 +432,8 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               onArticleConfirmed={handleArticleConfirmed}
               openArticleRequest={openArticleRequest}
               onOpenArticleRequestHandled={handleOpenArticleRequestHandled}
+              lineRequest={lineRequest}
+              onLineRequestHandled={handleLineRequestHandled}
             />
           </main>
 
@@ -626,6 +654,8 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               store="quotation"
               mode="summary"
               onEditArticle={handleEditItemInCatalog}
+              onEditLine={handleEditLine}
+              onAddNoteAbove={handleAddNoteAbove}
               showTrasportoControl
             />
           </div>
