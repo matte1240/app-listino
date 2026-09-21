@@ -218,24 +218,48 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     }
   }, [editingQuotation, isEditing, quotationInfo, quotationRows, resetQuotation, router, saving]);
 
+  /** Uno step è raggiungibile dallo stepper se tutti i precedenti sono completi (in modifica lo sono tutti). */
+  const canReachStep = (step: 1 | 2 | 3 | 4): boolean => {
+    if (step === 1) return true;
+    if (step === 2) return canGoNextStep1;
+    if (step === 3) return canGoNextStep1 && canGoNextStep2;
+    return canGoNextStep1 && canGoNextStep2 && canGoNextStep3;
+  };
+
+  const goToStep = (step: 1 | 2 | 3 | 4) => {
+    if (step === currentStep || !canReachStep(step)) return;
+    setMobileCartOpen(false);
+    setStep(step);
+  };
+
   const Stepper = () => (
     <div className="flex items-center gap-0 mb-6">
       {STEP_LABELS.map((label, idx) => {
         const stepNum = (idx + 1) as 1 | 2 | 3 | 4;
         const isActive = currentStep === stepNum;
         const isDone = currentStep > stepNum;
+        const reachable = canReachStep(stepNum);
         return (
           <div key={label} className="flex items-center flex-1 last:flex-none">
-            <div className="flex flex-col items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => goToStep(stepNum)}
+              disabled={!reachable}
+              aria-current={isActive ? "step" : undefined}
+              aria-label={`Vai allo step ${stepNum}: ${label}`}
+              className={`group flex flex-col items-center gap-1 shrink-0 rounded-lg px-1 -mx-1 transition-colors ${
+                reachable && !isActive ? "cursor-pointer hover:bg-primary/5" : "cursor-default"
+              }`}
+            >
               <div className={`flex h-7 w-7 rounded-full items-center justify-center text-xs font-bold transition-all ${
-                isDone || isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-              } ${isActive ? "ring-4 ring-primary/20" : ""}`}>
+                isDone || isActive ? "bg-primary text-primary-foreground" : reachable ? "bg-muted text-muted-foreground group-hover:bg-primary/15 group-hover:text-primary" : "bg-muted text-muted-foreground"
+              } ${isActive ? "ring-4 ring-primary/20" : isDone ? "group-hover:ring-4 group-hover:ring-primary/20" : ""}`}>
                 {isDone ? <CheckCircle2 className="h-4 w-4" /> : stepNum}
               </div>
               <span className={`text-[10px] font-semibold tracking-wide uppercase whitespace-nowrap ${isActive ? "text-primary" : "text-muted-foreground"}`}>
                 {label}
               </span>
-            </div>
+            </button>
             {idx < STEP_LABELS.length - 1 && <div className={`flex-1 h-px mx-2 mt-[-10px] ${isDone ? "bg-primary/40" : "bg-border"}`} />}
           </div>
         );
