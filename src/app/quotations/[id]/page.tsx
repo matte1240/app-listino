@@ -6,7 +6,10 @@ import { ArrowLeft, Calendar, CheckCircle2, Clock, FileText, Package, Pencil, Pr
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import type { Quotation, QuotationItem } from "@/types";
+import OrderLineRow from "@/components/OrderLineRow";
+import { countArticleLines } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, formatOrderCurrency } from "@/lib/order-totals";
+import type { Quotation } from "@/types";
 
 function formatDate(iso: string) {
   if (!iso) return "-";
@@ -17,16 +20,10 @@ function formatDate(iso: string) {
   });
 }
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
-function discountedPrice(item: QuotationItem) {
-  return item.prezzoListino * (1 - (item.sconto ?? 0) / 100);
-}
+const formatCurrency = formatOrderCurrency;
 
 function quotationTotal(quotation: Quotation) {
-  return quotation.items.reduce((sum, item) => sum + discountedPrice(item) * item.qty, 0);
+  return calculateOrderDiscountedTotal(quotation.items);
 }
 
 export default function QuotationDetailPage() {
@@ -181,23 +178,11 @@ export default function QuotationDetailPage() {
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Package className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">Articoli</span>
-            <Badge className="ml-auto rounded-full px-2.5 text-xs">{quotation.items.length}</Badge>
+            <Badge className="ml-auto rounded-full px-2.5 text-xs">{countArticleLines(quotation.items)}</Badge>
           </div>
           <div className="divide-y divide-border/60">
-            {quotation.items.map((item) => (
-              <div key={item.codice} className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold font-mono text-foreground">{item.codice}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{item.descrizione}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs sm:justify-end">
-                  <span className="font-bold text-foreground">{item.qty}</span>
-                  <span className="text-muted-foreground">{item.um}</span>
-                  <span>{formatCurrency(item.prezzoListino)}</span>
-                  {(item.sconto ?? 0) > 0 && <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{item.sconto}%</span>}
-                  <span className="font-semibold text-foreground">{formatCurrency(discountedPrice(item) * item.qty)}</span>
-                </div>
-              </div>
+            {quotation.items.map((item, index) => (
+              <OrderLineRow key={item.id ?? `${item.codice}-${index}`} item={item} variant="quotation" />
             ))}
           </div>
           <div className="px-4 py-3 border-t border-border bg-muted/30 flex items-center justify-between text-sm">

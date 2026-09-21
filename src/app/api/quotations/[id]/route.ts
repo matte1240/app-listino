@@ -3,8 +3,9 @@ import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotation } from "@/lib/quotations";
 import { userOwnsCustomerByRap } from "@/lib/rap";
-import { parseLocalizedNumber } from "@/lib/utils";
-import type { QuotationItem, ValiditaPreventivoGiorni } from "@/types";
+import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { getLineCodes } from "@/lib/settings";
+import type { ValiditaPreventivoGiorni } from "@/types";
 
 function canManageQuotation(
   db: ReturnType<typeof getDb>,
@@ -20,28 +21,6 @@ async function getAuthPayload(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
   return verifyToken(token);
-}
-
-function normalizeItems(items: unknown): QuotationItem[] {
-  if (!Array.isArray(items)) return [];
-
-  return items
-    .map((item) => {
-      const raw = item as Partial<QuotationItem>;
-      const qty = parseLocalizedNumber(raw.qty);
-      const prezzoListino = parseLocalizedNumber(raw.prezzoListino);
-      const sconto = raw.sconto === 8 || raw.sconto === 15 ? raw.sconto : 0;
-
-      return {
-        codice: String(raw.codice ?? "").trim(),
-        descrizione: String(raw.descrizione ?? "").trim(),
-        qty: Math.max(0, qty),
-        um: String(raw.um ?? "").trim(),
-        prezzoListino,
-        sconto,
-      } satisfies QuotationItem;
-    })
-    .filter((item) => item.codice && item.qty > 0);
 }
 
 async function resolveCustomer(db: ReturnType<typeof getDb>, clienteId: unknown, cliente: unknown) {
@@ -113,12 +92,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const customer = await resolveCustomer(db, body.clienteId, body.cliente);
   if (!customer) return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
 
-  const items = normalizeItems(body.items);
+  const items = normalizeOrderItems(body.items, getLineCodes());
   const dataPreventivo = String(existing.data_preventivo ?? new Date().toISOString().slice(0, 10)).trim();
   const dataConsegnaPrevista = String(body.dataConsegnaPrevista ?? "").trim() || String(existing.data_consegna_prevista ?? "").trim() || today();
   const validitaGiorni = normalizeValiditaGiorni(body.validitaGiorni);
 
-  if (!customer.cliente || !dataPreventivo || items.length === 0) {
+  if (!customer.cliente || !dataPreventivo || countArticleLines(items) === 0) {
     return NextResponse.json({ error: "Dati preventivo incompleti" }, { status: 400 });
   }
 

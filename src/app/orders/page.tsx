@@ -6,7 +6,9 @@ import { ClipboardList, Trash2, Pencil, ChevronDown, ChevronUp, Package, AlertTr
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
-import { calculateOrderDiscountedTotal, formatOrderCurrency, getDiscountedUnitPrice } from "@/lib/order-totals";
+import OrderLineRow from "@/components/OrderLineRow";
+import { countArticleLines } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
 import type { Order, OrderStatus } from "@/types";
 
 type OrderTab = "attivi" | "annullati";
@@ -293,7 +295,8 @@ export default function OrdersPage() {
           ) : (
             filteredOrders.map((order) => {
             const isOpen = expanded === order.id;
-            const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
+            const totalQty = calculateOrderTotalPieces(order.items);
+            const articleCount = countArticleLines(order.items);
             const totalImponibile = calculateOrderDiscountedTotal(order.items);
             const isDraft = order.status === "bozza";
             const hasAttachedDraft = !!order.hasDraft;
@@ -344,7 +347,7 @@ export default function OrdersPage() {
                       <span className="hidden text-xs text-muted-foreground/60 sm:inline">·</span>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Package className="h-3 w-3" />
-                        {order.items.length} art. — {totalQty} pz
+                        {articleCount} art. — {totalQty} pz
                       </span>
                       {isCancelled && order.cancelledFromStatus && (
                         <>
@@ -416,25 +419,7 @@ export default function OrdersPage() {
                     {/* Items */}
                     <div className="divide-y divide-border/60">
                       {order.items.map((item, idx) => (
-                        <div key={idx} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold font-mono text-foreground">{item.codice}</p>
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">{item.descrizione}</p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs sm:shrink-0 sm:justify-end">
-                            <span className="font-bold text-foreground">{item.qty}</span>
-                            <span className="text-muted-foreground">{item.um}</span>
-                            {item.sconto && item.sconto > 0 ? (
-                              <span className="flex flex-wrap items-center gap-1 sm:justify-end">
-                                <span className="line-through text-muted-foreground/50">€{item.prezzoListino.toFixed(3)}</span>
-                                <span className="font-semibold text-primary">€{getDiscountedUnitPrice(item).toFixed(3)}</span>
-                                <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{item.sconto}%</span>
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground/60">€{item.prezzoListino.toFixed(3)}</span>
-                            )}
-                          </div>
-                        </div>
+                        <OrderLineRow key={item.id ?? idx} item={item} variant="order" />
                       ))}
                     </div>
                     <div className="px-4 py-3 border-t border-border bg-muted/30 flex flex-col gap-1.5 text-sm">

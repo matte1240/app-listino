@@ -13,6 +13,8 @@ import {
   type OrderWriteData,
 } from "@/lib/orders";
 import { userOwnsCustomerByRap } from "@/lib/rap";
+import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { getLineCodes } from "@/lib/settings";
 import type { OrderHistoryItem } from "@/types";
 
 async function getAuthorizedOrder(req: NextRequest, paramsPromise: Promise<{ id: string }>) {
@@ -63,15 +65,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items: rawItems } = body as {
     clienteId?: number | null;
     cliente: string;
     magazzino: string;
     luogoConsegna: string;
     dataConsegna: string;
     note: string;
-    items: OrderHistoryItem[];
+    items: unknown;
   };
+  const items = normalizeOrderItems(rawItems, getLineCodes());
 
   const normalizedClienteId = Number(clienteId);
   const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
@@ -92,7 +95,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     resolvedCliente = selectedCustomer.ragione_sociale;
   }
 
-  if (!resolvedCliente || !magazzino?.trim() || !Array.isArray(items) || items.length === 0) {
+  if (!resolvedCliente || !magazzino?.trim() || countArticleLines(items) === 0) {
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 

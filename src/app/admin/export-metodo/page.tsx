@@ -16,6 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
+import { countArticleLines } from "@/lib/order-lines";
+import { calculateOrderTotalPieces } from "@/lib/order-totals";
 import type { Order } from "@/types";
 
 export default function AdminExportMetodoPage() {
@@ -167,7 +169,8 @@ export default function AdminExportMetodoPage() {
         ) : (
           <div className="flex flex-col gap-2">
             {filtered.map((order) => {
-              const totalQty = order.items.reduce((s, i) => s + i.qty, 0);
+              const totalQty = calculateOrderTotalPieces(order.items);
+              const articleCount = countArticleLines(order.items);
               const isDownloading = downloadingId === order.id;
               const canExport = !!order.clienteId;
               return (
@@ -200,7 +203,7 @@ export default function AdminExportMetodoPage() {
                       <span className="hidden sm:inline text-muted-foreground/60">·</span>
                       <span className="flex items-center gap-1">
                         <Package className="h-3 w-3" />
-                        {order.items.length} art. — {totalQty} pz
+                        {articleCount} art. — {totalQty} pz
                       </span>
                       {order.dataConsegna && (
                         <>

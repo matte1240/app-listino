@@ -338,6 +338,15 @@ function createDb() {
     )
   `);
 
+  // Impostazioni applicative chiave/valore (es. codici Metodo per trasporto e righe manuali)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   // Seed default admin if table is empty
   const count = db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number };
   if (count.c === 0) {

@@ -22,23 +22,33 @@ export interface EnrichedData {
   updatedAt: string;
 }
 
+/**
+ * Tipo di riga del corpo ordine/preventivo.
+ * - articolo: riga da listino (codice presente in `materials`)
+ * - manuale: riga inserita a mano (descrizione, U.M. e prezzo liberi)
+ * - commento: nota testuale a tutta larghezza, senza quantità né prezzo
+ * - trasporto: spese di trasporto, sempre ultima riga
+ */
+export type OrderLineType = "articolo" | "manuale" | "commento" | "trasporto";
+
 export interface OrderHistoryItem {
+  /** Identificativo stabile della riga (assente negli ordini salvati prima dell'introduzione). */
+  id?: string;
+  /** Assente = "articolo" (retro-compatibilità con gli ordini già salvati). */
+  tipo?: OrderLineType;
   codice: string;
   descrizione: string;
   qty: number;
   um: string;
   prezzoListino: number;
-  sconto?: number; // 0 | 8 | 15
+  /** Percentuale 0-100; 0/8/15 sono i preset, qualsiasi altro valore è uno "sconto libero". */
+  sconto?: number;
 }
 
-export interface QuotationItem {
-  codice: string;
-  descrizione: string;
-  qty: number;
-  um: string;
-  prezzoListino: number;
-  sconto?: number; // 0 | 8 | 15
-}
+export type QuotationItem = OrderHistoryItem;
+
+/** Riga come vive nello store del wizard: id e tipo sempre valorizzati. */
+export type OrderLine = OrderHistoryItem & { id: string; tipo: OrderLineType };
 
 export interface Quotation {
   id: number;

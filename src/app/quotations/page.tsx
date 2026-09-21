@@ -6,7 +6,10 @@ import { CheckCircle2, ChevronDown, ChevronUp, Clock, FileText, Loader2, Package
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import type { Quotation, QuotationItem } from "@/types";
+import OrderLineRow from "@/components/OrderLineRow";
+import { countArticleLines } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
+import type { Quotation } from "@/types";
 
 function formatDate(iso: string) {
   if (!iso) return "-";
@@ -17,16 +20,10 @@ function formatDate(iso: string) {
   });
 }
 
-function discountedPrice(item: QuotationItem) {
-  return item.prezzoListino * (1 - (item.sconto ?? 0) / 100);
-}
-
-function formatCurrency(value: number) {
-  return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
+const formatCurrency = formatOrderCurrency;
 
 function quotationTotal(quotation: Quotation) {
-  return quotation.items.reduce((sum, item) => sum + discountedPrice(item) * item.qty, 0);
+  return calculateOrderDiscountedTotal(quotation.items);
 }
 
 type QuotationTab = "attivi" | "convertiti";
@@ -164,7 +161,8 @@ export default function QuotationsPage() {
         ) : (
           filteredQuotations.map((quotation) => {
             const isOpen = expanded === quotation.id;
-            const totalQty = quotation.items.reduce((sum, item) => sum + item.qty, 0);
+            const totalQty = calculateOrderTotalPieces(quotation.items);
+            const articleCount = countArticleLines(quotation.items);
             const showDeleteConfirm = deleteConfirm === quotation.id;
             return (
               <div key={quotation.id} className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
@@ -180,7 +178,7 @@ export default function QuotationsPage() {
                       <span className="text-xs text-muted-foreground">{formatDate(quotation.dataPreventivo)}</span>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Package className="h-3 w-3" />
-                        {quotation.items.length} art. - {totalQty} pz
+                        {articleCount} art. - {totalQty} pz
                       </span>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />
@@ -207,19 +205,8 @@ export default function QuotationsPage() {
                     )}
 
                     <div className="divide-y divide-border/60">
-                      {quotation.items.map((item) => (
-                        <div key={item.codice} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold font-mono text-foreground">{item.codice}</p>
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">{item.descrizione}</p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs sm:shrink-0 sm:justify-end">
-                            <span className="font-bold text-foreground">{item.qty}</span>
-                            <span className="text-muted-foreground">{item.um}</span>
-                            {(item.sconto ?? 0) > 0 && <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{item.sconto}%</span>}
-                            <span className="font-semibold text-foreground">{formatCurrency(discountedPrice(item) * item.qty)}</span>
-                          </div>
-                        </div>
+                      {quotation.items.map((item, index) => (
+                        <OrderLineRow key={item.id ?? `${item.codice}-${index}`} item={item} variant="quotation" />
                       ))}
                     </div>
 

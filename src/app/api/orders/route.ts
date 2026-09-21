@@ -5,7 +5,9 @@ import { sendOrderEmail } from "@/lib/mail";
 import { dbOrderToOrder, getOrderDraftMap, type DbOrder } from "@/lib/orders";
 import { getDbQuotation, markQuotationConverted } from "@/lib/quotations";
 import { userOwnsCustomerByRap } from "@/lib/rap";
-import type { Order, OrderHistoryItem } from "@/types";
+import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { getLineCodes } from "@/lib/settings";
+import type { Order } from "@/types";
 
 type OrderListStatusFilter = "all" | "attivi" | "annullati";
 
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items, status, quotationId } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items: rawItems, status, quotationId } = body as {
     quotationId?: number | null;
     clienteId?: number | null;
     cliente: string;
@@ -110,13 +112,14 @@ export async function POST(req: NextRequest) {
     luogoConsegna: string;
     dataConsegna: string;
     note: string;
-    items: OrderHistoryItem[];
+    items: unknown;
     status?: "bozza" | "confermato";
   };
 
   const resolvedStatus: "bozza" | "confermato" = status === "bozza" ? "bozza" : "confermato";
 
   const db = getDb();
+  const items = normalizeOrderItems(rawItems, getLineCodes());
   const normalizedClienteId = Number(clienteId);
   const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
   const normalizedQuotationId = Number(quotationId);
@@ -138,7 +141,7 @@ export async function POST(req: NextRequest) {
     resolvedCliente = selectedCustomer.ragione_sociale;
   }
 
-  if (!resolvedCliente || !magazzino?.trim() || !Array.isArray(items) || items.length === 0) {
+  if (!resolvedCliente || !magazzino?.trim() || countArticleLines(items) === 0) {
     return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
   }
 
@@ -216,5 +219,5 @@ export async function POST(req: NextRequest) {
     sendOrderEmail(order, payload.email).catch((err) => console.error("[mail] Errore invio email ordine:", err));
   }
 
-  return NextResponse.json({ id: orderId }, { status: 201 });
+  return NextResponse.json({ id: orderId, status: resolvedStatus }, { status: 201 });
 }

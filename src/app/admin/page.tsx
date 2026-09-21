@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2 } from "lucide-react";
+import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import UploadExcel from "@/components/UploadExcel";
 
@@ -43,6 +43,12 @@ const adminSections = [
     title: "Export Metodo",
     description: "Esporta un ordine in XML per l'import nel gestionale Metodo.",
     icon: FileCode2,
+  },
+  {
+    href: "/admin/impostazioni",
+    title: "Impostazioni",
+    description: "Codici Metodo per trasporto e articoli manuali.",
+    icon: Settings2,
   },
 ];
 

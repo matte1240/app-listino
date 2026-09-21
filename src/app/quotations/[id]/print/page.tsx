@@ -7,6 +7,8 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
+import { getLineType } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, formatSconto, getLineTotal } from "@/lib/order-totals";
 import type { Anagrafica, Quotation, QuotationItem } from "@/types";
 
 const VAT_RATE = 0.22;
@@ -32,16 +34,12 @@ function formatUnitPrice(value: number) {
   });
 }
 
-function discountedPrice(item: QuotationItem) {
-  return item.prezzoListino * (1 - (item.sconto ?? 0) / 100);
-}
-
 function quotationTotal(quotation: Quotation) {
-  return quotation.items.reduce((sum, item) => sum + discountedPrice(item) * item.qty, 0);
+  return calculateOrderDiscountedTotal(quotation.items);
 }
 
 function displayDiscount(item: QuotationItem) {
-  return item.sconto ? `${item.sconto}` : "*";
+  return item.sconto ? formatSconto(item.sconto) : "*";
 }
 
 function estimateWrappedLines(value: string, charsPerLine: number) {
@@ -50,7 +48,12 @@ function estimateWrappedLines(value: string, charsPerLine: number) {
   return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
 }
 
+function estimateCommentRowHeightMm(item: QuotationItem) {
+  return 2.6 + estimateWrappedLines(item.descrizione, 115) * 4.1;
+}
+
 function estimateItemRowHeightMm(item: QuotationItem) {
+  if (getLineType(item) === "commento") return estimateCommentRowHeightMm(item);
   const descriptionLines = estimateWrappedLines(item.descrizione, 46);
   const codeLines = estimateWrappedLines(item.codice, 22);
   const visibleLines = Math.max(descriptionLines, codeLines, 1);
@@ -368,6 +371,10 @@ export default function QuotationPrintPage() {
           line-height: 1.22;
         }
 
+        .comment-row td {
+          font-style: italic;
+        }
+
         .notes-label {
           display: block;
           margin-bottom: 0.8mm;
@@ -572,16 +579,25 @@ export default function QuotationPrintPage() {
             </thead>
             <tbody>
               {quotation.items.map((item, index) => {
-                const rowPrice = discountedPrice(item);
+                const rowKey = item.id ?? `${item.codice}-${index}`;
+                if (getLineType(item) === "commento") {
+                  return (
+                    <tr key={rowKey} className="notes-row comment-row">
+                      <td colSpan={8}>
+                        <p className="notes-content">{item.descrizione}</p>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
-                  <tr key={`${item.codice}-${index}`}>
+                  <tr key={rowKey}>
                     <td className="code-cell">{item.codice}</td>
                     <td className="description-lines">{item.descrizione}</td>
                     <td>{item.um}</td>
                     <td className="text-right">{item.qty % 1 === 0 ? item.qty : item.qty.toLocaleString("it-IT")}</td>
                     <td className="text-right">{formatUnitPrice(item.prezzoListino)}</td>
                     <td className="text-right">{displayDiscount(item)}</td>
-                    <td className="text-right">{formatCurrency(rowPrice * item.qty)}</td>
+                    <td className="text-right">{formatCurrency(getLineTotal(item))}</td>
                     <td className="text-right">22</td>
                   </tr>
                 );

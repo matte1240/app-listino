@@ -1,5 +1,6 @@
-import type { Order } from "@/types";
+import type { Order, OrderHistoryItem } from "@/types";
 import { getDb } from "@/lib/db";
+import { getLineType } from "@/lib/order-lines";
 
 function escapeXmlAttr(s: string): string {
   return s
@@ -47,6 +48,31 @@ export interface BuildMetodoOrderXmlInput {
   codiceCliente: string;
 }
 
+/**
+ * Una riga `<riga .../>` per tipo:
+ * - articolo/manuale/trasporto: codice (per manuali e trasporto è quello configurato dall'admin), descr, um, quant, prezzo, sconto1
+ * - commento: sola descrizione, senza codice/quantità/prezzo
+ */
+function buildMetodoRiga(item: OrderHistoryItem): string {
+  const attrs: string[] = [];
+  const tipo = getLineType(item);
+
+  if (tipo === "commento") {
+    attrs.push(`descr="${escapeXmlAttr(item.descrizione)}"`);
+    return `<riga ${attrs.join(" ")}/>`;
+  }
+
+  attrs.push(`codice="${escapeXmlAttr(item.codice)}"`);
+  if (item.descrizione) attrs.push(`descr="${escapeXmlAttr(item.descrizione)}"`);
+  if (item.um) attrs.push(`um="${escapeXmlAttr(item.um)}"`);
+  attrs.push(`quant="${formatNumber(item.qty)}"`);
+  attrs.push(`prezzo="${formatNumber(item.prezzoListino)}"`);
+  if (item.sconto && item.sconto > 0) {
+    attrs.push(`sconto1="${formatNumber(item.sconto)}"`);
+  }
+  return `<riga ${attrs.join(" ")}/>`;
+}
+
 export function buildMetodoOrderXml({ order, codiceCliente }: BuildMetodoOrderXmlInput): string {
   const lines: string[] = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -70,16 +96,7 @@ export function buildMetodoOrderXml({ order, codiceCliente }: BuildMetodoOrderXm
 
   lines.push("  <righe>");
   for (const item of order.items) {
-    const attrs: string[] = [];
-    attrs.push(`codice="${escapeXmlAttr(item.codice)}"`);
-    if (item.descrizione) attrs.push(`descr="${escapeXmlAttr(item.descrizione)}"`);
-    if (item.um) attrs.push(`um="${escapeXmlAttr(item.um)}"`);
-    attrs.push(`quant="${formatNumber(item.qty)}"`);
-    attrs.push(`prezzo="${formatNumber(item.prezzoListino)}"`);
-    if (item.sconto && item.sconto > 0) {
-      attrs.push(`sconto1="${formatNumber(item.sconto)}"`);
-    }
-    lines.push(`    <riga ${attrs.join(" ")}/>`);
+    lines.push(`    ${buildMetodoRiga(item)}`);
   }
   lines.push("  </righe>");
   lines.push("</dati>");
@@ -104,7 +121,10 @@ export function buildMetodoOrderXmlForOrder(order: Order): MetodoXmlResult {
     return { ok: false, reason: "no_codice_anagrafica" };
   }
 
-  const codici = Array.from(new Set(order.items.map((i) => i.codice).filter(Boolean)));
+  // Per gli articoli a listino usa la descrizione originale del catalogo (non quella AI).
+  // Manuali, note e trasporto mantengono la descrizione inserita dall'agente.
+  const isCatalogArticle = (item: OrderHistoryItem) => getLineType(item) === "articolo";
+  const codici = Array.from(new Set(order.items.filter(isCatalogArticle).map((i) => i.codice).filter(Boolean)));
   let itemsForXml = order.items;
   if (codici.length > 0) {
     const placeholders = codici.map(() => "?").join(",");
@@ -113,6 +133,7 @@ export function buildMetodoOrderXmlForOrder(order: Order): MetodoXmlResult {
       .all(...codici) as Array<{ codice: string; descrizione: string }>;
     const descrByCodice = new Map(rows.map((r) => [r.codice, r.descrizione]));
     itemsForXml = order.items.map((item) => {
+      if (!isCatalogArticle(item)) return item;
       const original = descrByCodice.get(item.codice);
       return original ? { ...item, descrizione: original } : item;
     });

@@ -2,7 +2,23 @@ import nodemailer from "nodemailer";
 import type { Order, OrderHistoryItem } from "@/types";
 import { getDb } from "@/lib/db";
 import { buildMetodoOrderXmlForOrder } from "@/lib/metodo-xml";
-import { calculateOrderDiscountedTotal, formatOrderCurrency, getDiscountedUnitPrice } from "@/lib/order-totals";
+import { getLineType } from "@/lib/order-lines";
+import {
+  computeOrderDiff,
+  orderDiffHasChanges,
+  type ItemFieldChange,
+  type ModifiedItem,
+  type OrderDiff,
+  type PreviousOrderSnapshot,
+} from "@/lib/order-diff";
+import {
+  calculateOrderDiscountedTotal,
+  formatOrderCurrency,
+  formatScontoLabel,
+  getDiscountedUnitPrice,
+} from "@/lib/order-totals";
+
+export type { PreviousOrderSnapshot } from "@/lib/order-diff";
 
 const APP_NAME = "Ordini Ivicolors";
 
@@ -45,14 +61,18 @@ function getBranchEmail(magazzino: string): { to: string; cc: string } {
 
 let _transporter: nodemailer.Transporter | null = null;
 
-function getMailFromValue(): { name: string; address: string } {
+export function getMailFromValue(): { name: string; address: string } {
   return {
     name: process.env.GMAIL_FROM_NAME?.trim() || APP_NAME,
     address: process.env.GMAIL_FROM_ALIAS?.trim() || process.env.GMAIL_USER?.trim() || "",
   };
 }
 
-function getTransporter(): nodemailer.Transporter {
+export function isMailConfigured(): boolean {
+  return !!process.env.GMAIL_USER && !!process.env.GMAIL_APP_PASSWORD;
+}
+
+export function getTransporter(): nodemailer.Transporter {
   if (!_transporter) {
     _transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -123,106 +143,7 @@ function buildCcValue(branchCc?: string, agenteEmail?: string): string | undefin
   return ordered.length > 0 ? ordered.join(", ") : undefined;
 }
 
-export interface PreviousOrderSnapshot {
-  cliente: string;
-  magazzino: string;
-  luogoConsegna: string;
-  dataConsegna: string;
-  note: string;
-  items: OrderHistoryItem[];
-}
-
-interface ItemFieldChange {
-  field: "qty" | "um" | "sconto" | "prezzoListino" | "descrizione";
-  before: string;
-  after: string;
-}
-
-interface ModifiedItem {
-  before: OrderHistoryItem;
-  after: OrderHistoryItem;
-  changes: ItemFieldChange[];
-}
-
-interface OrderDiff {
-  headerChanges: Array<{ label: string; before: string; after: string }>;
-  added: OrderHistoryItem[];
-  removed: OrderHistoryItem[];
-  modified: ModifiedItem[];
-  unchanged: OrderHistoryItem[];
-}
-
-function formatScontoLabel(sconto?: number): string {
-  return sconto && sconto > 0 ? `-${sconto}%` : "—";
-}
-
-function diffItem(before: OrderHistoryItem, after: OrderHistoryItem): ItemFieldChange[] {
-  const changes: ItemFieldChange[] = [];
-  if (before.qty !== after.qty) {
-    changes.push({ field: "qty", before: String(before.qty), after: String(after.qty) });
-  }
-  if ((before.um ?? "") !== (after.um ?? "")) {
-    changes.push({ field: "um", before: before.um ?? "", after: after.um ?? "" });
-  }
-  if ((before.sconto ?? 0) !== (after.sconto ?? 0)) {
-    changes.push({ field: "sconto", before: formatScontoLabel(before.sconto), after: formatScontoLabel(after.sconto) });
-  }
-  if (before.prezzoListino !== after.prezzoListino) {
-    changes.push({
-      field: "prezzoListino",
-      before: `EUR ${before.prezzoListino.toFixed(2)}`,
-      after: `EUR ${after.prezzoListino.toFixed(2)}`,
-    });
-  }
-  if ((before.descrizione ?? "") !== (after.descrizione ?? "")) {
-    changes.push({ field: "descrizione", before: before.descrizione ?? "", after: after.descrizione ?? "" });
-  }
-  return changes;
-}
-
-function computeOrderDiff(previous: PreviousOrderSnapshot, order: Order): OrderDiff {
-  const headerChanges: OrderDiff["headerChanges"] = [];
-  const headerFields: Array<{ label: string; before: string; after: string }> = [
-    { label: "Cliente", before: previous.cliente, after: order.cliente },
-    { label: "Magazzino", before: previous.magazzino, after: order.magazzino },
-    { label: "Luogo consegna", before: previous.luogoConsegna, after: order.luogoConsegna },
-    {
-      label: "Data consegna",
-      before: previous.dataConsegna ? formatDate(previous.dataConsegna) : "—",
-      after: order.dataConsegna ? formatDate(order.dataConsegna) : "—",
-    },
-    { label: "Note", before: previous.note, after: order.note },
-  ];
-  for (const f of headerFields) {
-    if ((f.before ?? "") !== (f.after ?? "")) headerChanges.push(f);
-  }
-
-  const beforeByCodice = new Map(previous.items.map((i) => [i.codice, i]));
-  const afterByCodice = new Map(order.items.map((i) => [i.codice, i]));
-
-  const added: OrderHistoryItem[] = [];
-  const removed: OrderHistoryItem[] = [];
-  const modified: ModifiedItem[] = [];
-  const unchanged: OrderHistoryItem[] = [];
-
-  for (const after of order.items) {
-    const before = beforeByCodice.get(after.codice);
-    if (!before) {
-      added.push(after);
-      continue;
-    }
-    const changes = diffItem(before, after);
-    if (changes.length > 0) modified.push({ before, after, changes });
-    else unchanged.push(after);
-  }
-  for (const before of previous.items) {
-    if (!afterByCodice.has(before.codice)) removed.push(before);
-  }
-
-  return { headerChanges, added, removed, modified, unchanged };
-}
-
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -230,30 +151,35 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function renderDiffItemRow(
-  item: OrderHistoryItem,
-  kind: "added" | "removed" | "unchanged",
-): string {
-  const bg =
-    kind === "added" ? "#e6ffed" : kind === "removed" ? "#ffeef0" : "#ffffff";
-  const badge =
-    kind === "added"
-      ? '<span style="color:#22863a;font-weight:bold;">+ AGGIUNTO</span>'
-      : kind === "removed"
-        ? '<span style="color:#b31d28;font-weight:bold;">− RIMOSSO</span>'
-        : "";
-  const decoration = kind === "removed" ? "text-decoration:line-through;color:#6a737d;" : "";
-  const prezzoEffettivo = item.sconto && item.sconto > 0
-    ? item.prezzoListino * (1 - item.sconto / 100)
-    : item.prezzoListino;
-  const scontoCell = item.sconto && item.sconto > 0
-    ? `<strong>-${item.sconto}%</strong>`
-    : `—`;
-  const cell = `border:1px solid #cccccc;padding:6px;background:${bg};${decoration}`;
+const CELL_BORDER = "border:1px solid #cccccc;padding:6px;";
+
+/** Riga nota: occupa tutte le colonne della tabella. */
+function renderCommentRow(item: OrderHistoryItem, extra: { bg?: string; badge?: string; decoration?: string } = {}): string {
+  const bg = extra.bg ?? "#f6f8fa";
+  const decoration = extra.decoration ?? "";
   return `
       <tr>
-        <td style="${cell}text-align:left">${badge ? `${badge}<br/>` : ""}${escapeHtml(item.codice)}</td>
-        <td style="${cell}text-align:left">${escapeHtml(item.descrizione)}</td>
+        <td colspan="7" style="${CELL_BORDER}background:${bg};font-style:italic;color:#333333;${decoration}">${extra.badge ? `${extra.badge}<br/>` : ""}<strong>Nota:</strong> ${escapeHtml(item.descrizione).replace(/\n/g, "<br/>")}</td>
+      </tr>`;
+}
+
+function renderItemRow(
+  item: OrderHistoryItem,
+  extra: { bg?: string; badge?: string; decoration?: string } = {},
+): string {
+  if (getLineType(item) === "commento") return renderCommentRow(item, extra);
+
+  const bg = extra.bg ?? "#ffffff";
+  const decoration = extra.decoration ?? "";
+  const prezzoEffettivo = getDiscountedUnitPrice(item);
+  const scontoCell = item.sconto && item.sconto > 0 ? `<strong>${formatScontoLabel(item.sconto)}</strong>` : `—`;
+  const cell = `${CELL_BORDER}background:${bg};${decoration}`;
+  const isTrasporto = getLineType(item) === "trasporto";
+  const descrizione = isTrasporto ? `<strong>${escapeHtml(item.descrizione)}</strong>` : escapeHtml(item.descrizione);
+  return `
+      <tr>
+        <td style="${cell}text-align:left">${extra.badge ? `${extra.badge}<br/>` : ""}${escapeHtml(item.codice)}</td>
+        <td style="${cell}text-align:left">${descrizione}</td>
         <td style="${cell}text-align:center">${escapeHtml(item.um ?? "")}</td>
         <td style="${cell}text-align:center">${item.qty}</td>
         <td style="${cell}text-align:right">EUR ${item.prezzoListino.toFixed(2)}</td>
@@ -262,9 +188,25 @@ function renderDiffItemRow(
       </tr>`;
 }
 
+function renderDiffItemRow(
+  item: OrderHistoryItem,
+  kind: "added" | "removed" | "unchanged",
+): string {
+  const bg =
+    kind === "added" ? "#e6ffed" : kind === "removed" ? "#ffeef0" : getLineType(item) === "commento" ? "#f6f8fa" : "#ffffff";
+  const badge =
+    kind === "added"
+      ? '<span style="color:#22863a;font-weight:bold;">+ AGGIUNTO</span>'
+      : kind === "removed"
+        ? '<span style="color:#b31d28;font-weight:bold;">− RIMOSSO</span>'
+        : "";
+  const decoration = kind === "removed" ? "text-decoration:line-through;color:#6a737d;" : "";
+  return renderItemRow(item, { bg, badge, decoration });
+}
+
 function renderDiffModifiedRow(mod: ModifiedItem): string {
   const bg = "#fff5b1";
-  const cell = `border:1px solid #cccccc;padding:6px;background:${bg};`;
+  const cell = `${CELL_BORDER}background:${bg};`;
   const after = mod.after;
   const changedFields = new Set(mod.changes.map((c) => c.field));
   const fmtCell = (field: ItemFieldChange["field"], current: string): string => {
@@ -272,6 +214,14 @@ function renderDiffModifiedRow(mod: ModifiedItem): string {
     if (!change) return current;
     return `<span style="color:#b31d28;text-decoration:line-through;">${escapeHtml(change.before)}</span> &rarr; <strong>${escapeHtml(change.after)}</strong>`;
   };
+
+  if (getLineType(after) === "commento") {
+    return `
+      <tr>
+        <td colspan="7" style="${cell}font-style:italic;"><span style="color:#b08800;font-weight:bold;">~ MODIFICATO</span><br/><strong>Nota:</strong> ${fmtCell("descrizione", escapeHtml(after.descrizione))}</td>
+      </tr>`;
+  }
+
   const listPriceCellContent = changedFields.has("prezzoListino")
     ? fmtCell("prezzoListino", "")
     : `EUR ${after.prezzoListino.toFixed(2)}`;
@@ -279,8 +229,8 @@ function renderDiffModifiedRow(mod: ModifiedItem): string {
     ? fmtCell("sconto", "")
     : formatScontoLabel(after.sconto);
 
-  const nettoBefore = mod.before.prezzoListino * (1 - (mod.before.sconto ?? 0) / 100);
-  const nettoAfter = mod.after.prezzoListino * (1 - (mod.after.sconto ?? 0) / 100);
+  const nettoBefore = getDiscountedUnitPrice(mod.before);
+  const nettoAfter = getDiscountedUnitPrice(mod.after);
   const nettoChanged = Math.abs(nettoBefore - nettoAfter) > 0.005;
   const nettoCellContent = nettoChanged
     ? `<span style="color:#b31d28;text-decoration:line-through;">EUR ${nettoBefore.toFixed(2)}</span> &rarr; <strong>EUR ${nettoAfter.toFixed(2)}</strong>`
@@ -299,13 +249,7 @@ function renderDiffModifiedRow(mod: ModifiedItem): string {
 }
 
 function renderDiffSection(diff: OrderDiff): string {
-  const hasAnyChange =
-    diff.headerChanges.length > 0 ||
-    diff.added.length > 0 ||
-    diff.removed.length > 0 ||
-    diff.modified.length > 0;
-
-  if (!hasAnyChange) {
+  if (!orderDiffHasChanges(diff)) {
     return `<tr><td style="padding:8px 0;color:#6a737d;"><em>Nessuna differenza rilevata rispetto alla versione precedente.</em></td></tr>`;
   }
 
@@ -313,9 +257,9 @@ function renderDiffSection(diff: OrderDiff): string {
     .map(
       (c) => `
       <tr>
-        <td style="border:1px solid #cccccc;padding:6px;background:#f6f8fa;"><strong>${escapeHtml(c.label)}</strong></td>
-        <td style="border:1px solid #cccccc;padding:6px;color:#b31d28;text-decoration:line-through;">${escapeHtml(c.before || "—")}</td>
-        <td style="border:1px solid #cccccc;padding:6px;color:#22863a;"><strong>${escapeHtml(c.after || "—")}</strong></td>
+        <td style="${CELL_BORDER}background:#f6f8fa;"><strong>${escapeHtml(c.label)}</strong></td>
+        <td style="${CELL_BORDER}color:#b31d28;text-decoration:line-through;">${escapeHtml(c.before || "—")}</td>
+        <td style="${CELL_BORDER}color:#22863a;"><strong>${escapeHtml(c.after || "—")}</strong></td>
       </tr>`
     )
     .join("");
@@ -326,9 +270,9 @@ function renderDiffSection(diff: OrderDiff): string {
          <table role="table" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
            <thead>
              <tr>
-               <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Campo</th>
-               <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Prima</th>
-               <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Dopo</th>
+               <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Campo</th>
+               <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Prima</th>
+               <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Dopo</th>
              </tr>
            </thead>
            <tbody>${headerRows}</tbody>
@@ -336,15 +280,28 @@ function renderDiffSection(diff: OrderDiff): string {
        </td></tr>`
     : "";
 
-  return headerSection;
+  const reorderedSection = diff.reordered
+    ? `<tr><td style="padding:0 0 10px 0;color:#b08800;"><strong>L'ordine delle righe è stato modificato.</strong></td></tr>`
+    : "";
+
+  return headerSection + reorderedSection;
 }
 
-function buildDiffItemsRows(diff: OrderDiff): string {
+/**
+ * Righe della tabella in modalità "modificato": segue l'ordine attuale dell'ordine,
+ * poi accoda le righe rimosse.
+ */
+function buildDiffItemsRows(order: Order, diff: OrderDiff): string {
+  const modifiedByAfter = new Map(diff.modified.map((m) => [m.after, m]));
+  const added = new Set(diff.added);
   const rows: string[] = [];
-  for (const m of diff.modified) rows.push(renderDiffModifiedRow(m));
-  for (const a of diff.added) rows.push(renderDiffItemRow(a, "added"));
+  for (const item of order.items) {
+    const mod = modifiedByAfter.get(item);
+    if (mod) rows.push(renderDiffModifiedRow(mod));
+    else if (added.has(item)) rows.push(renderDiffItemRow(item, "added"));
+    else rows.push(renderDiffItemRow(item, "unchanged"));
+  }
   for (const r of diff.removed) rows.push(renderDiffItemRow(r, "removed"));
-  for (const u of diff.unchanged) rows.push(renderDiffItemRow(u, "unchanged"));
   return rows.join("");
 }
 
@@ -364,25 +321,8 @@ function buildOrderHtml(
   const mapsUrl = buildGoogleMapsSearchUrl(order.luogoConsegna);
   const agenteDisplayName = order.agenteFullName || order.agente;
   const rows = mode === "updated" && diff
-    ? buildDiffItemsRows(diff)
-    : order.items
-      .map((item) => {
-        const prezzoEffettivo = getDiscountedUnitPrice(item);
-        const scontoCell = item.sconto && item.sconto > 0
-          ? `<strong>-${item.sconto}%</strong>`
-          : `—`;
-        return `
-      <tr>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:left">${escapeHtml(item.codice)}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:left">${escapeHtml(item.descrizione)}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:center">${escapeHtml(item.um ?? "")}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:center">${item.qty}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:right">EUR ${item.prezzoListino.toFixed(2)}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:center">${scontoCell}</td>
-        <td style="border:1px solid #cccccc;padding:6px;text-align:right">EUR ${prezzoEffettivo.toFixed(2)}</td>
-      </tr>`;
-      })
-      .join("");
+    ? buildDiffItemsRows(order, diff)
+    : order.items.map((item) => renderItemRow(item)).join("");
 
   return `
 <!DOCTYPE html>
@@ -403,13 +343,13 @@ function buildOrderHtml(
     <tr>
       <td style="padding:0 0 14px 0;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
-          <tr><td style="padding:3px 0;"><strong>Cliente:</strong> ${order.cliente}</td></tr>
-          <tr><td style="padding:3px 0;"><strong>Magazzino:</strong> ${order.magazzino}</td></tr>
-          <tr><td style="padding:3px 0;"><strong>Agente:</strong> ${agenteDisplayName}</td></tr>
-          ${order.luogoConsegna ? `<tr><td style="padding:3px 0;"><strong>Luogo consegna:</strong> ${order.luogoConsegna}</td></tr>` : ""}
+          <tr><td style="padding:3px 0;"><strong>Cliente:</strong> ${escapeHtml(order.cliente)}</td></tr>
+          <tr><td style="padding:3px 0;"><strong>Magazzino:</strong> ${escapeHtml(order.magazzino)}</td></tr>
+          <tr><td style="padding:3px 0;"><strong>Agente:</strong> ${escapeHtml(agenteDisplayName)}</td></tr>
+          ${order.luogoConsegna ? `<tr><td style="padding:3px 0;"><strong>Luogo consegna:</strong> ${escapeHtml(order.luogoConsegna)}</td></tr>` : ""}
           ${mapsUrl ? `<tr><td style="padding:3px 0;"><strong>Google Maps:</strong> <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">Apri indirizzo cantiere</a></td></tr>` : ""}
           ${order.dataConsegna ? `<tr><td style="padding:3px 0;"><strong>Data consegna:</strong> ${formatDate(order.dataConsegna)}</td></tr>` : ""}
-          ${order.note ? `<tr><td style="padding:3px 0;"><strong>Note:</strong> ${order.note}</td></tr>` : ""}
+          ${order.note ? `<tr><td style="padding:3px 0;"><strong>Note:</strong> ${escapeHtml(order.note)}</td></tr>` : ""}
         </table>
       </td>
     </tr>
@@ -423,20 +363,20 @@ function buildOrderHtml(
         <table role="table" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
           <thead>
             <tr>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Codice</th>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:left;background:#f2f2f2;">Descrizione</th>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">UM</th>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">Quantità</th>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:right;background:#f2f2f2;">Prezzo di listino</th>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:center;background:#f2f2f2;">Sconto</th>
-              <th style="border:1px solid #cccccc;padding:6px;text-align:right;background:#f2f2f2;">Netto</th>
+              <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Codice</th>
+              <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Descrizione</th>
+              <th style="${CELL_BORDER}text-align:center;background:#f2f2f2;">UM</th>
+              <th style="${CELL_BORDER}text-align:center;background:#f2f2f2;">Quantità</th>
+              <th style="${CELL_BORDER}text-align:right;background:#f2f2f2;">Prezzo di listino</th>
+              <th style="${CELL_BORDER}text-align:center;background:#f2f2f2;">Sconto</th>
+              <th style="${CELL_BORDER}text-align:right;background:#f2f2f2;">Netto</th>
             </tr>
           </thead>
           <tbody>
             ${rows}
             <tr>
-              <td colspan="6" style="border:1px solid #cccccc;padding:6px;"><strong>Totale imponibile</strong></td>
-              <td style="border:1px solid #cccccc;padding:6px;text-align:right;"><strong>${formatOrderCurrency(totalImponibile)}</strong></td>
+              <td colspan="6" style="${CELL_BORDER}"><strong>Totale imponibile</strong></td>
+              <td style="${CELL_BORDER}text-align:right;"><strong>${formatOrderCurrency(totalImponibile)}</strong></td>
             </tr>
           </tbody>
         </table>
@@ -452,9 +392,11 @@ function buildOrderHtml(
 }
 
 function formatItemTextLine(item: OrderHistoryItem, prefix: string): string {
+  if (getLineType(item) === "commento") {
+    return `${prefix} NOTA: ${item.descrizione.replace(/\s*\n\s*/g, " / ")}`;
+  }
   const prezzoEffettivo = getDiscountedUnitPrice(item);
-  const scontoLabel = item.sconto && item.sconto > 0 ? `-${item.sconto}%` : "—";
-  return `${prefix} ${item.codice} | ${item.descrizione} | UM: ${item.um ?? "—"} | Qta: ${item.qty} | Listino: EUR ${item.prezzoListino.toFixed(2)} | Sconto: ${scontoLabel} | Netto: EUR ${prezzoEffettivo.toFixed(2)}`;
+  return `${prefix} ${item.codice} | ${item.descrizione} | UM: ${item.um || "—"} | Qta: ${item.qty} | Listino: EUR ${item.prezzoListino.toFixed(2)} | Sconto: ${formatScontoLabel(item.sconto)} | Netto: EUR ${prezzoEffettivo.toFixed(2)}`;
 }
 
 function buildOrderText(
@@ -496,20 +438,30 @@ function buildOrderText(
         lines.push(`  ${c.label}: "${c.before || "—"}" -> "${c.after || "—"}"`);
       }
     }
+    if (diff.reordered) {
+      lines.push("", "L'ordine delle righe e stato modificato.");
+    }
 
-    lines.push("", "Modifiche righe (legenda: + aggiunto, - rimosso, ~ modificato, =  invariato):");
-    for (const m of diff.modified) {
-      lines.push(formatItemTextLine(m.after, "~"));
-      for (const ch of m.changes) {
-        lines.push(`    ${ch.field}: "${ch.before}" -> "${ch.after}"`);
+    lines.push("", "Righe ordine (legenda: + aggiunto, - rimosso, ~ modificato, =  invariato):");
+    const modifiedByAfter = new Map(diff.modified.map((m) => [m.after, m]));
+    const added = new Set(diff.added);
+    for (const item of order.items) {
+      const mod = modifiedByAfter.get(item);
+      if (mod) {
+        lines.push(formatItemTextLine(mod.after, "~"));
+        for (const ch of mod.changes) {
+          lines.push(`    ${ch.field}: "${ch.before}" -> "${ch.after}"`);
+        }
+      } else if (added.has(item)) {
+        lines.push(formatItemTextLine(item, "+"));
+      } else {
+        lines.push(formatItemTextLine(item, "="));
       }
     }
-    for (const a of diff.added) lines.push(formatItemTextLine(a, "+"));
     for (const r of diff.removed) lines.push(formatItemTextLine(r, "-"));
-    for (const u of diff.unchanged) lines.push(formatItemTextLine(u, "="));
 
-    if (diff.headerChanges.length === 0 && diff.modified.length === 0 && diff.added.length === 0 && diff.removed.length === 0) {
-      lines.push("(nessuna diferencia rilevata rispetto alla versione precedente)");
+    if (!orderDiffHasChanges(diff)) {
+      lines.push("(nessuna differenza rilevata rispetto alla versione precedente)");
     }
   } else {
     lines.push("", "Righe ordine:");
@@ -525,7 +477,7 @@ function buildOrderText(
 
 export async function sendOrderEmail(order: Order, agenteEmail?: string): Promise<void> {
   const branch = getBranchEmail(order.magazzino);
-  if (!branch.to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+  if (!branch.to || !isMailConfigured()) {
     console.warn("[mail] Invio email disabilitato: credenziali GMAIL mancanti o nessuna email configurata per", order.magazzino);
     return;
   }
@@ -548,7 +500,7 @@ export async function sendOrderUpdatedEmail(
   agenteEmail?: string,
 ): Promise<void> {
   const branch = getBranchEmail(order.magazzino);
-  if (!branch.to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+  if (!branch.to || !isMailConfigured()) {
     console.warn("[mail] Invio email disabilitato: credenziali GMAIL mancanti o nessuna email configurata per", order.magazzino);
     return;
   }
@@ -569,7 +521,7 @@ export async function sendOrderUpdatedEmail(
 
 export async function sendOrderCancelledEmail(order: Order, agenteEmail?: string): Promise<void> {
   const branch = getBranchEmail(order.magazzino);
-  if (!branch.to || !process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+  if (!branch.to || !isMailConfigured()) {
     console.warn("[mail] Invio email disabilitato: credenziali GMAIL mancanti o nessuna email configurata per", order.magazzino);
     return;
   }
