@@ -105,7 +105,7 @@ export default function NewOrderPage() {
           cliente: quotation.cliente,
           note: quotation.note,
           magazzino: "",
-          luogoConsegna: "",
+          luogoConsegna: quotation.luogoConsegna ?? "",
           dataConsegna: quotation.dataConsegnaPrevista ?? "",
         });
 

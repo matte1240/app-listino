@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
         clienteId: customer.clienteId,
         dataPreventivo,
         dataConsegnaPrevista,
+        luogoConsegna: String(body.luogoConsegna ?? "").trim(),
         validitaGiorni,
         note: String(body.note ?? ""),
         agente: payload.username,

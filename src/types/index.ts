@@ -74,6 +74,8 @@ export interface Quotation extends ApprovalInfo {
   convertedOrderId: number | null;
   dataPreventivo: string;
   dataConsegnaPrevista: string;
+  /** Destinazione del cantiere (opzionale): vuota = stessa sede del cliente ("STESSA" nel PDF). */
+  luogoConsegna: string;
   validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
   agente: string;
@@ -136,6 +138,7 @@ export interface QuotationInfo {
   cliente: string;
   dataPreventivo: string;
   dataConsegnaPrevista: string;
+  luogoConsegna: string;
   validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
 }

@@ -176,6 +176,7 @@ function createDb() {
       cliente_id INTEGER,
       data_preventivo TEXT NOT NULL DEFAULT '',
       data_consegna_prevista TEXT NOT NULL DEFAULT '',
+      luogo_consegna TEXT NOT NULL DEFAULT '',
       validita_giorni INTEGER NOT NULL DEFAULT 30,
       note TEXT NOT NULL DEFAULT '',
       agente TEXT NOT NULL DEFAULT '',
@@ -199,6 +200,10 @@ function createDb() {
   }
   if (!quotationCols.some((c) => c.name === "data_consegna_prevista")) {
     db.exec("ALTER TABLE quotations ADD COLUMN data_consegna_prevista TEXT NOT NULL DEFAULT ''");
+  }
+  if (!quotationCols.some((c) => c.name === "luogo_consegna")) {
+    // Migration: destinazione cantiere (opzionale) sui preventivi
+    db.exec("ALTER TABLE quotations ADD COLUMN luogo_consegna TEXT NOT NULL DEFAULT ''");
   }
   if (!quotationCols.some((c) => c.name === "validita_giorni")) {
     db.exec("ALTER TABLE quotations ADD COLUMN validita_giorni INTEGER NOT NULL DEFAULT 30");

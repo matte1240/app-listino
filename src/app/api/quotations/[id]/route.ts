@@ -118,6 +118,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       clienteId: customer.clienteId,
       dataPreventivo,
       dataConsegnaPrevista,
+      luogoConsegna: String(body.luogoConsegna ?? "").trim(),
       validitaGiorni,
       note: String(body.note ?? ""),
       items,

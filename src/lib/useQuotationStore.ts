@@ -36,6 +36,7 @@ const defaultQuotationInfo = (): QuotationInfo => ({
   cliente: "",
   dataPreventivo: today(),
   dataConsegnaPrevista: today(),
+  luogoConsegna: "",
   validitaGiorni: 30,
   note: "",
 });

@@ -10,6 +10,7 @@ import {
   Clock,
   FileText,
   Loader2,
+  MapPin,
   MessageSquare,
   Package,
   Save,
@@ -25,6 +26,10 @@ import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import AddressAutocompleteInput, {
+  type AddressAutocompleteInputHandle,
+  type AddressData,
+} from "@/components/AddressAutocompleteInput";
 import MaterialList from "@/components/MaterialList";
 import OrderLinesEditor from "@/components/OrderLinesEditor";
 import type { LineComposerRequest } from "@/components/QuickLineComposer";
@@ -90,6 +95,14 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const [lineRequest, setLineRequest] = useState<{ request: LineComposerRequest; requestId: number } | null>(null);
   const lineRequestIdRef = useRef(0);
 
+  // Destinazione cantiere (opzionale), stesso componente e validazione degli ordini
+  const addressInputRef = useRef<AddressAutocompleteInputHandle>(null);
+  const addressDataRef = useRef<AddressData | null>(null);
+  const [isAddressValid, setIsAddressValid] = useState(true);
+  const [recentDestinations, setRecentDestinations] = useState<string[]>([]);
+  const [recentDestinationsLoading, setRecentDestinationsLoading] = useState(false);
+  const [selectedRecentDestination, setSelectedRecentDestination] = useState("");
+
   const isEditing = !!editingQuotation;
   const { user } = useAuth();
 
@@ -101,6 +114,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
       cliente: editingQuotation.cliente,
       dataPreventivo: editingQuotation.dataPreventivo,
       dataConsegnaPrevista: editingQuotation.dataConsegnaPrevista || editingQuotation.dataPreventivo || today(),
+      luogoConsegna: editingQuotation.luogoConsegna ?? "",
       validitaGiorni: editingQuotation.validitaGiorni ?? 30,
       note: editingQuotation.note,
     });
@@ -149,6 +163,57 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     if (currentStep !== 2 && mobileCartOpen) setMobileCartOpen(false);
   }, [currentStep, mobileCartOpen, setMobileCartOpen]);
 
+  // Destinazioni recenti del cliente selezionato da anagrafica (come negli ordini)
+  useEffect(() => {
+    if (!quotationInfo.clienteId) {
+      setRecentDestinations([]);
+      setRecentDestinationsLoading(false);
+      setSelectedRecentDestination("");
+      return;
+    }
+
+    let cancelled = false;
+    setRecentDestinationsLoading(true);
+
+    fetch(`/api/anagrafiche/${quotationInfo.clienteId}/recent-destinations?limit=8`, { credentials: "same-origin" })
+      .then(async (res) => {
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data?.destinations) ? data.destinations : [];
+      })
+      .then((destinations: string[]) => {
+        if (!cancelled) setRecentDestinations(destinations);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentDestinations([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRecentDestinationsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [quotationInfo.clienteId]);
+
+  const handleDeliveryAddressChange = useCallback((value: string) => {
+    setQuotationInfo({ luogoConsegna: value });
+    if (selectedRecentDestination && value !== selectedRecentDestination) {
+      setSelectedRecentDestination("");
+    }
+  }, [selectedRecentDestination, setQuotationInfo]);
+
+  const handleAddressResolved = useCallback((data: AddressData) => {
+    addressDataRef.current = data;
+    if (data.address) setQuotationInfo({ luogoConsegna: data.address });
+  }, [setQuotationInfo]);
+
+  /** Lasciando lo step Dati con una destinazione digitata la si valida (geocoding) come negli ordini. */
+  const validateDestination = useCallback(async () => {
+    if (!quotationInfo.luogoConsegna.trim()) return true;
+    return isAddressValid || (await addressInputRef.current?.validateAddress()) === true;
+  }, [isAddressValid, quotationInfo.luogoConsegna]);
+
   const flaggedCount = countArticleLines(lines);
   const totalQty = calculateOrderTotalPieces(lines);
   const quotationRows = lines;
@@ -165,6 +230,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
 
   function handleSelectCustomer(customer: AnagraficaSearchItem) {
     setQuotationInfo({ clienteId: customer.id, cliente: customer.ragioneSociale });
+    setSelectedRecentDestination("");
     setCustomerDropdownOpen(false);
   }
 
@@ -250,8 +316,9 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     return canGoNextStep1 && canGoNextStep2 && canGoNextStep3;
   };
 
-  const goToStep = (step: 1 | 2 | 3 | 4) => {
+  const goToStep = async (step: 1 | 2 | 3 | 4) => {
     if (step === currentStep || !canReachStep(step)) return;
+    if (currentStep === 3 && step > 3 && !(await validateDestination())) return;
     setMobileCartOpen(false);
     setStep(step);
   };
@@ -267,7 +334,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           <div key={label} className="flex items-center flex-1 last:flex-none">
             <button
               type="button"
-              onClick={() => goToStep(stepNum)}
+              onClick={() => void goToStep(stepNum)}
               disabled={!reachable}
               aria-current={isActive ? "step" : undefined}
               aria-label={`Vai allo step ${stepNum}: ${label}`}
@@ -537,6 +604,53 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="luogo" className="text-sm font-medium flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+              Destinazione cantiere
+            </Label>
+            <select
+              value={selectedRecentDestination}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSelectedRecentDestination(value);
+                if (value) setQuotationInfo({ luogoConsegna: value });
+              }}
+              disabled={!quotationInfo.clienteId || recentDestinationsLoading || recentDestinations.length === 0}
+              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60"
+            >
+              <option value="">
+                {recentDestinationsLoading
+                  ? "Caricamento destinazioni recenti..."
+                  : !quotationInfo.clienteId
+                    ? "Seleziona prima un cliente da anagrafica"
+                    : recentDestinations.length === 0
+                      ? "Nessuna destinazione recente disponibile"
+                      : "Destinazioni recenti del cliente"}
+              </option>
+              {recentDestinations.map((destination) => (
+                <option key={destination} value={destination}>
+                  {destination}
+                </option>
+              ))}
+            </select>
+            <AddressAutocompleteInput
+              ref={addressInputRef}
+              id="luogo"
+              placeholder="Indirizzo del cantiere (opzionale)"
+              value={quotationInfo.luogoConsegna}
+              onChange={handleDeliveryAddressChange}
+              onAddressResolved={handleAddressResolved}
+              onValidityChange={(valid) => {
+                setIsAddressValid(valid);
+                if (!valid) addressDataRef.current = null;
+              }}
+              className="h-11 rounded-xl text-base bg-background"
+              style={{ fontSize: "16px" }}
+            />
+            <p className="text-xs text-muted-foreground">Se lasci vuoto, nel PDF la destinazione sarà &quot;STESSA&quot; (sede del cliente).</p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <Label className="text-sm font-medium flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
               Validità preventivo
@@ -581,7 +695,13 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               <ChevronLeft className="h-4 w-4" />
               Indietro
             </Button>
-            <Button className="w-full h-11 gap-2 font-semibold sm:flex-1" disabled={!canGoNextStep3} onClick={() => setStep(4)}>
+            <Button
+              className="w-full h-11 gap-2 font-semibold sm:flex-1"
+              disabled={!canGoNextStep3}
+              onClick={async () => {
+                if (await validateDestination()) setStep(4);
+              }}
+            >
               Riepilogo
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -624,6 +744,13 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               </div>
             </div>
           )}
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Destinazione cantiere</p>
+              <p className="font-semibold">{quotationInfo.luogoConsegna.trim() || "Stessa del cliente"}</p>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
             <div>
