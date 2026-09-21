@@ -25,15 +25,24 @@ env:
 jobs:
   build-and-push:
     name: Build & Push
-    runs-on: ubuntu-latest
+    # Runner self-hosted sulla VM (utente github-runner, gruppo docker).
+    # Le etichette sono quelle assegnate in fase di registrazione del runner.
+    runs-on: [self-hosted, vm-ubuntu]
+    timeout-minutes: 30
+    # Sicurezza: il runner ha accesso al Docker della VM, quindi le PR provenienti da fork
+    # non devono girarci (potrebbero eseguire codice arbitrario). Girano solo push, tag,
+    # dispatch manuale e PR aperte da branch dello stesso repository.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write       # needed to push to GHCR
 
     steps:
-      # 1. Checkout code
+      # 1. Checkout code (clean: true evita residui della build precedente sul runner persistente)
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       # 2. Setup Docker Buildx (multi-platform support + cache)
       - name: Set up Docker Buildx
@@ -84,3 +93,40 @@ jobs:
       - name: Image digest
         if: github.event_name != 'pull_request'
         run: echo "Published ${{ steps.meta.outputs.tags }}"
+
+      # 7. Pulizia disco: la VM ha poco spazio, la cache locale di buildx e le immagini
+      #    penzolanti vanno rimosse a ogni run (la cache "vera" è quella di GitHub Actions).
+      - name: Clean up Docker build cache
+        if: always()
+        run: |
+          docker builder prune --all --force >/dev/null 2>&1 || true
+          docker image prune --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+
+  # Deploy automatico dell'ambiente dev sulla stessa VM del runner.
+  # Si attiva solo se in Settings → Secrets and variables → Actions → Variables esiste
+  # DEV_COMPOSE_DIR = cartella sulla VM (leggibile dall'utente github-runner) che contiene
+  # docker-compose.dev.yml e .env.dev. Senza la variabile il job viene saltato.
+  deploy-dev:
+    name: Deploy dev
+    needs: build-and-push
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push' && vars.DEV_COMPOSE_DIR != ''
+    runs-on: [self-hosted, vm-ubuntu]
+    timeout-minutes: 10
+    permissions:
+      packages: read
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull & restart dev container
+        working-directory: ${{ vars.DEV_COMPOSE_DIR }}
+        run: |
+          docker compose -f docker-compose.dev.yml pull
+          docker compose -f docker-compose.dev.yml up -d --remove-orphans
+          docker image prune --force >/dev/null 2>&1 || true
+          docker compose -f docker-compose.dev.yml ps
