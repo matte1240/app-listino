@@ -15,11 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import SearchBar from "@/components/SearchBar";
 import MaterialList from "@/components/MaterialList";
+import OrderLinesEditor from "@/components/OrderLinesEditor";
 import AddressAutocompleteInput, {
   type AddressAutocompleteInputHandle,
   type AddressData,
 } from "@/components/AddressAutocompleteInput";
-import { calculateOrderDiscountedTotal, formatOrderCurrency, getDiscountedUnitPrice } from "@/lib/order-totals";
+import { countArticleLines } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI, type AnagraficaSearchItem, type OrderHistoryItem } from "@/types";
 import type { Order } from "@/types";
@@ -36,14 +38,12 @@ export default function OrderWizard({ editingOrder }: Props) {
   const router = useRouter();
 
   const materials = useOrderStore((s) => s.materials);
-  const orderItems = useOrderStore((s) => s.orderItems);
+  const lines = useOrderStore((s) => s.lines);
   const orderInfo = useOrderStore((s) => s.orderInfo);
   const currentStep = useOrderStore((s) => s.currentStep);
   const setStep = useOrderStore((s) => s.setStep);
   const setOrderInfo = useOrderStore((s) => s.setOrderInfo);
-  const toggleFlag = useOrderStore((s) => s.toggleFlag);
-  const setQty = useOrderStore((s) => s.setQty);
-  const setSconto = useOrderStore((s) => s.setSconto);
+  const setLines = useOrderStore((s) => s.setLines);
   const resetOrder = useOrderStore((s) => s.resetOrder);
   const setSearchQuery = useOrderStore((s) => s.setSearchQuery);
   const setShowObsolete = useOrderStore((s) => s.setShowObsolete);
@@ -96,14 +96,8 @@ export default function OrderWizard({ editingOrder }: Props) {
       dataConsegna: editingSource.dataConsegna,
       note: initialNote,
     });
-    // Populate orderItems from order
-    for (const item of editingSource.items) {
-      const current = useOrderStore.getState().orderItems[item.codice];
-      if (!current?.flagged) toggleFlag(item.codice);
-      if ((current?.qty ?? 0) !== item.qty) setQty(item.codice, item.qty);
-      const normalizedSconto: 0 | 8 | 15 = item.sconto === 8 || item.sconto === 15 ? item.sconto : 0;
-      if ((current?.sconto ?? 0) !== normalizedSconto) setSconto(item.codice, normalizedSconto);
-    }
+    // Populate lines from order (ordine, tipi e id preservati)
+    setLines(editingSource.items);
     // Start at step 1 when editing so user can review customer selection first
     setStep(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -195,9 +189,8 @@ export default function OrderWizard({ editingOrder }: Props) {
   }, [setOrderInfo]);
 
   // Items derived from store
-  const flaggedItems = materials.filter((m) => orderItems[m.codice]?.flagged);
-  const flaggedCount = flaggedItems.length;
-  const totalPz = flaggedItems.reduce((s, m) => s + (orderItems[m.codice]?.qty ?? 0), 0);
+  const flaggedCount = countArticleLines(lines);
+  const totalPz = calculateOrderTotalPieces(lines);
 
   const canGoNextStep1 = orderInfo.cliente.trim() !== "";
   const canGoNextStep2 = flaggedCount > 0;
@@ -224,7 +217,8 @@ export default function OrderWizard({ editingOrder }: Props) {
     setSearchQuery(codice);
     openArticleRequestIdRef.current += 1;
     setOpenArticleRequest({ codice, requestId: openArticleRequestIdRef.current });
-  }, [materials, setMobileCartOpen, setSearchQuery, setShowObsolete]);
+    setStep(2);
+  }, [materials, setMobileCartOpen, setSearchQuery, setShowObsolete, setStep]);
 
   const handleOpenArticleRequestHandled = useCallback((requestId: number) => {
     setOpenArticleRequest((current) => {
@@ -233,19 +227,10 @@ export default function OrderWizard({ editingOrder }: Props) {
     });
   }, []);
 
-  const buildOrderItems = useCallback((): OrderHistoryItem[] => {
-    return flaggedItems.map((m) => ({
-      codice: m.codice,
-      descrizione: m.descrizioneAI || m.descrizione,
-      qty: orderItems[m.codice]?.qty ?? 0,
-      um: m.um,
-      prezzoListino: m.prezzoListino,
-      sconto: orderItems[m.codice]?.sconto ?? 0,
-    }));
-  }, [flaggedItems, orderItems]);
+  // Le righe dello store sono già nel formato persistito (id, tipo, snapshot descrizione/prezzo).
+  const buildOrderItems = useCallback((): OrderHistoryItem[] => lines, [lines]);
 
-  const summaryItems = buildOrderItems();
-  const totalImponibile = calculateOrderDiscountedTotal(summaryItems);
+  const totalImponibile = calculateOrderDiscountedTotal(lines);
 
   const getRequestConfig = useCallback((status: "bozza" | "confermato") => {
     const items = buildOrderItems();
@@ -280,18 +265,6 @@ export default function OrderWizard({ editingOrder }: Props) {
     return "Modifica inviata!";
   }, [isEditing, isStandaloneDraft]);
 
-  const handleRemoveItemFromCart = useCallback((codice: string, articoloLabel?: string) => {
-    const message = articoloLabel
-      ? `Vuoi rimuovere \"${articoloLabel}\" dal carrello?`
-      : `Vuoi rimuovere l'articolo ${codice} dal carrello?`;
-
-    if (!window.confirm(message)) return;
-
-    setQty(codice, 0);
-    setSconto(codice, 0);
-    setOpenArticleRequest((current) => (current?.codice === codice ? null : current));
-  }, [setQty, setSconto]);
-
   const renderCartSummary = (itemsHeightClass: string) => (
     <>
       <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3">
@@ -321,57 +294,21 @@ export default function OrderWizard({ editingOrder }: Props) {
         )}
       </div>
 
-      {flaggedCount > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-3 flex flex-col gap-2">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Articoli inseriti</p>
-          <div className={`flex flex-col gap-2 ${itemsHeightClass} overflow-y-auto pr-1`}>
-            {flaggedItems.map((m) => {
-              const qty = orderItems[m.codice]?.qty ?? 0;
-              const sconto = orderItems[m.codice]?.sconto ?? 0;
-              return (
-                <div
-                  key={m.codice}
-                  className="rounded-xl border border-border/70 bg-background px-2.5 py-2"
-                >
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold font-mono truncate">{m.codice}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{m.descrizioneAI || m.descrizione}</p>
-                      <div className="mt-1 flex items-center gap-2 text-[11px]">
-                        <span className="font-semibold text-foreground">{qty} {m.um}</span>
-                        {sconto > 0 && <span className="font-semibold text-primary">-{sconto}%</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleEditItemInCatalog(m.codice)}
-                        className="h-7 px-2 rounded-lg border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                      >
-                        Modifica
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Rimuovi ${m.codice} dal carrello`}
-                        onClick={() => handleRemoveItemFromCart(m.codice, m.descrizioneAI || m.descrizione)}
-                        className="h-7 w-7 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors flex items-center justify-center"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <div className="rounded-2xl border border-border bg-card p-3 flex flex-col gap-2">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Righe ordine</p>
+        <OrderLinesEditor
+          store="order"
+          mode="cart"
+          onEditArticle={handleEditItemInCatalog}
+          listHeightClass={itemsHeightClass}
+        />
+      </div>
     </>
   );
 
   const handleSaveDraftAndExit = useCallback(async () => {
     // If no meaningful data, just exit
-    if (!orderInfo.cliente.trim() || flaggedItems.length === 0) {
+    if (!orderInfo.cliente.trim() || flaggedCount === 0) {
       resetOrder();
       setExitDialogOpen(false);
       router.push("/orders");
@@ -393,7 +330,7 @@ export default function OrderWizard({ editingOrder }: Props) {
       setExitDialogOpen(false);
       router.push("/orders");
     }
-  }, [orderInfo, flaggedItems.length, getRequestConfig, resetOrder, router, setExitDialogOpen]);
+  }, [orderInfo, flaggedCount, getRequestConfig, resetOrder, router, setExitDialogOpen]);
 
   const handleSave = useCallback(async (status: "bozza" | "confermato") => {
     if (saving) return;
@@ -597,7 +534,7 @@ export default function OrderWizard({ editingOrder }: Props) {
 
           {/* Sticky sidebar */}
           <aside className="hidden lg:flex w-72 shrink-0 flex-col gap-3 px-4 py-5 border-l border-border sticky top-[calc(3.5rem+49px)] self-start max-h-[calc(100dvh-3.5rem-49px)] overflow-y-auto">
-            {renderCartSummary("max-h-64")}
+            {renderCartSummary("max-h-[46dvh]")}
 
             <Button
               variant="outline"
@@ -912,35 +849,16 @@ export default function OrderWizard({ editingOrder }: Props) {
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Package className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">Articoli</span>
+            <span className="text-[11px] text-muted-foreground hidden sm:inline">trascina per riordinare</span>
             <Badge className="ml-auto rounded-full px-2.5 text-xs">{flaggedCount}</Badge>
           </div>
-          <div className="divide-y divide-border/60">
-            {flaggedItems.map((m) => {
-              const qty = orderItems[m.codice]?.qty ?? 0;
-              const sconto = orderItems[m.codice]?.sconto ?? 0;
-              const prezzoScontato = getDiscountedUnitPrice({ prezzoListino: m.prezzoListino, sconto });
-              return (
-                <div key={m.codice} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold font-mono">{m.codice}</p>
-                    <p className="text-xs text-muted-foreground truncate">{m.descrizioneAI || m.descrizione}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs sm:shrink-0 sm:justify-end">
-                    <span className="font-bold">{qty}</span>
-                    <span className="text-muted-foreground">{m.um}</span>
-                    {sconto > 0 ? (
-                      <span className="flex flex-wrap items-center gap-1 sm:justify-end">
-                        <span className="line-through text-muted-foreground/50">€{m.prezzoListino.toFixed(3)}</span>
-                        <span className="font-semibold text-primary">€{prezzoScontato.toFixed(3)}</span>
-                        <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{sconto}%</span>
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground/60">€{m.prezzoListino.toFixed(3)}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="px-3 py-3">
+            <OrderLinesEditor
+              store="order"
+              mode="summary"
+              onEditArticle={handleEditItemInCatalog}
+              showTrasportoControl
+            />
           </div>
           <div className="px-4 py-2.5 border-t border-border bg-muted/30 flex flex-col gap-1.5 text-sm">
             <div className="flex items-center justify-between gap-3">

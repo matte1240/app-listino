@@ -290,14 +290,53 @@ export function makeCommentLine(testo = ""): OrderLine {
   return { id: newLineId(), tipo: "commento", codice: "", descrizione: testo, qty: 0, um: "", prezzoListino: 0, sconto: 0 };
 }
 
-/** Inserisce `line` subito dopo `afterId` (o in coda, prima del trasporto, se assente). */
-export function insertLineAfter(lines: ReadonlyArray<OrderLine>, line: OrderLine, afterId?: string | null): OrderLine[] {
-  if (!afterId) return insertBeforeTrasporto(lines, line);
-  const index = lines.findIndex((existing) => existing.id === afterId);
+/** Inserisce `line` subito prima di `beforeId` (o in coda, prima del trasporto, se assente). */
+export function insertLineBefore(lines: ReadonlyArray<OrderLine>, line: OrderLine, beforeId?: string | null): OrderLine[] {
+  if (!beforeId) return insertBeforeTrasporto(lines, line);
+  const index = lines.findIndex((existing) => existing.id === beforeId);
   if (index === -1) return insertBeforeTrasporto(lines, line);
   const next = [...lines];
-  next.splice(index + 1, 0, line);
+  next.splice(index, 0, line);
   return ensureTrasportoLast(next);
+}
+
+/** Completa descrizione/U.M./prezzo delle righe articolo prive di snapshot (es. carrello migrato) dal catalogo. */
+export function hydrateLinesFromMaterials(
+  lines: ReadonlyArray<OrderLine>,
+  materials: ReadonlyArray<Pick<Material, "codice" | "descrizione" | "descrizioneAI" | "um" | "prezzoListino">>
+): OrderLine[] {
+  const needsHydration = lines.some((line) => line.tipo === "articolo" && !line.descrizione && line.prezzoListino === 0);
+  if (!needsHydration) return [...lines];
+  const byCodice = new Map(materials.map((material) => [material.codice, material]));
+  return lines.map((line) => {
+    if (line.tipo !== "articolo" || line.descrizione || line.prezzoListino !== 0) return line;
+    const material = byCodice.get(line.codice);
+    if (!material) return line;
+    return {
+      ...line,
+      descrizione: material.descrizioneAI || material.descrizione,
+      um: material.um,
+      prezzoListino: material.prezzoListino,
+    };
+  });
+}
+
+/** Migrazione del vecchio carrello persistito `{ codice: { flagged, qty, sconto } }` in righe ordinate per codice. */
+export function migrateLegacyCartMap(map: unknown): OrderLine[] {
+  if (!map || typeof map !== "object") return [];
+  const entries = Object.entries(map as Record<string, { flagged?: boolean; qty?: number; sconto?: number }>)
+    .filter(([, value]) => value && value.flagged && (value.qty ?? 0) > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+  return entries.map(([codice, value]) => ({
+    id: newLineId(),
+    tipo: "articolo" as const,
+    codice,
+    descrizione: "",
+    qty: value.qty ?? 0,
+    um: "",
+    prezzoListino: 0,
+    sconto: value.sconto ?? 0,
+  }));
 }
 
 /** Imposta (importo > 0) o rimuove (null/0) la riga spese di trasporto. */

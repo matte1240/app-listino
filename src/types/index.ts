@@ -109,22 +109,6 @@ export interface Order {
   draft?: OrderDraft | null;
 }
 
-export interface OrderItem {
-  flagged: boolean;
-  qty: number;
-  sconto: 0 | 8 | 15;
-}
-
-export type OrderMap = Record<string, OrderItem>;
-
-export interface QuotationStoreItem {
-  flagged: boolean;
-  qty: number;
-  sconto: 0 | 8 | 15;
-}
-
-export type QuotationMap = Record<string, QuotationStoreItem>;
-
 export interface QuotationInfo {
   clienteId: number | null;
   cliente: string;

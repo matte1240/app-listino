@@ -11,10 +11,6 @@ import type { Material, Quotation } from "@/types";
 
 type PrefillState = "idle" | "loading" | "ready" | "error";
 
-function normalizeSconto(value: number | undefined): 0 | 8 | 15 {
-  return value === 8 || value === 15 ? value : 0;
-}
-
 async function fetchMaterials(): Promise<Material[]> {
   const res = await fetch("/api/materials");
   if (!res.ok) return [];
@@ -30,8 +26,7 @@ export default function NewOrderPage() {
   const materials = useOrderStore((state) => state.materials);
   const setMaterials = useOrderStore((state) => state.setMaterials);
   const setOrderInfo = useOrderStore((state) => state.setOrderInfo);
-  const setQty = useOrderStore((state) => state.setQty);
-  const setSconto = useOrderStore((state) => state.setSconto);
+  const setLines = useOrderStore((state) => state.setLines);
   const [queryReady, setQueryReady] = useState(false);
   const [fromQuotationId, setFromQuotationId] = useState<string | null>(null);
   const [prefillState, setPrefillState] = useState<PrefillState>("idle");
@@ -104,10 +99,8 @@ export default function NewOrderPage() {
           dataConsegna: quotation.dataConsegnaPrevista ?? "",
         });
 
-        for (const item of quotation.items) {
-          setQty(item.codice, item.qty);
-          setSconto(item.codice, normalizeSconto(item.sconto));
-        }
+        // Copia le righe del preventivo (ordine, note, manuali e trasporto inclusi)
+        setLines(quotation.items);
 
         setStep(3);
         setPrefillState("ready");
@@ -123,7 +116,7 @@ export default function NewOrderPage() {
     return () => {
       cancelled = true;
     };
-  }, [fromQuotationId, loading, queryReady, resetOrder, setMaterials, setOrderInfo, setQty, setSconto, setStep, user]);
+  }, [fromQuotationId, loading, queryReady, resetOrder, setLines, setMaterials, setOrderInfo, setStep, user]);
 
   if (loading || !queryReady || !user) {
     return (

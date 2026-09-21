@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
+import { countArticleLines } from "@/lib/order-lines";
 
 const navItems = [
   { href: "/orders", label: "Ordini", icon: ClipboardList, adminOnly: false },
@@ -35,12 +36,12 @@ export default function Navbar() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const orderInfo = useOrderStore((s) => s.orderInfo);
-  const orderItems = useOrderStore((s) => s.orderItems);
+  const orderLines = useOrderStore((s) => s.lines);
   const currentStep = useOrderStore((s) => s.currentStep);
   const setMobileCartOpen = useOrderStore((s) => s.setMobileCartOpen);
   const setExitDialogOpen = useOrderStore((s) => s.setExitDialogOpen);
   const quotationInfo = useQuotationStore((s) => s.quotationInfo);
-  const quotationItems = useQuotationStore((s) => s.quotationItems);
+  const quotationLines = useQuotationStore((s) => s.lines);
   const quotationCurrentStep = useQuotationStore((s) => s.currentStep);
   const setQuotationMobileCartOpen = useQuotationStore((s) => s.setMobileCartOpen);
   const resetQuotation = useQuotationStore((s) => s.resetQuotation);
@@ -61,7 +62,7 @@ export default function Navbar() {
   const isWizardMode = isOrderWizardMode || isQuotationWizardMode;
   const activeStep = isQuotationWizardMode ? quotationCurrentStep : currentStep;
   const isMaterialsStep = isWizardMode && activeStep === 2;
-  const flaggedCount = Object.values(isQuotationWizardMode ? quotationItems : orderItems).filter((item) => item?.flagged).length;
+  const flaggedCount = countArticleLines(isQuotationWizardMode ? quotationLines : orderLines);
   const activeCustomer = isQuotationWizardMode ? quotationInfo.cliente : orderInfo.cliente;
 
   const items = navItems.filter((item) => !item.adminOnly || user.role === "admin");

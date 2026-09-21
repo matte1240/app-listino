@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Minus, Plus, Sparkles, AlertCircle } from "lucide-react";
+import DiscountSelector from "@/components/DiscountSelector";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { useAuth } from "@/lib/auth-context";
+import { findArticleLine } from "@/lib/order-lines";
 import type { Material } from "@/types";
 import { cn, parseLocalizedNumber } from "@/lib/utils";
 
@@ -28,17 +30,14 @@ export default function MaterialCard({
   onOpenArticleRequestHandled,
 }: Props) {
   const { codice, descrizione, descrizioneAI, um, prezzoListino, raggr, obsoleto, mqConfezione, pzBancale, mqBancale } = material;
-  const orderItem = useOrderStore((s) => s.orderItems[codice]);
-  const orderSetQty = useOrderStore((s) => s.setQty);
-  const orderSetSconto = useOrderStore((s) => s.setSconto);
+  const orderLine = useOrderStore((s) => findArticleLine(s.lines, codice));
+  const orderUpsert = useOrderStore((s) => s.upsertArticolo);
   const orderSetMaterialDescrizioneAI = useOrderStore((s) => s.setMaterialDescrizioneAI);
-  const quotationItem = useQuotationStore((s) => s.quotationItems[codice]);
-  const quotationSetQty = useQuotationStore((s) => s.setQty);
-  const quotationSetSconto = useQuotationStore((s) => s.setSconto);
+  const quotationLine = useQuotationStore((s) => findArticleLine(s.lines, codice));
+  const quotationUpsert = useQuotationStore((s) => s.upsertArticolo);
   const quotationSetMaterialDescrizioneAI = useQuotationStore((s) => s.setMaterialDescrizioneAI);
-  const activeItem = store === "quotation" ? quotationItem : orderItem;
-  const setQty = store === "quotation" ? quotationSetQty : orderSetQty;
-  const setSconto = store === "quotation" ? quotationSetSconto : orderSetSconto;
+  const activeItem = store === "quotation" ? quotationLine : orderLine;
+  const upsertArticolo = store === "quotation" ? quotationUpsert : orderUpsert;
   const setMaterialDescrizioneAI = store === "quotation" ? quotationSetMaterialDescrizioneAI : orderSetMaterialDescrizioneAI;
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -72,14 +71,14 @@ export default function MaterialCard({
     }
   };
 
-  const isInCart = activeItem?.flagged ?? false;
+  const isInCart = !!activeItem;
   const cartQty = activeItem?.qty ?? 0;
   const cartSconto = activeItem?.sconto ?? 0;
 
   const [expanded, setExpanded] = useState(false);
   const [draftQty, setDraftQty] = useState(0);
   const [draftQtyInput, setDraftQtyInput] = useState("");
-  const [draftSconto, setDraftSconto] = useState<0 | 8 | 15>(0);
+  const [draftSconto, setDraftSconto] = useState<number>(0);
   const [editorMode, setEditorMode] = useState<"add" | "edit">("add");
   const qtyInputRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -148,8 +147,7 @@ export default function MaterialCard({
   const handleConfirm = () => {
     if (draftQty <= 0) return;
     const nextQty = editorMode === "edit" ? draftQty : (isInCart ? cartQty : 0) + draftQty;
-    setQty(codice, nextQty);
-    setSconto(codice, draftSconto);
+    upsertArticolo(material, nextQty, draftSconto);
     resetDraft();
     onArticleConfirmed?.();
   };
@@ -398,25 +396,7 @@ export default function MaterialCard({
             {/* Discount selector */}
             <div className="flex items-center gap-2 pl-8">
               <span className="text-sm font-medium text-muted-foreground shrink-0">Sconto:</span>
-              <div className="flex gap-1.5">
-                {([0, 8, 15] as const).map((pct) => (
-                  <button
-                    key={pct}
-                    onClick={() => {
-                      dismissKeyboard();
-                      setDraftSconto(pct);
-                    }}
-                    className={cn(
-                      "h-7 px-2.5 rounded-lg text-xs font-semibold border transition-colors",
-                      draftSconto === pct
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                    )}
-                  >
-                    {pct === 0 ? "Nessuno" : `-${pct}%`}
-                  </button>
-                ))}
-              </div>
+              <DiscountSelector value={draftSconto} onChange={setDraftSconto} onInteract={dismissKeyboard} />
             </div>
 
             <div className="flex items-center gap-2 pl-8">

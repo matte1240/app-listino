@@ -1,10 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Material, QuotationInfo, QuotationMap } from "@/types";
+import type { Material, OrderLine, QuotationInfo } from "@/types";
+import { hydrateLinesFromMaterials, migrateLegacyCartMap } from "@/lib/order-lines";
+import { createLineActions, type LineActions } from "@/lib/order-lines-store";
 
-interface QuotationStore {
+interface QuotationStore extends LineActions {
   materials: Material[];
-  quotationItems: QuotationMap;
+  /** Righe del preventivo, nell'ordine di inserimento scelto dall'utente. */
+  lines: OrderLine[];
   quotationInfo: QuotationInfo;
   searchQuery: string;
   showObsolete: boolean;
@@ -14,13 +17,16 @@ interface QuotationStore {
   setStep: (step: 1 | 2 | 3 | 4) => void;
   setMaterials: (materials: Material[]) => void;
   setMaterialDescrizioneAI: (codice: string, descrizioneAI: string) => void;
-  toggleFlag: (codice: string) => void;
-  setQty: (codice: string, qty: number) => void;
-  setSconto: (codice: string, sconto: 0 | 8 | 15) => void;
   resetQuotation: () => void;
   setSearchQuery: (q: string) => void;
   setShowObsolete: (value: boolean) => void;
   setQuotationInfo: (info: Partial<QuotationInfo>) => void;
+}
+
+interface PersistedQuotationState {
+  lines: OrderLine[];
+  quotationInfo: QuotationInfo;
+  currentStep: 1 | 2 | 3 | 4;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -36,9 +42,9 @@ const defaultQuotationInfo = (): QuotationInfo => ({
 
 export const useQuotationStore = create<QuotationStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       materials: [],
-      quotationItems: {},
+      lines: [],
       quotationInfo: defaultQuotationInfo(),
       searchQuery: "",
       showObsolete: true,
@@ -47,7 +53,8 @@ export const useQuotationStore = create<QuotationStore>()(
       setMobileCartOpen: (mobileCartOpen) => set({ mobileCartOpen }),
       setStep: (currentStep) => set({ currentStep }),
 
-      setMaterials: (materials) => set({ materials }),
+      setMaterials: (materials) =>
+        set((state) => ({ materials, lines: hydrateLinesFromMaterials(state.lines, materials) })),
 
       setMaterialDescrizioneAI: (codice, descrizioneAI) =>
         set((state) => ({
@@ -56,48 +63,9 @@ export const useQuotationStore = create<QuotationStore>()(
           ),
         })),
 
-      toggleFlag: (codice) => {
-        const current = get().quotationItems[codice];
-        const wasFlagged = current?.flagged ?? false;
-        set((state) => ({
-          quotationItems: {
-            ...state.quotationItems,
-            [codice]: {
-              flagged: !wasFlagged,
-              qty: current?.qty ?? 0,
-              sconto: current?.sconto ?? 0,
-            },
-          },
-        }));
-      },
+      ...createLineActions<QuotationStore>(set),
 
-      setQty: (codice, qty) => {
-        const newQty = Math.max(0, qty);
-        set((state) => ({
-          quotationItems: {
-            ...state.quotationItems,
-            [codice]: {
-              flagged: newQty > 0,
-              qty: newQty,
-              sconto: state.quotationItems[codice]?.sconto ?? 0,
-            },
-          },
-        }));
-      },
-
-      setSconto: (codice, sconto) => {
-        set((state) => ({
-          quotationItems: {
-            ...state.quotationItems,
-            [codice]: {
-              ...state.quotationItems[codice],
-              sconto,
-            },
-          },
-        }));
-      },
-
-      resetQuotation: () => set({ quotationItems: {}, quotationInfo: defaultQuotationInfo(), currentStep: 1, mobileCartOpen: false }),
+      resetQuotation: () => set({ lines: [], quotationInfo: defaultQuotationInfo(), currentStep: 1, mobileCartOpen: false }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
 
@@ -108,19 +76,30 @@ export const useQuotationStore = create<QuotationStore>()(
     }),
     {
       name: "listino-quotation-store",
+      version: 1,
+      migrate: (persistedState, version) => {
+        const state = (persistedState ?? {}) as Record<string, unknown>;
+        if (version < 1) {
+          // v0: carrello come mappa { codice: { flagged, qty, sconto } } → righe ordinate
+          const { quotationItems, ...rest } = state;
+          return { ...rest, lines: migrateLegacyCartMap(quotationItems) } as unknown as PersistedQuotationState;
+        }
+        return state as unknown as PersistedQuotationState;
+      },
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<QuotationStore> | undefined;
         return {
           ...currentState,
           ...persisted,
+          lines: Array.isArray(persisted?.lines) ? persisted.lines : [],
           quotationInfo: {
             ...defaultQuotationInfo(),
             ...persisted?.quotationInfo,
           },
         };
       },
-      partialize: (state) => ({
-        quotationItems: state.quotationItems,
+      partialize: (state): PersistedQuotationState => ({
+        lines: state.lines,
         quotationInfo: state.quotationInfo,
         currentStep: state.currentStep,
       }),
