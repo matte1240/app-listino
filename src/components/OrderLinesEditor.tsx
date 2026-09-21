@@ -17,12 +17,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { ArrowDown, ArrowUp, GripVertical, MessageSquare, MessageSquarePlus, PackagePlus, Truck, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import DiscountSelector from "@/components/DiscountSelector";
+import NumberField, { IOS_FONT } from "@/components/NumberField";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { getTrasportoLine, isTrasportoLine } from "@/lib/order-lines";
 import type { LineActions } from "@/lib/order-lines-store";
 import { formatOrderCurrency, formatSconto, getDiscountedUnitPrice, getLineTotal } from "@/lib/order-totals";
-import { cn, parseLocalizedNumber } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { OrderLine } from "@/types";
 
 type EditorMode = "cart" | "summary";
@@ -37,55 +38,6 @@ interface Props {
   showTrasportoControl?: boolean;
   /** Altezza massima dell'elenco (classe Tailwind), con scroll interno. */
   listHeightClass?: string;
-}
-
-const IOS_FONT = { fontSize: "16px" } as const;
-
-function formatNumberInput(value: number): string {
-  if (!Number.isFinite(value) || value === 0) return "";
-  return value.toLocaleString("it-IT", { maximumFractionDigits: 3, useGrouping: false });
-}
-
-interface NumberFieldProps {
-  value: number;
-  onCommit: (value: number) => void;
-  placeholder?: string;
-  className?: string;
-  ariaLabel: string;
-  autoFocus?: boolean;
-}
-
-/** Campo numerico con virgola decimale: aggiorna lo store ad ogni digitazione, riformatta al blur. */
-function NumberField({ value, onCommit, placeholder, className, ariaLabel, autoFocus }: NumberFieldProps) {
-  const [text, setText] = useState("");
-  const [focused, setFocused] = useState(false);
-  // Mentre il campo è attivo mostra il testo digitato (es. "12,"), altrimenti il valore formattato dello store.
-  const displayValue = focused ? text : formatNumberInput(value);
-
-  return (
-    <input
-      type="text"
-      inputMode="decimal"
-      value={displayValue}
-      placeholder={placeholder}
-      aria-label={ariaLabel}
-      autoFocus={autoFocus}
-      onFocus={() => {
-        setText(formatNumberInput(value));
-        setFocused(true);
-      }}
-      onBlur={() => setFocused(false)}
-      onChange={(event) => {
-        setText(event.target.value);
-        onCommit(Math.max(0, parseLocalizedNumber(event.target.value)));
-      }}
-      className={cn(
-        "h-9 rounded-lg border border-border bg-background px-2 text-sm font-semibold text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40",
-        className
-      )}
-      style={IOS_FONT}
-    />
-  );
 }
 
 function IconButton({
@@ -384,7 +336,11 @@ export default function OrderLinesEditor({ store, mode, onEditArticle, showTrasp
   return (
     <div className="flex flex-col gap-2" data-vaul-no-drag>
       {movableLines.length === 0 && !trasporto && (
-        <p className="text-xs text-muted-foreground px-1 py-2">Nessuna riga inserita. Aggiungi articoli dal listino oppure una riga manuale.</p>
+        <p className="text-xs text-muted-foreground px-1 py-2">
+          {mode === "cart"
+            ? "Nessuna riga inserita. Aggiungi articoli dal listino o una riga manuale dalla casella in cima alla lista."
+            : "Nessuna riga inserita."}
+        </p>
       )}
 
       <div ref={listRef} className={cn("flex flex-col gap-2 pr-1", listHeightClass, listHeightClass && "overflow-y-auto")}>
@@ -428,6 +384,8 @@ export default function OrderLinesEditor({ store, mode, onEditArticle, showTrasp
         )}
       </div>
 
+      {/* Nello step Materiali le righe si creano dalla casella in cima alla lista articoli. */}
+      {mode === "summary" && (
       <div className="flex flex-wrap gap-1.5">
         <button
           type="button"
@@ -446,6 +404,7 @@ export default function OrderLinesEditor({ store, mode, onEditArticle, showTrasp
           Nota
         </button>
       </div>
+      )}
 
       {showTrasportoControl && <TrasportoControl trasporto={trasporto} setTrasporto={actions.setTrasporto} />}
     </div>

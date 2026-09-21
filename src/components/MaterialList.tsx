@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
-import { PackageSearch, Tag } from "lucide-react";
+import { useMemo, useRef } from "react";
+import { PackagePlus, PackageSearch, Tag } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import MaterialCard from "@/components/MaterialCard";
+import QuickLineComposer, { type QuickLineComposerHandle } from "@/components/QuickLineComposer";
 import type { Material } from "@/types";
 
 function materialSearchText(m: Material): string {
@@ -32,6 +33,8 @@ export default function MaterialList({
   const quotationMaterials = useQuotationStore((s) => s.materials);
   const quotationSearchQuery = useQuotationStore((s) => s.searchQuery);
   const quotationShowObsolete = useQuotationStore((s) => s.showObsolete);
+
+  const composerRef = useRef<QuickLineComposerHandle>(null);
 
   const materials = store === "quotation" ? quotationMaterials : orderMaterials;
   const searchQuery = store === "quotation" ? quotationSearchQuery : orderSearchQuery;
@@ -73,6 +76,13 @@ export default function MaterialList({
     return map;
   }, [filtered]);
 
+  // Casella di inserimento rapido (righe manuali e note), sempre in cima alla lista nello step Materiali.
+  const composer = !isReadOnlyCatalog && materials.length > 0 && (
+    <div className="mb-4">
+      <QuickLineComposer ref={composerRef} store={store} onAdded={onArticleConfirmed} />
+    </div>
+  );
+
   if (materials.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
@@ -91,15 +101,28 @@ export default function MaterialList({
 
   if (filtered.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-          <PackageSearch className="h-9 w-9 text-muted-foreground/50" />
-        </div>
-        <div>
-          <p className="font-semibold text-foreground">Nessun risultato</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Nessun articolo per &quot;{searchQuery}&quot;
-          </p>
+      <div className="flex flex-col gap-1">
+        {composer}
+        <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+            <PackageSearch className="h-9 w-9 text-muted-foreground/50" />
+          </div>
+          <div>
+            <p className="font-semibold text-foreground">Nessun risultato</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Nessun articolo per &quot;{searchQuery}&quot;
+            </p>
+          </div>
+          {!isReadOnlyCatalog && (
+            <button
+              type="button"
+              onClick={() => composerRef.current?.openManual(searchQuery.trim())}
+              className="h-10 px-4 rounded-xl border border-primary/40 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-2"
+            >
+              <PackagePlus className="h-4 w-4" />
+              Inseriscilo come articolo manuale
+            </button>
+          )}
         </div>
       </div>
     );
@@ -115,6 +138,8 @@ export default function MaterialList({
 
   return (
     <div className="flex flex-col gap-1">
+      {composer}
+
       {/* Summary pill */}
       <div className="flex items-center gap-2 px-1 mb-3">
         <span className="inline-flex items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold px-2.5 py-0.5">

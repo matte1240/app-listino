@@ -124,7 +124,8 @@ Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 - Per ogni articolo nel carrello imposti:
   - **Quantità** (con i tasti `+` / `−` o digitando il numero),
   - **Sconto a riga**: `0%`, `8%`, `15%` oppure **Libero** (digiti tu la percentuale). Lo sconto si applica al prezzo di listino dell'articolo specifico.
-- Su mobile in basso compare un'icona **Carrello**: tocca per vedere e modificare gli articoli selezionati.
+- In cima alla lista articoli c'è la casella **Articolo manuale / Nota** (vedi sotto): serve per aggiungere righe non presenti a listino senza aprire il carrello.
+- Su mobile la barra in basso mostra **articoli e totale**: toccala (o tocca **Carrello** in alto) per aprire il carrello dal basso e vedere, riordinare o modificare le righe.
 - Puoi rimuovere un articolo con l'icona **X**.
 
 > **Sconto libero = approvazione dell'amministratore.** Qualsiasi percentuale diversa da 0, 8 e 15 fa passare l'ordine (o il preventivo) da un amministratore prima dell'invio: vedi la sezione 4.1.
@@ -134,8 +135,9 @@ Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 Il corpo dell'ordine (pannello **Righe ordine** nel carrello e nel riepilogo) mostra le righe **nell'ordine in cui le hai inserite**, non per codice.
 
 - **Riordinare**: trascina una riga con la maniglia `⋮⋮` (su tablet tieni premuto un attimo, poi trascina) oppure usa le frecce **▲ ▼**.
-- **Nota**: il pulsante **+ Nota** aggiunge una riga di testo libero in fondo; l'icona "nota sopra" su ogni riga la inserisce sopra quella riga. Serve per intitolare un gruppo di articoli (es. *Materiale per il piano terra*) o dare istruzioni al magazzino. Le note compaiono nella mail, nell'XML Metodo (come sola descrizione) e nel PDF del preventivo.
-- **Articolo manuale**: il pulsante **+ Articolo manuale** aggiunge una riga non presente a listino, in cui scrivi tu **descrizione, U.M., prezzo e quantità** (con lo stesso selettore sconto degli articoli). Nell'XML Metodo la riga usa il codice generico configurato dall'admin (sezione 11.9).
+- **Nota**: nella casella in cima alla lista articoli tocca **Nota**, scrivi il testo e premi **Aggiungi nota**: la riga va in fondo all'ordine. L'icona "nota sopra" su ogni riga del carrello la inserisce invece sopra quella riga. Serve per intitolare un gruppo di articoli (es. *Materiale per il piano terra*) o dare istruzioni al magazzino. Le note compaiono nella mail, nell'XML Metodo (come sola descrizione) e nel PDF del preventivo.
+- **Articolo manuale**: nella stessa casella tocca **Articolo manuale**, compila **descrizione, U.M., prezzo e quantità** (con lo stesso selettore sconto degli articoli) e premi **Aggiungi**. Se cerchi un articolo che non esiste a listino, sotto "Nessun risultato" trovi **Inseriscilo come articolo manuale** con la descrizione già compilata. Nell'XML Metodo la riga usa il codice generico configurato dall'admin (sezione 11.9).
+- Nel riepilogo (step 4) i pulsanti **+ Articolo manuale** e **+ Nota** sotto le righe permettono di aggiungere una riga all'ultimo momento.
 - Le righe vuote (nota senza testo, articolo manuale senza descrizione o quantità) non vengono salvate.
 
 ### Step 3 — Dettagli
