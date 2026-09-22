@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Check, MessageSquarePlus, PackagePlus, Plus, X } from "lucide-react";
+import { AlertCircle, Check, MessageSquarePlus, PackagePlus, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import DiscountSelector from "@/components/DiscountSelector";
 import NumberField, { IOS_FONT } from "@/components/NumberField";
@@ -34,10 +34,17 @@ interface Props {
 
 type Mode = "closed" | "manuale" | "nota";
 
+interface ManualErrors {
+  descrizione?: boolean;
+  qty?: boolean;
+}
+
 const DEFAULT_UM = "pz";
 
 const fieldClass =
   "h-9 w-full rounded-lg border border-border bg-background px-2 text-sm font-semibold focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40";
+
+const invalidFieldClass = "border-destructive focus:border-destructive focus:ring-destructive/30";
 
 function dismissKeyboard() {
   const active = document.activeElement;
@@ -46,9 +53,18 @@ function dismissKeyboard() {
   }
 }
 
+function FieldWarning({ children }: { children: string }) {
+  return (
+    <p role="alert" className="flex items-center gap-1 text-[11px] font-medium text-destructive">
+      <AlertCircle className="h-3 w-3 shrink-0" />
+      {children}
+    </p>
+  );
+}
+
 /**
- * Casella "pinnata" in cima alla lista articoli dello step Materiali:
- * inserisce righe manuali e note senza passare dal carrello.
+ * Casella fissa sotto la barra di ricerca dello step Materiali:
+ * inserisce (o modifica) righe manuali e note senza passare dal carrello.
  */
 const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function QuickLineComposer({ store, onAdded }, ref) {
   // Le azioni sono funzioni stabili: leggerle una volta evita ri-render su ogni modifica dello store.
@@ -61,24 +77,25 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
   const [descrizione, setDescrizione] = useState("");
   const [um, setUm] = useState(DEFAULT_UM);
   const [prezzo, setPrezzo] = useState(0);
-  const [qty, setQty] = useState(1);
+  // La quantità non è precompilata: resta il placeholder finché l'utente non la digita.
+  const [qty, setQty] = useState(0);
   const [sconto, setSconto] = useState(0);
+  const [manualErrors, setManualErrors] = useState<ManualErrors>({});
   const [nota, setNota] = useState("");
   /** Riga in modifica (null = inserimento). */
   const [editingLine, setEditingLine] = useState<OrderLine | null>(null);
   const [noteBeforeId, setNoteBeforeId] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const descrizioneRef = useRef<HTMLInputElement>(null);
+  const qtyRef = useRef<HTMLInputElement>(null);
 
   const resetManual = () => {
     setDescrizione("");
     setUm(DEFAULT_UM);
     setPrezzo(0);
-    setQty(1);
+    setQty(0);
     setSconto(0);
+    setManualErrors({});
   };
-
-  const scrollIntoView = () =>
-    window.requestAnimationFrame(() => rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
 
   const openManual = (initial = "", line: OrderLine | null = null) => {
     resetManual();
@@ -93,7 +110,6 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
     }
     setEditingLine(line);
     setMode("manuale");
-    scrollIntoView();
   };
 
   const openNote = (line: OrderLine | null = null, beforeId: string | null = null) => {
@@ -101,7 +117,6 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
     setEditingLine(line);
     setNoteBeforeId(line ? null : beforeId);
     setMode("nota");
-    scrollIntoView();
   };
 
   const open = (request: LineComposerRequest) => {
@@ -116,15 +131,20 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
     setMode("closed");
     setEditingLine(null);
     setNoteBeforeId(null);
+    setManualErrors({});
   };
 
   const isEditing = editingLine !== null;
-
-  const canAddManual = descrizione.trim() !== "" && qty > 0;
   const canAddNote = nota.trim() !== "";
 
   const addManual = () => {
-    if (!canAddManual) return;
+    // Avviso sui campi mancanti invece di un pulsante disabilitato: l'utente vede subito cosa manca.
+    const errors: ManualErrors = { descrizione: descrizione.trim() === "", qty: !(qty > 0) };
+    if (errors.descrizione || errors.qty) {
+      setManualErrors(errors);
+      (errors.descrizione ? descrizioneRef : qtyRef).current?.focus();
+      return;
+    }
     const patch = { descrizione: descrizione.trim(), um: um.trim(), qty, prezzoListino: prezzo, sconto };
     if (editingLine) {
       actions.updateLine(editingLine.id, patch);
@@ -162,10 +182,9 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
 
   return (
     <div
-      ref={rootRef}
       data-testid="quick-line-composer"
       className={cn(
-        "rounded-2xl border bg-card shadow-sm p-2.5 flex flex-col gap-2.5 scroll-mt-32",
+        "rounded-2xl border bg-card shadow-sm p-2.5 flex flex-col gap-2.5",
         mode === "closed" ? "border-border" : "border-primary/40 shadow-md shadow-primary/10"
       )}
     >
@@ -182,23 +201,32 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
 
       {mode === "manuale" && (
         <form
+          noValidate
           className="flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             addManual();
           }}
         >
-          <input
-            type="text"
-            value={descrizione}
-            placeholder="Descrizione articolo"
-            aria-label="Descrizione articolo manuale"
-            autoFocus
-            autoComplete="off"
-            onChange={(event) => setDescrizione(event.target.value)}
-            className={cn(fieldClass, "h-10 font-medium")}
-            style={IOS_FONT}
-          />
+          <div className="flex flex-col gap-1">
+            <input
+              ref={descrizioneRef}
+              type="text"
+              value={descrizione}
+              placeholder="Descrizione articolo"
+              aria-label="Descrizione articolo manuale"
+              aria-invalid={manualErrors.descrizione || undefined}
+              autoFocus
+              autoComplete="off"
+              onChange={(event) => {
+                setDescrizione(event.target.value);
+                if (event.target.value.trim()) setManualErrors((current) => (current.descrizione ? { ...current, descrizione: false } : current));
+              }}
+              className={cn(fieldClass, "h-10 font-medium", manualErrors.descrizione && invalidFieldClass)}
+              style={IOS_FONT}
+            />
+            {manualErrors.descrizione && <FieldWarning>Inserisci la descrizione dell&apos;articolo.</FieldWarning>}
+          </div>
           <div className="grid grid-cols-3 gap-2">
             <label className="flex flex-col gap-0.5">
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">U.M.</span>
@@ -219,9 +247,22 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
             </label>
             <label className="flex flex-col gap-0.5">
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Qtà</span>
-              <NumberField value={qty} onCommit={setQty} placeholder="0" ariaLabel="Quantità" className="w-full" onEnter={addManual} />
+              <NumberField
+                ref={qtyRef}
+                value={qty}
+                onCommit={(value) => {
+                  setQty(value);
+                  if (value > 0) setManualErrors((current) => (current.qty ? { ...current, qty: false } : current));
+                }}
+                placeholder="0"
+                ariaLabel="Quantità"
+                className="w-full"
+                onEnter={addManual}
+                invalid={!!manualErrors.qty}
+              />
             </label>
           </div>
+          {manualErrors.qty && <FieldWarning>Inserisci la quantità.</FieldWarning>}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Sconto</span>
             <DiscountSelector size="sm" value={sconto} onChange={setSconto} onInteract={dismissKeyboard} />
@@ -229,8 +270,7 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
           <div className="flex items-center gap-2 pt-0.5">
             <button
               type="submit"
-              disabled={!canAddManual}
-              className="flex-1 sm:flex-none h-10 px-4 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground border border-primary hover:opacity-95 disabled:bg-muted disabled:text-muted-foreground disabled:border-border disabled:cursor-not-allowed transition-colors"
+              className="flex-1 sm:flex-none h-10 px-4 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground border border-primary hover:opacity-95 transition-colors"
             >
               {isEditing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {isEditing ? "Salva modifica" : "Aggiungi"}
@@ -244,9 +284,6 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
               Annulla
             </button>
           </div>
-          {!canAddManual && (
-            <p className="text-[11px] text-muted-foreground">Servono descrizione e quantità; il prezzo può restare 0.</p>
-          )}
         </form>
       )}
 

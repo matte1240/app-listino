@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import { cn, parseLocalizedNumber } from "@/lib/utils";
 
 /** Font 16px sugli input: evita lo zoom automatico di iOS al focus. */
@@ -19,10 +19,15 @@ interface NumberFieldProps {
   ariaLabel: string;
   autoFocus?: boolean;
   onEnter?: () => void;
+  /** Evidenzia il campo come non valido (bordo rosso + aria-invalid). */
+  invalid?: boolean;
 }
 
 /** Campo numerico con virgola decimale: aggiorna il valore ad ogni digitazione, riformatta al blur. */
-export default function NumberField({ value, onCommit, placeholder, className, ariaLabel, autoFocus, onEnter }: NumberFieldProps) {
+const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(function NumberField(
+  { value, onCommit, placeholder, className, ariaLabel, autoFocus, onEnter, invalid = false },
+  ref
+) {
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   // Mentre il campo è attivo mostra il testo digitato (es. "12,"), altrimenti il valore formattato.
@@ -30,11 +35,13 @@ export default function NumberField({ value, onCommit, placeholder, className, a
 
   return (
     <input
+      ref={ref}
       type="text"
       inputMode="decimal"
       value={displayValue}
       placeholder={placeholder}
       aria-label={ariaLabel}
+      aria-invalid={invalid || undefined}
       autoFocus={autoFocus}
       onFocus={() => {
         setText(formatNumberInput(value));
@@ -53,9 +60,12 @@ export default function NumberField({ value, onCommit, placeholder, className, a
       }}
       className={cn(
         "h-9 rounded-lg border border-border bg-background px-2 text-sm font-semibold text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40",
+        invalid && "border-destructive focus:border-destructive focus:ring-destructive/30",
         className
       )}
       style={IOS_FONT}
     />
   );
-}
+});
+
+export default NumberField;

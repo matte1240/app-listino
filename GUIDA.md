@@ -124,7 +124,7 @@ Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 - Per ogni articolo nel carrello imposti:
   - **Quantità** (con i tasti `+` / `−` o digitando il numero),
   - **Sconto a riga**: `0%`, `8%`, `15%` oppure **Libero** (digiti tu la percentuale). Lo sconto si applica al prezzo di listino dell'articolo specifico.
-- In cima alla lista articoli c'è la casella **Articolo manuale / Nota** (vedi sotto): serve per aggiungere righe non presenti a listino senza aprire il carrello.
+- Sotto la barra di ricerca, sempre visibile anche scorrendo la lista, c'è la casella **Articolo manuale / Nota** (vedi sotto): serve per aggiungere righe non presenti a listino senza aprire il carrello.
 - Su mobile la barra in basso mostra **articoli e totale**: toccala (o tocca **Carrello** in alto) per aprire il carrello dal basso e vedere, riordinare o modificare le righe.
 - Puoi rimuovere un articolo con l'icona **X**.
 
@@ -135,9 +135,9 @@ Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 Il corpo dell'ordine (pannello **Righe ordine** nel carrello e nel riepilogo) mostra le righe **nell'ordine in cui le hai inserite**, non per codice.
 
 - **Riordinare**: trascina una riga con la maniglia `⋮⋮` (su tablet tieni premuto un attimo, poi trascina) oppure usa le frecce **▲ ▼**.
-- **Nota**: nella casella in cima alla lista articoli tocca **Nota**, scrivi il testo e premi **Aggiungi nota**: la riga va in fondo all'ordine. L'icona "nota sopra" su ogni riga del carrello apre la stessa casella e inserisce la nota sopra quella riga. Serve per intitolare un gruppo di articoli (es. *Materiale per il piano terra*) o dare istruzioni al magazzino. Le note compaiono nella mail, nell'XML Metodo (come sola descrizione) e nel PDF del preventivo.
-- **Articolo manuale**: nella stessa casella tocca **Articolo manuale**, compila **descrizione, U.M., prezzo e quantità** (con lo stesso selettore sconto degli articoli) e premi **Aggiungi**. Se cerchi un articolo che non esiste a listino, sotto "Nessun risultato" trovi **Inseriscilo come articolo manuale** con la descrizione già compilata. Nell'XML Metodo la riga usa il codice generico configurato dall'admin (sezione 11.9).
-- **Modificare** una riga manuale o una nota: nel carrello e nel riepilogo le righe sono di sola lettura, come gli articoli; il pulsante **Modifica** riapre la casella in cima alla lista già compilata (premi **Salva modifica** per confermare).
+- **Nota**: nella casella sotto la barra di ricerca tocca **Nota**, scrivi il testo e premi **Aggiungi nota**: la riga va in fondo all'ordine. L'icona "nota sopra" su ogni riga del carrello apre la stessa casella e inserisce la nota sopra quella riga. Serve per intitolare un gruppo di articoli (es. *Materiale per il piano terra*) o dare istruzioni al magazzino. Le note compaiono nella mail, nell'XML Metodo (come sola descrizione) e nel PDF del preventivo.
+- **Articolo manuale**: nella stessa casella tocca **Articolo manuale**, compila **descrizione, U.M., prezzo e quantità** (con lo stesso selettore sconto degli articoli) e premi **Aggiungi**. La quantità non è precompilata: se la lasci vuota (o manca la descrizione) compare un avviso in rosso e la riga non viene inserita. Se cerchi un articolo che non esiste a listino, sotto "Nessun risultato" trovi **Inseriscilo come articolo manuale** con la descrizione già compilata. Nell'XML Metodo la riga usa il codice generico configurato dall'admin (sezione 11.9).
+- **Modificare** una riga manuale o una nota: nel carrello e nel riepilogo le righe sono di sola lettura, come gli articoli; il pulsante **Modifica** riapre la casella sotto la barra di ricerca già compilata (premi **Salva modifica** per confermare).
 - Le righe vuote (nota senza testo, articolo manuale senza descrizione o quantità) non vengono salvate.
 
 ### Step 3 — Dettagli
@@ -187,7 +187,7 @@ Il wizard dei preventivi ha gli stessi step dell'ordine (cliente, articoli, dati
 - **Destinazione cantiere** (opzionale): scegli una destinazione recente del cliente o digita l'indirizzo, come nell'ordine. Se la lasci vuota, nel PDF la casella *Destinazione diversa* riporta **STESSA** (la sede del cliente). Trasformando il preventivo in ordine la destinazione viene ricopiata nel luogo di consegna.
 - **Note** che compaiono nel PDF.
 
-Il PDF (pulsante **PDF** nel dettaglio del preventivo) è un foglio A4 in stile Metodo: le righe articolo sono separate solo dalle colonne, le note in corsivo a tutta larghezza, le spese di trasporto per ultime.
+Il PDF (pulsante **PDF** nel dettaglio del preventivo) è un foglio A4 in stile Metodo: le righe articolo sono separate solo dalle colonne, le note di riga in corsivo nella colonna Descrizione, le spese di trasporto per ultime.
 
 ---
 
