@@ -49,14 +49,10 @@ function estimateWrappedLines(value: string, charsPerLine: number) {
 }
 
 // Le stime seguono il CSS della tabella (padding 0.9mm sopra/sotto, interlinea ~4.1mm) per chiudere a fondo pagina.
-function estimateCommentRowHeightMm(item: QuotationItem) {
-  return 1.8 + estimateWrappedLines(item.descrizione, 115) * 4.1;
-}
-
+// Le note occupano la sola colonna Descrizione, quindi vanno a capo come le descrizioni articolo.
 function estimateItemRowHeightMm(item: QuotationItem) {
-  if (getLineType(item) === "commento") return estimateCommentRowHeightMm(item);
   const descriptionLines = estimateWrappedLines(item.descrizione, 46);
-  const codeLines = estimateWrappedLines(item.codice, 22);
+  const codeLines = getLineType(item) === "commento" ? 1 : estimateWrappedLines(item.codice, 22);
   const visibleLines = Math.max(descriptionLines, codeLines, 1);
   return 1.8 + visibleLines * 4.1;
 }
@@ -401,9 +397,8 @@ export default function QuotationPrintPage() {
           line-height: 1.22;
         }
 
-        .items-table tbody .comment-row td {
-          border-top: 0;
-          padding: 0.9mm 1.2mm;
+        /* Nota di riga: testo in corsivo nella sola colonna Descrizione, le altre colonne restano vuote. */
+        .comment-row td {
           font-style: italic;
         }
 
@@ -620,10 +615,15 @@ export default function QuotationPrintPage() {
                 const rowKey = item.id ?? `${item.codice}-${index}`;
                 if (getLineType(item) === "commento") {
                   return (
-                    <tr key={rowKey} className="notes-row comment-row">
-                      <td colSpan={8}>
-                        <p className="notes-content">{item.descrizione}</p>
-                      </td>
+                    <tr key={rowKey} className="comment-row">
+                      <td className="code-cell" />
+                      <td className="description-lines">{item.descrizione}</td>
+                      <td />
+                      <td />
+                      <td />
+                      <td />
+                      <td />
+                      <td />
                     </tr>
                   );
                 }

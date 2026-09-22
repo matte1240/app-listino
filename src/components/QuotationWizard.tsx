@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
@@ -32,7 +32,7 @@ import AddressAutocompleteInput, {
 } from "@/components/AddressAutocompleteInput";
 import MaterialList from "@/components/MaterialList";
 import OrderLinesEditor from "@/components/OrderLinesEditor";
-import type { LineComposerRequest } from "@/components/QuickLineComposer";
+import QuickLineComposer, { type LineComposerRequest, type QuickLineComposerHandle } from "@/components/QuickLineComposer";
 import SearchBar from "@/components/SearchBar";
 import { countArticleLines, itemsRequireApproval } from "@/lib/order-lines";
 import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
@@ -92,8 +92,13 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const [openArticleRequest, setOpenArticleRequest] = useState<{ codice: string; requestId: number } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openArticleRequestIdRef = useRef(0);
-  const [lineRequest, setLineRequest] = useState<{ request: LineComposerRequest; requestId: number } | null>(null);
-  const lineRequestIdRef = useRef(0);
+  // Casella righe manuali/note (sticky sotto la ricerca): la richiesta di apertura resta in attesa finché lo step 2 non è montato.
+  const composerRef = useRef<QuickLineComposerHandle>(null);
+  const pendingLineRequestRef = useRef<{ request: LineComposerRequest; fromOtherStep: boolean } | null>(null);
+  const [lineRequestTick, setLineRequestTick] = useState(0);
+  // Altezza dell'header sticky (ricerca + casella): la sidebar desktop si aggancia subito sotto.
+  const stickyHeaderRef = useRef<HTMLDivElement>(null);
+  const step2RootRef = useRef<HTMLDivElement>(null);
 
   // Destinazione cantiere (opzionale), stesso componente e validazione degli ordini
   const addressInputRef = useRef<AddressAutocompleteInputHandle>(null);
@@ -260,14 +265,40 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     });
   }, []);
 
-  /** Righe manuali e note si modificano dalla casella in cima alla lista articoli (step Materiali), come gli articoli. */
+  /** Righe manuali e note si modificano dalla casella sotto la barra di ricerca (step Materiali), come gli articoli. */
   const openLineComposer = useCallback((request: LineComposerRequest) => {
+    pendingLineRequestRef.current = { request, fromOtherStep: currentStep !== 2 };
     setMobileCartOpen(false);
     setSearchQuery("");
-    lineRequestIdRef.current += 1;
-    setLineRequest({ request, requestId: lineRequestIdRef.current });
     setStep(2);
-  }, [setMobileCartOpen, setSearchQuery, setStep]);
+    setLineRequestTick((tick) => tick + 1);
+  }, [currentStep, setMobileCartOpen, setSearchQuery, setStep]);
+
+  useEffect(() => {
+    if (currentStep !== 2) return;
+    const pending = pendingLineRequestRef.current;
+    if (!pending) return;
+    pendingLineRequestRef.current = null;
+    // Arrivando da un altro step la pagina può essere scorsa: si riparte dall'alto (la casella è comunque sticky).
+    if (pending.fromOtherStep) window.scrollTo({ top: 0 });
+    composerRef.current?.open(pending.request);
+  }, [currentStep, lineRequestTick]);
+
+  const handleCreateManualFromSearch = useCallback((descrizione: string) => {
+    composerRef.current?.open({ kind: "manuale", descrizione });
+  }, []);
+
+  // L'header sticky cambia altezza (casella aperta/chiusa): la si espone come variabile CSS per la sidebar.
+  useEffect(() => {
+    const header = stickyHeaderRef.current;
+    const root = step2RootRef.current;
+    if (!header || !root) return;
+    const observer = new ResizeObserver(() => {
+      root.style.setProperty("--step2-header-h", `${header.offsetHeight}px`);
+    });
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [currentStep]);
 
   const handleEditLine = useCallback((line: OrderLine) => {
     openLineComposer({ kind: line.tipo === "commento" ? "nota" : "manuale", line });
@@ -276,10 +307,6 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const handleAddNoteAbove = useCallback((beforeId: string) => {
     openLineComposer({ kind: "nota", beforeId });
   }, [openLineComposer]);
-
-  const handleLineRequestHandled = useCallback((requestId: number) => {
-    setLineRequest((current) => (current && current.requestId === requestId ? null : current));
-  }, []);
 
   const handleSave = useCallback(async () => {
     if (saving) return;
@@ -482,11 +509,13 @@ export default function QuotationWizard({ editingQuotation }: Props) {
 
   if (currentStep === 2) {
     return (
-      <div className="min-h-dvh flex flex-col">
-        <div className="sticky top-14 z-30 bg-background/80 backdrop-blur-md border-b border-border">
-          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 sm:gap-3">
-            <div className="flex-1">
-              <SearchBar ref={searchInputRef} autoFocus store="quotation" />
+      <div ref={step2RootRef} className="min-h-dvh flex flex-col" style={{ "--step2-header-h": "49px" } as CSSProperties}>
+        {/* Header sticky: ricerca + casella righe manuali/note, sempre visibili scorrendo la lista */}
+        <div ref={stickyHeaderRef} className="sticky top-14 z-30 bg-background/90 backdrop-blur-md border-b border-border">
+          <div className="max-w-5xl mx-auto px-4 py-2 flex flex-col gap-2">
+            <SearchBar ref={searchInputRef} autoFocus store="quotation" />
+            <div className="lg:mr-72">
+              <QuickLineComposer ref={composerRef} store="quotation" onAdded={handleArticleConfirmed} />
             </div>
           </div>
         </div>
@@ -499,12 +528,14 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               onArticleConfirmed={handleArticleConfirmed}
               openArticleRequest={openArticleRequest}
               onOpenArticleRequestHandled={handleOpenArticleRequestHandled}
-              lineRequest={lineRequest}
-              onLineRequestHandled={handleLineRequestHandled}
+              onCreateManualFromSearch={handleCreateManualFromSearch}
             />
           </main>
 
-          <aside className="hidden lg:flex w-72 shrink-0 flex-col gap-3 px-4 py-5 border-l border-border sticky top-[calc(3.5rem+49px)] self-start max-h-[calc(100dvh-3.5rem-49px)] overflow-y-auto">
+          <aside
+            className="hidden lg:flex w-72 shrink-0 flex-col gap-3 px-4 py-5 border-l border-border sticky self-start overflow-y-auto"
+            style={{ top: "calc(3.5rem + var(--step2-header-h))", maxHeight: "calc(100dvh - 3.5rem - var(--step2-header-h))" }}
+          >
             {renderCartSummary("max-h-[46dvh]")}
             <Button variant="outline" className="gap-2 text-sm" onClick={() => setStep(1)}>
               <ChevronLeft className="h-4 w-4" />

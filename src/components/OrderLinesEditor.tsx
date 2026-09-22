@@ -298,7 +298,7 @@ export default function OrderLinesEditor({
     <div className="flex flex-col gap-2" data-vaul-no-drag>
       {movableLines.length === 0 && !trasporto && (
         <p className="text-xs text-muted-foreground px-1 py-2">
-          Nessuna riga inserita. Aggiungi articoli dal listino o una riga manuale dalla casella in cima alla lista.
+          Nessuna riga inserita. Aggiungi articoli dal listino o una riga manuale dalla casella sotto la barra di ricerca.
         </p>
       )}
 
