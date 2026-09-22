@@ -59,7 +59,7 @@ function estimateItemRowHeightMm(item: QuotationItem) {
 
 function estimateNotesRowHeightMm(note: string) {
   if (!note.trim()) return 0;
-  return 3.4 + (1 + estimateWrappedLines(note, 115)) * 4.1;
+  return 4.7 + (1 + estimateWrappedLines(note, 46)) * 4.1;
 }
 
 function quotationFillerHeightMm(quotation: Quotation) {
@@ -390,10 +390,9 @@ export default function QuotationPrintPage() {
           border-top: 0;
         }
 
+        /* Note del preventivo: restano nella sola colonna Descrizione, staccate dall'ultimo articolo. */
         .items-table tbody .notes-row td {
-          border-top: 0.25mm solid #000;
-          padding: 1.3mm 1.2mm;
-          font-size: 9.2pt;
+          padding-top: 3mm;
           line-height: 1.22;
         }
 
@@ -642,10 +641,17 @@ export default function QuotationPrintPage() {
               })}
               {quotation.note.trim() && (
                 <tr className="notes-row">
-                  <td colSpan={8}>
+                  <td className="code-cell" />
+                  <td className="description-lines">
                     <span className="notes-label">Note</span>
                     <p className="notes-content">{quotation.note.trim()}</p>
                   </td>
+                  <td />
+                  <td />
+                  <td />
+                  <td />
+                  <td />
+                  <td />
                 </tr>
               )}
               <tr className="filler-row" aria-hidden="true" style={{ "--quotation-filler-height": `${fillerHeightMm}mm` } as CSSProperties}>
