@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   User, Warehouse, MapPin, Calendar, MessageSquare,
   ChevronRight, ChevronLeft, CheckCircle2, Loader2,
-  Package, Send, Save, ShoppingCart, X, ShieldAlert,
+  Package, Send, Save, ShoppingCart, X, ShieldAlert, Hash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import AddressAutocompleteInput, {
   type AddressData,
 } from "@/components/AddressAutocompleteInput";
 import { countArticleLines, itemsRequireApproval, linesCoveredByQuotation } from "@/lib/order-lines";
+import { CIG_LENGTH, CUP_LENGTH, isValidCig, isValidCup, normalizeCig, normalizeCup } from "@/lib/cig-cup";
 import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
 import { useAuth } from "@/lib/auth-context";
 import { useOrderStore } from "@/lib/useOrderStore";
@@ -30,6 +31,50 @@ import type { Order, OrderLine } from "@/types";
 import ExitOrderDialog from "@/components/ExitOrderDialog";
 
 const STEP_LABELS = ["Cliente", "Materiali", "Dettagli", "Riepilogo"] as const;
+
+interface PublicCodeFieldProps {
+  id: string;
+  label: string;
+  hint: string;
+  value: string;
+  length: number;
+  showError: boolean;
+  onChange: (value: string) => void;
+}
+
+/** Campo CIG/CUP: facoltativo, maiuscolo, lunghezza fissa (avviso in rosso se incompleto al passaggio al riepilogo). */
+function PublicCodeField({ id, label, hint, value, length, showError, onChange }: PublicCodeFieldProps) {
+  const invalid = showError && value !== "" && value.length !== length;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id} className="text-sm font-medium flex items-center gap-1.5">
+        <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+        {label}
+      </Label>
+      <Input
+        id={id}
+        placeholder={`${length} caratteri (opzionale)`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={invalid || undefined}
+        autoComplete="off"
+        autoCapitalize="characters"
+        spellCheck={false}
+        className="h-11 rounded-xl text-base bg-background font-mono tracking-wide"
+        style={{ fontSize: "16px" }}
+      />
+      {invalid ? (
+        <p role="alert" className="text-[11px] font-medium text-destructive">
+          Il {label} deve avere {length} caratteri ({value.length}/{length}).
+        </p>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          {hint}{value ? ` · ${value.length}/${length}` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   /** When provided, we're editing this order */
@@ -65,6 +110,8 @@ export default function OrderWizard({ editingOrder }: Props) {
   const addressInputRef = useRef<AddressAutocompleteInputHandle>(null);
   const addressDataRef = useRef<AddressData | null>(null);
   const [isAddressValid, setIsAddressValid] = useState(true);
+  // CIG/CUP incompleti: l'avviso compare solo dopo il tentativo di passare al riepilogo.
+  const [showPublicCodeErrors, setShowPublicCodeErrors] = useState(false);
 
   // Customer search
   const [customerResults, setCustomerResults] = useState<AnagraficaSearchItem[]>([]);
@@ -106,6 +153,8 @@ export default function OrderWizard({ editingOrder }: Props) {
       cliente: editingSource.cliente,
       magazzino: editingSource.magazzino as typeof orderInfo.magazzino,
       luogoConsegna: editingSource.luogoConsegna,
+      cig: editingSource.cig ?? "",
+      cup: editingSource.cup ?? "",
       dataConsegna: editingSource.dataConsegna,
       note: initialNote,
     });
@@ -445,13 +494,22 @@ export default function OrderWizard({ editingOrder }: Props) {
     return canGoNextStep1 && canGoNextStep2;
   };
 
+  /** Validazione dello step Dettagli prima del riepilogo: CIG/CUP completi (se inseriti) e indirizzo digitato valido. */
+  const validateDetailsStep = async (): Promise<boolean> => {
+    if (!isValidCig(orderInfo.cig) || !isValidCup(orderInfo.cup)) {
+      setShowPublicCodeErrors(true);
+      return false;
+    }
+    if (orderInfo.luogoConsegna.trim()) {
+      return isAddressValid || (await addressInputRef.current?.validateAddress()) === true;
+    }
+    return true;
+  };
+
   const goToStep = async (step: 1 | 2 | 3 | 4) => {
     if (step === currentStep || !canReachStep(step)) return;
-    // Lasciando lo step Dettagli con un indirizzo digitato, stessa validazione del pulsante "Avanti — Riepilogo".
-    if (currentStep === 3 && step > 3 && orderInfo.luogoConsegna.trim()) {
-      const valid = isAddressValid || (await addressInputRef.current?.validateAddress()) === true;
-      if (!valid) return;
-    }
+    // Lasciando lo step Dettagli verso il riepilogo, stessa validazione del pulsante "Avanti — Riepilogo".
+    if (currentStep === 3 && step > 3 && !(await validateDetailsStep())) return;
     setMobileCartOpen(false);
     setStep(step);
   };
@@ -813,6 +871,28 @@ export default function OrderWizard({ editingOrder }: Props) {
             />
           </div>
 
+          {/* CIG / CUP (fatturazione PA) */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <PublicCodeField
+              id="cig"
+              label="CIG"
+              hint="Codice Identificativo Gara"
+              value={orderInfo.cig}
+              length={CIG_LENGTH}
+              showError={showPublicCodeErrors}
+              onChange={(value) => setOrderInfo({ cig: normalizeCig(value) })}
+            />
+            <PublicCodeField
+              id="cup"
+              label="CUP"
+              hint="Codice Unico di Progetto"
+              value={orderInfo.cup}
+              length={CUP_LENGTH}
+              showError={showPublicCodeErrors}
+              onChange={(value) => setOrderInfo({ cup: normalizeCup(value) })}
+            />
+          </div>
+
           {/* Data consegna */}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="data" className="text-sm font-medium flex items-center gap-1.5">
@@ -859,12 +939,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             <Button
               className="w-full h-11 gap-2 font-semibold sm:flex-1"
               onClick={async () => {
-                // If address field has text, validate it before proceeding
-                if (orderInfo.luogoConsegna.trim()) {
-                  const valid = isAddressValid || (await addressInputRef.current?.validateAddress()) === true;
-                  if (!valid) return;
-                }
-                setStep(4);
+                if (await validateDetailsStep()) setStep(4);
               }}
             >
               Avanti — Riepilogo
@@ -928,6 +1003,25 @@ export default function OrderWizard({ editingOrder }: Props) {
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Luogo consegna</p>
                 <p className="font-semibold">{orderInfo.luogoConsegna}</p>
+              </div>
+            </div>
+          )}
+          {(orderInfo.cig || orderInfo.cup) && (
+            <div className="flex items-center gap-2">
+              <Hash className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex flex-wrap gap-x-6 gap-y-1">
+                {orderInfo.cig && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">CIG</p>
+                    <p className="font-semibold font-mono">{orderInfo.cig}</p>
+                  </div>
+                )}
+                {orderInfo.cup && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">CUP</p>
+                    <p className="font-semibold font-mono">{orderInfo.cup}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}

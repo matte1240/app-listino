@@ -10,6 +10,8 @@ export interface OrderSnapshot {
   cliente: string;
   magazzino: string;
   luogoConsegna: string;
+  cig: string;
+  cup: string;
   dataConsegna: string;
   note: string;
   items: OrderHistoryItem[];
@@ -80,6 +82,8 @@ export function computeOrderDiff(previous: OrderSnapshot, current: OrderSnapshot
     { label: "Cliente", before: previous.cliente, after: current.cliente },
     { label: "Magazzino", before: previous.magazzino, after: current.magazzino },
     { label: "Luogo consegna", before: previous.luogoConsegna, after: current.luogoConsegna },
+    { label: "CIG", before: previous.cig, after: current.cig },
+    { label: "CUP", before: previous.cup, after: current.cup },
     { label: "Data consegna", before: formatDate(previous.dataConsegna), after: formatDate(current.dataConsegna) },
     { label: "Note", before: previous.note, after: current.note },
   ];

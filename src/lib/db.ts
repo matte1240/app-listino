@@ -91,6 +91,8 @@ function createDb() {
       cliente_id INTEGER,
       magazzino TEXT NOT NULL,
       luogo_consegna TEXT NOT NULL DEFAULT '',
+      cig TEXT NOT NULL DEFAULT '',
+      cup TEXT NOT NULL DEFAULT '',
       data_consegna TEXT NOT NULL DEFAULT '',
       note TEXT NOT NULL DEFAULT '',
       agente TEXT NOT NULL,
@@ -139,6 +141,12 @@ function createDb() {
       db.exec(`ALTER TABLE orders ADD COLUMN ${col} TEXT`);
     }
   }
+  // Migration: CIG e CUP in testata (fatturazione PA)
+  for (const col of ["cig", "cup"]) {
+    if (!orderCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE orders ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+    }
+  }
 
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_quotation_id ON orders(quotation_id)");
@@ -151,6 +159,8 @@ function createDb() {
       cliente_id INTEGER,
       magazzino TEXT NOT NULL,
       luogo_consegna TEXT NOT NULL DEFAULT '',
+      cig TEXT NOT NULL DEFAULT '',
+      cup TEXT NOT NULL DEFAULT '',
       data_consegna TEXT NOT NULL DEFAULT '',
       note TEXT NOT NULL DEFAULT '',
       items TEXT NOT NULL,
@@ -165,6 +175,12 @@ function createDb() {
   for (const col of ["approval_status", "approval_requested_at", "approval_note"]) {
     if (!draftCols.some((c) => c.name === col)) {
       db.exec(`ALTER TABLE order_drafts ADD COLUMN ${col} TEXT`);
+    }
+  }
+  // Migration: CIG e CUP in testata (fatturazione PA)
+  for (const col of ["cig", "cup"]) {
+    if (!draftCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE order_drafts ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
     }
   }
 

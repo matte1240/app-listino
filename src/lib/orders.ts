@@ -10,6 +10,8 @@ export interface DbOrder {
   cliente_id: number | null;
   magazzino: string;
   luogo_consegna: string;
+  cig: string;
+  cup: string;
   data_consegna: string;
   note: string;
   agente: string;
@@ -33,6 +35,8 @@ export interface DbOrderDraft {
   cliente_id: number | null;
   magazzino: string;
   luogo_consegna: string;
+  cig: string;
+  cup: string;
   data_consegna: string;
   note: string;
   items: string;
@@ -48,6 +52,8 @@ export interface OrderWriteData {
   clienteId: number | null;
   magazzino: string;
   luogoConsegna: string;
+  cig: string;
+  cup: string;
   dataConsegna: string;
   note: string;
   items: OrderHistoryItem[];
@@ -96,6 +102,8 @@ export function dbDraftToOrderDraft(row: DbOrderDraft): OrderDraft {
     cliente: row.cliente,
     magazzino: row.magazzino,
     luogoConsegna: row.luogo_consegna,
+    cig: row.cig ?? "",
+    cup: row.cup ?? "",
     dataConsegna: row.data_consegna,
     note: row.note,
     items: parseOrderItems(row.items),
@@ -121,6 +129,8 @@ export function dbOrderToOrder(
     cliente: row.cliente,
     magazzino: row.magazzino,
     luogoConsegna: row.luogo_consegna,
+    cig: row.cig ?? "",
+    cup: row.cup ?? "",
     dataConsegna: row.data_consegna,
     note: row.note,
     agente: row.agente,
@@ -191,7 +201,7 @@ export function upsertOrderDraft(
   if (existingDraft) {
     db.prepare(
       `UPDATE order_drafts
-       SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?,
+       SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, cig = ?, cup = ?, data_consegna = ?, note = ?, items = ?,
            approval_status = ?, approval_requested_at = ?, approval_note = NULL, updated_at = datetime('now')
        WHERE order_id = ?`
     ).run(
@@ -199,6 +209,8 @@ export function upsertOrderDraft(
       data.clienteId,
       data.magazzino,
       data.luogoConsegna,
+      data.cig,
+      data.cup,
       data.dataConsegna,
       data.note,
       JSON.stringify(data.items),
@@ -208,14 +220,16 @@ export function upsertOrderDraft(
     );
   } else {
     db.prepare(
-      `INSERT INTO order_drafts (order_id, cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, items, approval_status, approval_requested_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO order_drafts (order_id, cliente, cliente_id, magazzino, luogo_consegna, cig, cup, data_consegna, note, items, approval_status, approval_requested_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       orderId,
       data.cliente,
       data.clienteId,
       data.magazzino,
       data.luogoConsegna,
+      data.cig,
+      data.cup,
       data.dataConsegna,
       data.note,
       JSON.stringify(data.items),
@@ -245,6 +259,8 @@ export function applyOrderDraft(db: Database.Database, order: DbOrder, draftRow:
     cliente: order.cliente,
     magazzino: order.magazzino,
     luogoConsegna: order.luogo_consegna,
+    cig: order.cig ?? "",
+    cup: order.cup ?? "",
     dataConsegna: order.data_consegna,
     note: order.note,
     items: parseOrderItems(order.items),
@@ -253,13 +269,15 @@ export function applyOrderDraft(db: Database.Database, order: DbOrder, draftRow:
   db.transaction(() => {
     db.prepare(
       `UPDATE orders
-       SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, updated_at = datetime('now')
+       SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, cig = ?, cup = ?, data_consegna = ?, note = ?, items = ?, updated_at = datetime('now')
        WHERE id = ?`
     ).run(
       draftRow.cliente,
       draftRow.cliente_id,
       draftRow.magazzino,
       draftRow.luogo_consegna,
+      draftRow.cig ?? "",
+      draftRow.cup ?? "",
       draftRow.data_consegna,
       draftRow.note,
       draftRow.items,

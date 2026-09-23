@@ -12,7 +12,7 @@ Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e *
 
 - **Listino** — ricerca veloce su materiali con flag "obsoleto", descrizioni arricchite con AI
 - **Ordini** — wizard 4 step (Cliente → Articoli → Dettagli → Riepilogo), bozze salvate sul server con il pulsante **Salva bozza** (tabella `orders` con status `bozza`), modifica di un ordine confermato via bozza-di-modifica (`order_drafts`), cancellazione
-- **Righe ordine flessibili** — righe in ordine di inserimento, riordino con drag & drop (dnd-kit) o frecce, righe **nota** posizionabili, **articoli manuali** (descrizione, U.M., prezzo liberi), **spese di trasporto** sempre come ultima riga; stesse righe in email, XML Metodo e PDF preventivo
+- **Righe ordine flessibili** — righe in ordine di inserimento, riordino con drag & drop (dnd-kit) o frecce, righe **nota** posizionabili, **articoli manuali** (descrizione e prezzo liberi, U.M. da menu PZ/ML/MQ/KG), **spese di trasporto** sempre come ultima riga; stesse righe in email, XML Metodo e PDF preventivo
 - **Sconto libero con approvazione** — oltre a 8% e 15% una percentuale libera; ordini, modifiche e preventivi con sconti liberi restano `in_approvazione` finché un admin li approva (pagina **Admin → Approvazioni**, badge nel menu), con email e notifiche push agli admin e all'agente
 - **Email automatiche** — invio a email magazzino + CC agente per nuovo ordine, modifica, cancellazione
 - **Allegato XML Metodo** — generato e allegato automaticamente alle mail di nuovo ordine e modifica, importabile nel gestionale Metodo
@@ -20,6 +20,7 @@ Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e *
 - **Anagrafiche clienti** — import massivo da Excel con upsert per `Codice` (riconosce header `N.Cli.`, `Codice Cliente`, ecc.)
 - **Export Metodo** — XML scaricabile a richiesta dal pannello admin per ogni ordine
 - **Luogo di consegna** — autocomplete Google Places + memoria delle ultime destinazioni per cliente
+- **CIG e CUP** — codici facoltativi in testata ordine (step Dettagli, sotto il luogo di consegna) per la fatturazione alla PA, riportati in mail
 - **AI Enrichment** — rigenerazione descrizioni materiali via OpenAI (modello configurabile)
 - **Amministrazione** — gestione utenti, listino Excel, anagrafiche, email per filiale, backup/restore
 - **Backup automatici** — scheduler interno + upload su Hetzner Object Storage (S3 compatibile)

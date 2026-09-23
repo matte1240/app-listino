@@ -19,6 +19,7 @@ import { getDbQuotation, markQuotationConverted, type DbQuotation } from "@/lib/
 import { userOwnsCustomerByRap } from "@/lib/rap";
 import { countArticleLines, itemsRequireApproval, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
+import { normalizeCig, normalizeCup } from "@/lib/cig-cup";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { getApprovedQuotationItems, quotationUnavailableReason, resolveOrderSubmitState } from "@/lib/approvals";
 import { notifyAdminsApprovalRequested, orderApprovalDoc } from "@/lib/notifications";
@@ -81,11 +82,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items: rawItems, status } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, cig: rawCig, cup: rawCup, dataConsegna, note, items: rawItems, status } = body as {
     clienteId?: number | null;
     cliente: string;
     magazzino: string;
     luogoConsegna: string;
+    cig?: string;
+    cup?: string;
     dataConsegna: string;
     note: string;
     items: unknown;
@@ -94,6 +97,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const requestedStatus: "bozza" | "confermato" = status === "bozza" ? "bozza" : "confermato";
   const items = normalizeOrderItems(rawItems, getLineCodes());
+  const cig = normalizeCig(rawCig);
+  const cup = normalizeCup(rawCup);
 
   const normalizedClienteId = Number(clienteId);
   const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
@@ -132,6 +137,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     clienteId: resolvedClienteId,
     magazzino,
     luogoConsegna: luogoConsegna ?? "",
+    cig,
+    cup,
     dataConsegna: dataConsegna ?? "",
     note: note ?? "",
     items,
@@ -176,6 +183,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       cliente: parent.cliente,
       magazzino: parent.magazzino,
       luogoConsegna: parent.luogo_consegna,
+      cig: parent.cig ?? "",
+      cup: parent.cup ?? "",
       dataConsegna: parent.data_consegna,
       note: parent.note,
       items: parseOrderItems(parent.items),
@@ -184,13 +193,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     db.transaction(() => {
       db.prepare(
         `UPDATE orders
-         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL, cancelled_from_status = NULL
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, cig = ?, cup = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?, updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL, cancelled_from_status = NULL
          WHERE id = ?`
       ).run(
         resolvedCliente,
         resolvedClienteId,
         magazzino,
         luogoConsegna ?? "",
+        cig,
+        cup,
         dataConsegna ?? "",
         note ?? "",
         JSON.stringify(items),
@@ -219,6 +230,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     cliente: existing.cliente,
     magazzino: existing.magazzino,
     luogoConsegna: existing.luogo_consegna,
+    cig: existing.cig ?? "",
+    cup: existing.cup ?? "",
     dataConsegna: existing.data_consegna,
     note: existing.note,
     items: parseOrderItems(existing.items),
@@ -266,7 +279,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     db.transaction(() => {
       db.prepare(
         `UPDATE orders
-         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?,
+         SET cliente = ?, cliente_id = ?, magazzino = ?, luogo_consegna = ?, cig = ?, cup = ?, data_consegna = ?, note = ?, items = ?, status = ?, parent_order_id = ?,
              approval_requested_at = ?, approval_decided_at = ?, approval_decided_by = ?, approval_note = ?,
              updated_at = datetime('now'), cancelled_at = NULL, cancelled_by = NULL, cancelled_from_status = NULL
          WHERE id = ?`
@@ -275,6 +288,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         resolvedClienteId,
         magazzino,
         luogoConsegna ?? "",
+        cig,
+        cup,
         dataConsegna ?? "",
         note ?? "",
         JSON.stringify(items),

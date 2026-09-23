@@ -8,6 +8,7 @@ import NumberField, { IOS_FONT } from "@/components/NumberField";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import type { LineActions } from "@/lib/order-lines-store";
+import { MANUAL_LINE_UNITS } from "@/lib/order-lines";
 import { cn } from "@/lib/utils";
 import type { OrderLine } from "@/types";
 
@@ -39,7 +40,14 @@ interface ManualErrors {
   qty?: boolean;
 }
 
-const DEFAULT_UM = "pz";
+const DEFAULT_UM = MANUAL_LINE_UNITS[0];
+
+/** U.M. di una riga esistente nella forma del menu; un valore fuori elenco (righe salvate prima del menu) resta com'è. */
+function resolveManualUnit(um: string): string {
+  const value = um.trim();
+  if (!value) return DEFAULT_UM;
+  return MANUAL_LINE_UNITS.find((unit) => unit === value.toUpperCase()) ?? value;
+}
 
 const fieldClass =
   "h-9 w-full rounded-lg border border-border bg-background px-2 text-sm font-semibold focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40";
@@ -101,7 +109,7 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
     resetManual();
     if (line) {
       setDescrizione(line.descrizione);
-      setUm(line.um);
+      setUm(resolveManualUnit(line.um));
       setPrezzo(line.prezzoListino);
       setQty(line.qty);
       setSconto(line.sconto ?? 0);
@@ -230,16 +238,18 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
           <div className="grid grid-cols-3 gap-2">
             <label className="flex flex-col gap-0.5">
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">U.M.</span>
-              <input
-                type="text"
+              <select
                 value={um}
-                placeholder="pz"
                 aria-label="Unità di misura"
-                autoComplete="off"
                 onChange={(event) => setUm(event.target.value)}
                 className={fieldClass}
                 style={IOS_FONT}
-              />
+              >
+                {MANUAL_LINE_UNITS.map((unit) => (
+                  <option key={unit} value={unit}>{unit}</option>
+                ))}
+                {!MANUAL_LINE_UNITS.includes(um) && <option value={um}>{um}</option>}
+              </select>
             </label>
             <label className="flex flex-col gap-0.5">
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Prezzo €</span>

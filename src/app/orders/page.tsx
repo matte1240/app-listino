@@ -125,6 +125,8 @@ export default function OrdersPage() {
               cliente: order.cliente,
               magazzino: order.magazzino,
               luogoConsegna: order.luogoConsegna,
+              cig: order.cig,
+              cup: order.cup,
               dataConsegna: order.dataConsegna,
               note: order.note,
               items: order.items,
@@ -396,10 +398,16 @@ export default function OrdersPage() {
                 {isOpen && (
                   <div className="border-t border-border">
                     {/* Info */}
-                    {(order.luogoConsegna || order.note) && (
+                    {(order.luogoConsegna || order.cig || order.cup || order.note) && (
                       <div className="px-4 py-3 bg-muted/30 flex flex-col gap-1 text-xs text-muted-foreground border-b border-border">
                         {order.luogoConsegna && (
                           <span><strong>Luogo:</strong> {order.luogoConsegna}</span>
+                        )}
+                        {order.cig && (
+                          <span><strong>CIG:</strong> {order.cig}</span>
+                        )}
+                        {order.cup && (
+                          <span><strong>CUP:</strong> {order.cup}</span>
                         )}
                         {order.note && (
                           <span><strong>Note:</strong> {order.note}</span>
@@ -416,7 +424,7 @@ export default function OrdersPage() {
                       </div>
                     )}
 
-                    {!order.luogoConsegna && !order.note && (order.cancelledAt || (user?.role === "admin" && order.cancelledBy) || order.cancelledFromStatus) && (
+                    {!order.luogoConsegna && !order.cig && !order.cup && !order.note && (order.cancelledAt || (user?.role === "admin" && order.cancelledBy) || order.cancelledFromStatus) && (
                       <div className="px-4 py-3 bg-muted/30 flex flex-col gap-1 text-xs text-muted-foreground border-b border-border">
                         {order.cancelledAt && (
                           <span><strong>Annullato il:</strong> {formatDate(order.cancelledAt)}</span>
