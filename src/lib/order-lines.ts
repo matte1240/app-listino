@@ -11,6 +11,8 @@ export const DEFAULT_CODICE_TRASPORTO = "TRASPORTO";
 export const DEFAULT_CODICE_MANUALE = "MANUALE";
 export const TRASPORTO_DESCRIZIONE = "Spese di trasporto";
 export const ORDER_LINE_TYPES: readonly OrderLineType[] = ["articolo", "manuale", "commento", "trasporto"];
+/** Unità di misura selezionabili per gli articoli manuali (la prima è il default). */
+export const MANUAL_LINE_UNITS: readonly string[] = ["PZ", "ML", "MQ", "KG"];
 
 export interface LineCodes {
   /** Codice Metodo usato per le righe inserite manualmente. */

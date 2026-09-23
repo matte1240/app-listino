@@ -40,6 +40,8 @@ const defaultOrderInfo: OrderInfo = {
   clienteId: null,
   cliente: "",
   luogoConsegna: "",
+  cig: "",
+  cup: "",
   dataConsegna: "",
   note: "",
   magazzino: "",
@@ -86,13 +88,17 @@ export const useOrderStore = create<OrderStore>()(
     }),
     {
       name: "listino-order-store",
-      version: 1,
+      version: 2,
       migrate: (persistedState, version) => {
-        const state = (persistedState ?? {}) as Record<string, unknown>;
+        let state = (persistedState ?? {}) as Record<string, unknown>;
         if (version < 1) {
           // v0: carrello come mappa { codice: { flagged, qty, sconto } } → righe ordinate
           const { orderItems, ...rest } = state;
-          return { ...rest, lines: migrateLegacyCartMap(orderItems) } as unknown as PersistedOrderState;
+          state = { ...rest, lines: migrateLegacyCartMap(orderItems) };
+        }
+        if (version < 2) {
+          // v1: testata senza CIG/CUP → campi aggiunti vuoti
+          state = { ...state, orderInfo: { ...defaultOrderInfo, ...(state.orderInfo as Partial<OrderInfo> | undefined) } };
         }
         return state as unknown as PersistedOrderState;
       },

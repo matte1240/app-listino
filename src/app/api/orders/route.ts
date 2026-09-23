@@ -7,6 +7,7 @@ import { getDbQuotation, markQuotationConverted, type DbQuotation } from "@/lib/
 import { userOwnsCustomerByRap } from "@/lib/rap";
 import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
+import { normalizeCig, normalizeCup } from "@/lib/cig-cup";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { getApprovedQuotationItems, quotationUnavailableReason, resolveOrderSubmitState, type OrderSubmitState } from "@/lib/approvals";
 import { notifyAdminsApprovalRequested, orderApprovalDoc } from "@/lib/notifications";
@@ -107,12 +108,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items: rawItems, status, quotationId } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, cig: rawCig, cup: rawCup, dataConsegna, note, items: rawItems, status, quotationId } = body as {
     quotationId?: number | null;
     clienteId?: number | null;
     cliente: string;
     magazzino: string;
     luogoConsegna: string;
+    cig?: string;
+    cup?: string;
     dataConsegna: string;
     note: string;
     items: unknown;
@@ -123,6 +126,8 @@ export async function POST(req: NextRequest) {
 
   const db = getDb();
   const items = normalizeOrderItems(rawItems, getLineCodes());
+  const cig = normalizeCig(rawCig);
+  const cup = normalizeCup(rawCup);
   const normalizedClienteId = Number(clienteId);
   const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
   const normalizedQuotationId = Number(quotationId);
@@ -175,15 +180,17 @@ export async function POST(req: NextRequest) {
     orderId = db.transaction(() => {
       const result = db
         .prepare(
-          `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status, parent_order_id, quotation_id,
+          `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, cig, cup, data_consegna, note, agente, items, status, parent_order_id, quotation_id,
                                approval_requested_at, approval_decided_at, approval_decided_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           resolvedCliente,
           resolvedClienteId,
           magazzino,
           luogoConsegna ?? "",
+          cig,
+          cup,
           dataConsegna ?? "",
           note ?? "",
           payload.username,
@@ -219,6 +226,8 @@ export async function POST(req: NextRequest) {
     cliente: resolvedCliente,
     magazzino,
     luogoConsegna: luogoConsegna ?? "",
+    cig,
+    cup,
     dataConsegna: dataConsegna ?? "",
     note: note ?? "",
     agente: payload.username,

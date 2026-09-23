@@ -95,6 +95,10 @@ export interface OrderDraft {
   cliente: string;
   magazzino: string;
   luogoConsegna: string;
+  /** Codice Identificativo Gara (10 caratteri), vuoto se assente. */
+  cig: string;
+  /** Codice Unico di Progetto (15 caratteri), vuoto se assente. */
+  cup: string;
   dataConsegna: string;
   note: string;
   items: OrderHistoryItem[];
@@ -113,6 +117,10 @@ export interface Order extends ApprovalInfo {
   cliente: string;
   magazzino: string;
   luogoConsegna: string;
+  /** Codice Identificativo Gara (10 caratteri), vuoto se assente. */
+  cig: string;
+  /** Codice Unico di Progetto (15 caratteri), vuoto se assente. */
+  cup: string;
   dataConsegna: string;
   note: string;
   agente: string;
@@ -154,6 +162,8 @@ export interface OrderInfo {
   clienteId: number | null;
   cliente: string;
   luogoConsegna: string;
+  cig: string;
+  cup: string;
   dataConsegna: string;
   note: string;
   magazzino: Magazzino | "";

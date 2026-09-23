@@ -18,6 +18,7 @@ import {
 import { userOwnsCustomerByRap } from "@/lib/rap";
 import { countArticleLines, itemsRequireApproval, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
+import { normalizeCig, normalizeCup } from "@/lib/cig-cup";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { notifyAdminsApprovalRequested, orderApprovalDoc } from "@/lib/notifications";
 
@@ -66,11 +67,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items: rawItems } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, cig, cup, dataConsegna, note, items: rawItems } = body as {
     clienteId?: number | null;
     cliente: string;
     magazzino: string;
     luogoConsegna: string;
+    cig?: string;
+    cup?: string;
     dataConsegna: string;
     note: string;
     items: unknown;
@@ -105,6 +108,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     clienteId: resolvedClienteId,
     magazzino,
     luogoConsegna: luogoConsegna ?? "",
+    cig: normalizeCig(cig),
+    cup: normalizeCup(cup),
     dataConsegna: dataConsegna ?? "",
     note: note ?? "",
     items,

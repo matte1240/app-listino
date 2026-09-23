@@ -348,6 +348,8 @@ function buildOrderHtml(
           <tr><td style="padding:3px 0;"><strong>Agente:</strong> ${escapeHtml(agenteDisplayName)}</td></tr>
           ${order.luogoConsegna ? `<tr><td style="padding:3px 0;"><strong>Luogo consegna:</strong> ${escapeHtml(order.luogoConsegna)}</td></tr>` : ""}
           ${mapsUrl ? `<tr><td style="padding:3px 0;"><strong>Google Maps:</strong> <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">Apri indirizzo cantiere</a></td></tr>` : ""}
+          ${order.cig ? `<tr><td style="padding:3px 0;"><strong>CIG:</strong> ${escapeHtml(order.cig)}</td></tr>` : ""}
+          ${order.cup ? `<tr><td style="padding:3px 0;"><strong>CUP:</strong> ${escapeHtml(order.cup)}</td></tr>` : ""}
           ${order.dataConsegna ? `<tr><td style="padding:3px 0;"><strong>Data consegna:</strong> ${formatDate(order.dataConsegna)}</td></tr>` : ""}
           ${order.note ? `<tr><td style="padding:3px 0;"><strong>Note:</strong> ${escapeHtml(order.note)}</td></tr>` : ""}
         </table>
@@ -422,6 +424,8 @@ function buildOrderText(
 
   if (order.luogoConsegna) lines.push(`Luogo consegna: ${order.luogoConsegna}`);
   if (mapsUrl) lines.push(`Google Maps: ${mapsUrl}`);
+  if (order.cig) lines.push(`CIG: ${order.cig}`);
+  if (order.cup) lines.push(`CUP: ${order.cup}`);
   if (order.dataConsegna) lines.push(`Data consegna: ${formatDate(order.dataConsegna)}`);
   if (order.note) lines.push(`Note: ${order.note}`);
 

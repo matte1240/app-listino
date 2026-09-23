@@ -136,7 +136,7 @@ Il corpo dell'ordine (pannello **Righe ordine** nel carrello e nel riepilogo) mo
 
 - **Riordinare**: trascina una riga con la maniglia `⋮⋮` (su tablet tieni premuto un attimo, poi trascina) oppure usa le frecce **▲ ▼**.
 - **Nota**: nella casella sotto la barra di ricerca tocca **Nota**, scrivi il testo e premi **Aggiungi nota**: la riga va in fondo all'ordine. L'icona "nota sopra" su ogni riga del carrello apre la stessa casella e inserisce la nota sopra quella riga. Serve per intitolare un gruppo di articoli (es. *Materiale per il piano terra*) o dare istruzioni al magazzino. Le note compaiono nella mail, nell'XML Metodo (come sola descrizione) e nel PDF del preventivo.
-- **Articolo manuale**: nella stessa casella tocca **Articolo manuale**, compila **descrizione, U.M., prezzo e quantità** (con lo stesso selettore sconto degli articoli) e premi **Aggiungi**. La quantità non è precompilata: se la lasci vuota (o manca la descrizione) compare un avviso in rosso e la riga non viene inserita. Se cerchi un articolo che non esiste a listino, sotto "Nessun risultato" trovi **Inseriscilo come articolo manuale** con la descrizione già compilata. Nell'XML Metodo la riga usa il codice generico configurato dall'admin (sezione 11.9).
+- **Articolo manuale**: nella stessa casella tocca **Articolo manuale**, compila **descrizione, U.M. (menu a tendina: PZ, ML, MQ, KG — di default PZ), prezzo e quantità** (con lo stesso selettore sconto degli articoli) e premi **Aggiungi**. La quantità non è precompilata: se la lasci vuota (o manca la descrizione) compare un avviso in rosso e la riga non viene inserita. Se cerchi un articolo che non esiste a listino, sotto "Nessun risultato" trovi **Inseriscilo come articolo manuale** con la descrizione già compilata. Nell'XML Metodo la riga usa il codice generico configurato dall'admin (sezione 11.9).
 - **Modificare** una riga manuale o una nota: nel carrello e nel riepilogo le righe sono di sola lettura, come gli articoli; il pulsante **Modifica** riapre la casella sotto la barra di ricerca già compilata (premi **Salva modifica** per confermare).
 - Le righe vuote (nota senza testo, articolo manuale senza descrizione o quantità) non vengono salvate.
 
@@ -144,6 +144,7 @@ Il corpo dell'ordine (pannello **Righe ordine** nel carrello e nel riepilogo) mo
 
 - **Magazzino**: scegli da quale filiale spedire (Pordenone, Udine, Fossalta di Portogruaro, Trieste). La mail dell'ordine andrà alla casella della filiale scelta.
 - Conferma o modifica i dati di consegna inseriti nello step 1.
+- **CIG** e **CUP** (sotto il luogo di consegna, facoltativi): per gli ordini legati a lavori pubblici o a clienti della Pubblica Amministrazione. Il **CIG** (Codice Identificativo Gara) ha **10 caratteri**, il **CUP** (Codice Unico di Progetto) **15 caratteri**: lettere e numeri vengono messi in maiuscolo e spazi o trattini tolti in automatico. Se il codice è incompleto compare un avviso in rosso e non si passa al riepilogo. I codici compaiono nel riepilogo, nella mail e nell'XML Metodo (campi di testata `<cig>` e `<cup>`).
 
 ### Step 4 — Riepilogo
 
@@ -296,6 +297,8 @@ Le righe **nota** compaiono nella mail come riga a tutta larghezza; le **spese d
 ### Cos'è l'allegato XML Metodo
 
 È un file `ordine-metodo-N.xml` pronto per essere importato nel gestionale Metodo. Il magazzino lo apre e importa direttamente: niente trascrizione manuale.
+
+Se nell'ordine sono indicati **CIG** e/o **CUP**, il file li riporta nei campi di testata `<cig>` e `<cup>` previsti dal tracciato Metodo per l'acquisizione ordini da XML. Perché vengano importati, i campi CIG e CUP devono esistere nel tracciato delle testate ordini di Metodo (configurazione a cura dell'assistenza Metodo).
 
 > **Quando l'allegato non c'è**: se il cliente dell'ordine non è collegato a un'anagrafica con codice (cioè è un cliente "libero" digitato a mano), l'XML non si può generare. La mail parte comunque, ma senza allegato. Se ti serve l'XML, accerta che il cliente sia stato selezionato dalle anagrafiche.
 
