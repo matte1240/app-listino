@@ -92,6 +92,10 @@ export function buildMetodoOrderXml({ order, codiceCliente }: BuildMetodoOrderXm
   if (order.luogoConsegna) {
     lines.push(`    <destdiv1>${escapeXmlText(order.luogoConsegna.toUpperCase())}</destdiv1>`);
   }
+
+  // CIG/CUP: campi di testa "cig"/"cup" del tracciato Metodo (acquisizione ordine da XML, appendice A)
+  if (order.cig) lines.push(`    <cig>${escapeXmlText(order.cig)}</cig>`);
+  if (order.cup) lines.push(`    <cup>${escapeXmlText(order.cup)}</cup>`);
   lines.push("  </testa>");
 
   lines.push("  <righe>");

@@ -20,7 +20,7 @@ Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e *
 - **Anagrafiche clienti** — import massivo da Excel con upsert per `Codice` (riconosce header `N.Cli.`, `Codice Cliente`, ecc.)
 - **Export Metodo** — XML scaricabile a richiesta dal pannello admin per ogni ordine
 - **Luogo di consegna** — autocomplete Google Places + memoria delle ultime destinazioni per cliente
-- **CIG e CUP** — codici facoltativi in testata ordine (step Dettagli, sotto il luogo di consegna) per la fatturazione alla PA, riportati in mail
+- **CIG e CUP** — codici facoltativi in testata ordine (step Dettagli, sotto il luogo di consegna) per la fatturazione alla PA, riportati in mail e nei campi di testata `<cig>`/`<cup>` dell'XML Metodo
 - **AI Enrichment** — rigenerazione descrizioni materiali via OpenAI (modello configurabile)
 - **Amministrazione** — gestione utenti, listino Excel, anagrafiche, email per filiale, backup/restore
 - **Backup automatici** — scheduler interno + upload su Hetzner Object Storage (S3 compatibile)

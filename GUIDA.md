@@ -144,7 +144,7 @@ Il corpo dell'ordine (pannello **Righe ordine** nel carrello e nel riepilogo) mo
 
 - **Magazzino**: scegli da quale filiale spedire (Pordenone, Udine, Fossalta di Portogruaro, Trieste). La mail dell'ordine andrà alla casella della filiale scelta.
 - Conferma o modifica i dati di consegna inseriti nello step 1.
-- **CIG** e **CUP** (sotto il luogo di consegna, facoltativi): per gli ordini legati a lavori pubblici o a clienti della Pubblica Amministrazione. Il **CIG** (Codice Identificativo Gara) ha **10 caratteri**, il **CUP** (Codice Unico di Progetto) **15 caratteri**: lettere e numeri vengono messi in maiuscolo e spazi o trattini tolti in automatico. Se il codice è incompleto compare un avviso in rosso e non si passa al riepilogo. I codici compaiono nel riepilogo e nella mail.
+- **CIG** e **CUP** (sotto il luogo di consegna, facoltativi): per gli ordini legati a lavori pubblici o a clienti della Pubblica Amministrazione. Il **CIG** (Codice Identificativo Gara) ha **10 caratteri**, il **CUP** (Codice Unico di Progetto) **15 caratteri**: lettere e numeri vengono messi in maiuscolo e spazi o trattini tolti in automatico. Se il codice è incompleto compare un avviso in rosso e non si passa al riepilogo. I codici compaiono nel riepilogo, nella mail e nell'XML Metodo (campi di testata `<cig>` e `<cup>`).
 
 ### Step 4 — Riepilogo
 
@@ -297,6 +297,8 @@ Le righe **nota** compaiono nella mail come riga a tutta larghezza; le **spese d
 ### Cos'è l'allegato XML Metodo
 
 È un file `ordine-metodo-N.xml` pronto per essere importato nel gestionale Metodo. Il magazzino lo apre e importa direttamente: niente trascrizione manuale.
+
+Se nell'ordine sono indicati **CIG** e/o **CUP**, il file li riporta nei campi di testata `<cig>` e `<cup>` previsti dal tracciato Metodo per l'acquisizione ordini da XML. Perché vengano importati, i campi CIG e CUP devono esistere nel tracciato delle testate ordini di Metodo (configurazione a cura dell'assistenza Metodo).
 
 > **Quando l'allegato non c'è**: se il cliente dell'ordine non è collegato a un'anagrafica con codice (cioè è un cliente "libero" digitato a mano), l'XML non si può generare. La mail parte comunque, ma senza allegato. Se ti serve l'XML, accerta che il cliente sia stato selezionato dalle anagrafiche.
 
