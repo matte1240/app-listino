@@ -510,8 +510,8 @@ export default function OrdersPage() {
                 : "Gli ordini attivi appariranno qui"
           )
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
-            <section aria-label="Elenco ordini" className="flex flex-col gap-2.5">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
+            <section aria-label="Elenco ordini" className="flex min-w-0 flex-col gap-2.5">
               {filteredOrders.map((order) => {
                 const isOpen = expanded === order.id;
                 const isCancelled = order.status === "annullato";
