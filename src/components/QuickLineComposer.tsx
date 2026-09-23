@@ -252,10 +252,6 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
               </select>
             </label>
             <label className="flex flex-col gap-0.5">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Prezzo €</span>
-              <NumberField value={prezzo} onCommit={setPrezzo} placeholder="0,00" ariaLabel="Prezzo unitario" className="w-full" onEnter={addManual} />
-            </label>
-            <label className="flex flex-col gap-0.5">
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Qtà</span>
               <NumberField
                 ref={qtyRef}
@@ -270,6 +266,10 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
                 onEnter={addManual}
                 invalid={!!manualErrors.qty}
               />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Prezzo €</span>
+              <NumberField value={prezzo} onCommit={setPrezzo} placeholder="0,00" ariaLabel="Prezzo unitario" className="w-full" onEnter={addManual} />
             </label>
           </div>
           {manualErrors.qty && <FieldWarning>Inserisci la quantità.</FieldWarning>}
