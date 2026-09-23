@@ -2,15 +2,14 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ComponentType } from "react";
-import { ClipboardList, FileText, LayoutList, LogOut, Plus, Shield, X } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useEffect, useState, type ComponentProps, type ComponentType } from "react";
+import { ClipboardList, FileText, FilePlus2, LayoutList, LogOut, Plus, Shield } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { canNavigateTo } from "@/lib/navigation-guard";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import PushToggle from "@/components/PushToggle";
-import { useOrderStore } from "@/lib/useOrderStore";
-import { useQuotationStore } from "@/lib/useQuotationStore";
 
 interface NavItem {
   href: string;
@@ -54,6 +53,23 @@ function CountBadge({ count, className }: { count: number; className?: string })
   );
 }
 
+/** Link della navigazione: durante un wizard con dati non salvati chiede prima conferma di uscita. */
+function NavLink({ href, onClick, ...props }: ComponentProps<typeof Link> & { href: string }) {
+  return (
+    <Link
+      href={href}
+      onClick={(event) => {
+        if (!canNavigateTo(href)) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.(event);
+      }}
+      {...props}
+    />
+  );
+}
+
 function Wordmark({ className, priority = false }: { className?: string; priority?: boolean }) {
   return (
     <Image
@@ -69,19 +85,13 @@ function Wordmark({ className, priority = false }: { className?: string; priorit
 }
 
 /**
- * Struttura dell'app: sidebar su desktop, barra superiore + tab bar in basso su mobile,
- * barra dedicata (senza navigazione) durante i wizard di ordini e preventivi.
+ * Struttura dell'app, uguale in ogni pagina (wizard compresi): sidebar su desktop,
+ * barra superiore + tab bar in basso su mobile.
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-
-  const orderInfo = useOrderStore((s) => s.orderInfo);
-  const setExitDialogOpen = useOrderStore((s) => s.setExitDialogOpen);
-  const quotationInfo = useQuotationStore((s) => s.quotationInfo);
-  const resetQuotation = useQuotationStore((s) => s.resetQuotation);
 
   // Conteggio documenti in attesa di approvazione (solo admin): al mount, ad ogni cambio pagina, ogni 60 s e al focus.
   const [pendingApprovals, setPendingApprovals] = useState(0);
@@ -107,90 +117,41 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [isAdmin, pathname]);
 
-  const showChrome = !!user && pathname !== "/login";
-
-  // Wizard immersivo: niente navigazione, solo contesto e uscita.
-  const isNewOrder = pathname === "/orders/new";
-  const editMatch = pathname.match(/^\/orders\/(\d+)\/edit$/);
-  const editOrderId = editMatch ? editMatch[1] : null;
-  const isNewQuotation = pathname === "/quotations/new";
-  const editQuotationMatch = pathname.match(/^\/quotations\/(\d+)\/edit$/);
-  const editQuotationId = editQuotationMatch ? editQuotationMatch[1] : null;
-  const isQuotationWizardMode = isNewQuotation || !!editQuotationId;
-  const isWizardMode = isNewOrder || !!editOrderId || isQuotationWizardMode;
-  const activeCustomer = isQuotationWizardMode ? quotationInfo.cliente : orderInfo.cliente;
-
-  const showWizardBar = showChrome && isWizardMode;
-  const showNavigation = showChrome && !isWizardMode;
+  const showNavigation = !!user && pathname !== "/login";
 
   const items = navItems.filter((item) => !item.adminOnly || isAdmin);
   const userDisplayName = user ? user.fullName || user.username : "";
   const userInitials = getUserInitials(userDisplayName);
   const roleLabel = isAdmin ? "Amministratore" : "Agente";
 
-  const wizardTitle = editOrderId
-    ? `Modifica ordine #${editOrderId}`
-    : editQuotationId
-      ? `Modifica preventivo #${editQuotationId}`
-      : isNewQuotation
-        ? "Nuovo preventivo"
-        : "Nuovo ordine";
-
-  const handleWizardExit = () => {
-    if (isQuotationWizardMode) {
-      resetQuotation();
-      router.push("/quotations");
-      return;
-    }
-    setExitDialogOpen(true);
-  };
-
   return (
     <>
-      {showWizardBar && (
-        <header className="no-print sticky top-0 z-40 h-14 border-b border-border bg-card">
-          <div className="flex h-full items-center gap-3 px-3 sm:px-5">
-            <Image
-              src="/IVICOLORS_marchio.png"
-              alt=""
-              width={408}
-              height={536}
-              className="hidden h-8 w-auto sm:block"
-              priority
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[15px] font-bold leading-tight text-foreground">{wizardTitle}</p>
-              {activeCustomer && (
-                <p className="truncate text-xs font-medium text-muted-foreground">{activeCustomer}</p>
-              )}
-            </div>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleWizardExit}>
-              <X className="h-4 w-4" />
-              <span className="hidden sm:inline">Esci</span>
-              <span className="sr-only sm:hidden">Esci</span>
-            </Button>
-          </div>
-        </header>
-      )}
-
       {showNavigation && (
         <>
           {/* Desktop: sidebar */}
           <aside className="no-print fixed inset-y-0 left-0 z-40 hidden w-64 flex-col gap-6 border-r border-border bg-sidebar px-4 pt-6 pb-5 lg:flex">
-            <Link href="/orders" className="self-start px-2.5">
+            <NavLink href="/orders" className="self-start px-2.5">
               <Wordmark className="h-[26px]" priority />
-            </Link>
-            <Button asChild size="lg" className="w-full">
-              <Link href="/orders/new">
-                <Plus className="size-5" />
-                Nuovo ordine
-              </Link>
-            </Button>
+            </NavLink>
+            <div className="flex flex-col gap-2">
+              <Button asChild size="lg" className="w-full">
+                <NavLink href="/orders/new">
+                  <Plus className="size-5" />
+                  Nuovo ordine
+                </NavLink>
+              </Button>
+              <Button asChild variant="outline" className="h-11 w-full">
+                <NavLink href="/quotations/new">
+                  <FilePlus2 className="size-[18px]" />
+                  Nuovo preventivo
+                </NavLink>
+              </Button>
+            </div>
             <nav aria-label="Navigazione principale" className="flex flex-col gap-1">
               {items.map(({ href, label, icon: Icon }) => {
                 const active = isActivePath(pathname, href);
                 return (
-                  <Link
+                  <NavLink
                     key={href}
                     href={href}
                     aria-current={active ? "page" : undefined}
@@ -204,7 +165,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <Icon className="h-5 w-5" />
                     {label}
                     {href === "/admin" && pendingApprovals > 0 && <CountBadge count={pendingApprovals} className="ml-auto" />}
-                  </Link>
+                  </NavLink>
                 );
               })}
             </nav>
@@ -234,9 +195,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* Mobile: barra superiore */}
           <header className="no-print sticky top-0 z-40 h-14 border-b border-border bg-card lg:hidden">
             <div className="flex h-full items-center justify-between pr-1.5 pl-4">
-              <Link href="/orders" className="flex items-center">
+              <NavLink href="/orders" className="flex items-center">
                 <Wordmark className="h-[22px]" priority />
-              </Link>
+              </NavLink>
               <div className="relative">
                 <button
                   type="button"
@@ -287,11 +248,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </>
       )}
 
-      <div
-        className={cn(
-          showNavigation && "pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-64 print:p-0"
-        )}
-      >
+      <div className={cn(showNavigation && "pb-[var(--app-tabbar-h)] lg:pl-64 print:p-0")}>
         {children}
       </div>
 
@@ -307,7 +264,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {items.map(({ href, label, icon: Icon }) => {
               const active = isActivePath(pathname, href);
               return (
-                <Link
+                <NavLink
                   key={href}
                   href={href}
                   aria-current={active ? "page" : undefined}
@@ -328,7 +285,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     )}
                   </span>
                   {label}
-                </Link>
+                </NavLink>
               );
             })}
           </div>
