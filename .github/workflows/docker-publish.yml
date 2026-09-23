@@ -7,11 +7,7 @@ on:
       - dev                # immagine di sviluppo: ghcr.io/.../app-listino:dev
     tags:
       - "v*.*.*"           # triggers on version tags like v1.0.0
-  pull_request:
-    branches:
-      - main               # build only (no push) on PRs to main
-      - dev                # build only (no push) on PRs to dev
-  workflow_dispatch:       # allow manual trigger from GitHub UI
+  workflow_dispatch:       # avvio manuale dalla UI di GitHub (eseguito solo su main o dev, vedi `if` del job)
 
 # Un solo build per branch alla volta: un nuovo push annulla quello in corso
 concurrency:
@@ -29,10 +25,9 @@ jobs:
     # Le etichette sono quelle assegnate in fase di registrazione del runner.
     runs-on: [self-hosted, vm-ubuntu]
     timeout-minutes: 30
-    # Sicurezza: il runner ha accesso al Docker della VM, quindi le PR provenienti da fork
-    # non devono girarci (potrebbero eseguire codice arbitrario). Girano solo push, tag,
-    # dispatch manuale e PR aperte da branch dello stesso repository.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Build solo per main, dev e tag di versione: le altre branch (anche con PR aperte o avvio
+    # manuale) non occupano il runner. Senza trigger pull_request nemmeno le PR da fork ci arrivano.
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: read
       packages: write       # needed to push to GHCR
@@ -49,9 +44,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       # 3. Login to GitHub Container Registry
-      #    On PRs this step is skipped automatically (no GITHUB_TOKEN write)
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -62,7 +55,6 @@ jobs:
       #    branch main  → ghcr.io/matte1240/app-listino:main + :latest
       #    branch dev   → ghcr.io/matte1240/app-listino:dev + :dev-<sha>
       #    tag v1.2.3   → ghcr.io/matte1240/app-listino:1.2.3 + :1.2
-      #    PR           → ghcr.io/matte1240/app-listino:pr-42 (not pushed)
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -70,19 +62,18 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=dev-,enable=${{ github.ref == 'refs/heads/dev' }}
 
-      # 5. Build (and push if not a PR)
+      # 5. Build and push
       #    Layer cache stored in GitHub Actions cache to speed up future builds
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -91,7 +82,6 @@ jobs:
 
       # 6. Print image digest for traceability
       - name: Image digest
-        if: github.event_name != 'pull_request'
         run: echo "Published ${{ steps.meta.outputs.tags }}"
 
       # 7. Pulizia disco: la VM ha poco spazio, la cache locale di buildx e le immagini
