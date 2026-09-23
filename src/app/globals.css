@@ -140,6 +140,19 @@
   --sidebar-ring: #5D82C0;
 }
 
+/* Ingombro della navigazione: barra superiore e tab bar solo su mobile, sidebar da lg in su. */
+:root {
+  --app-header-h: 3.5rem;
+  --app-tabbar-h: calc(4.5rem + env(safe-area-inset-bottom));
+}
+
+@media (width >= 64rem) {
+  :root {
+    --app-header-h: 0px;
+    --app-tabbar-h: 0px;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

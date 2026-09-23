@@ -390,13 +390,13 @@ export default function OrdersPage() {
         )}
 
         {canEditOrder(order) && !showDeleteConfirm && (
-          <div className={cn("flex flex-col gap-2 border-t border-border py-3.5 sm:flex-row sm:flex-wrap sm:justify-end", inset)}>
+          <div className={cn("grid grid-cols-2 gap-2 border-t border-border py-3.5 sm:flex sm:flex-row sm:flex-wrap sm:justify-end", inset)}>
             {isCancelled ? (
               <Button
                 variant="outline"
                 onClick={() => handleRestore(order)}
                 disabled={isRestoring}
-                className="w-full justify-center text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 sm:w-auto dark:text-emerald-300 dark:hover:bg-emerald-900/20"
+                className="col-span-2 w-full justify-center text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 sm:w-auto dark:text-emerald-300 dark:hover:bg-emerald-900/20"
               >
                 {isRestoring ? <><Loader2 className="animate-spin" /> Ripristino…</> : <><Undo2 /> Ripristina ordine</>}
               </Button>
@@ -405,7 +405,7 @@ export default function OrdersPage() {
                 variant="outline"
                 onClick={() => handleDiscardDraft(order)}
                 disabled={isSendingThisDraft || isDiscardingThisDraft || deleting}
-                className="w-full justify-center text-amber-800 hover:bg-amber-50 hover:text-amber-800 sm:w-auto dark:text-amber-300 dark:hover:bg-amber-900/20"
+                className="col-span-2 w-full justify-center text-amber-800 hover:bg-amber-50 hover:text-amber-800 sm:w-auto dark:text-amber-300 dark:hover:bg-amber-900/20"
               >
                 {isDiscardingThisDraft ? <><Loader2 className="animate-spin" /> Scarto bozza…</> : <><Undo2 /> Scarta bozza</>}
               </Button>
@@ -436,7 +436,7 @@ export default function OrdersPage() {
               <Button
                 onClick={() => handleSendDraft(order)}
                 disabled={isSendingThisDraft || isDiscardingThisDraft || deleting}
-                className="w-full justify-center sm:w-auto"
+                className="col-span-2 w-full justify-center sm:w-auto"
               >
                 {isSendingThisDraft ? <><Loader2 className="animate-spin" /> Invio bozza…</> : <><Send /> Invia bozza</>}
               </Button>
@@ -472,31 +472,35 @@ export default function OrdersPage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 pt-6 pb-24 lg:max-w-[1200px] lg:px-10 lg:pt-8 lg:pb-8">
-        <PageHeader
-          eyebrow="Cronologia"
-          title="Ordini"
-          actions={
-            <>
-              <SegmentedTabs
-                className="order-2 sm:w-64 lg:order-1"
-                value={activeTab}
-                onChange={setActiveTab}
-                options={[
-                  { value: "attivi", label: "Attivi", count: orderCounts.attivi },
-                  { value: "annullati", label: "Annullati", count: orderCounts.annullati },
-                ]}
-              />
-              <SearchField
-                className="order-1 sm:flex-1 lg:order-2 lg:w-[360px] lg:flex-none"
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder="Numero, cliente, cantiere, agente"
-                ariaLabel="Cerca ordini"
-              />
-            </>
-          }
-        />
+      <main className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-24 lg:h-dvh lg:max-w-[1200px] lg:gap-6 lg:px-10 lg:pb-0">
+        {/* Titolo, schede e ricerca restano visibili: sticky su mobile, fissi su desktop (scorrono elenco e dettaglio) */}
+        <div className="sticky top-[var(--app-header-h)] z-20 -mx-4 border-b border-border/70 bg-background px-4 pt-5 pb-3 lg:static lg:mx-0 lg:border-0 lg:px-0 lg:pt-8 lg:pb-0">
+          <PageHeader
+            className="gap-3"
+            eyebrow="Cronologia"
+            title="Ordini"
+            actions={
+              <>
+                <SegmentedTabs
+                  className="order-2 sm:w-64 lg:order-1"
+                  value={activeTab}
+                  onChange={setActiveTab}
+                  options={[
+                    { value: "attivi", label: "Attivi", count: orderCounts.attivi },
+                    { value: "annullati", label: "Annullati", count: orderCounts.annullati },
+                  ]}
+                />
+                <SearchField
+                  className="order-1 sm:flex-1 lg:order-2 lg:w-[360px] lg:flex-none"
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Numero, cliente, cantiere, agente"
+                  ariaLabel="Cerca ordini"
+                />
+              </>
+            }
+          />
+        </div>
 
         {orders.length === 0 ? (
           emptyState("Nessun ordine salvato", "Gli ordini salvati appariranno qui")
@@ -510,8 +514,8 @@ export default function OrdersPage() {
                 : "Gli ordini attivi appariranno qui"
           )
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
-            <section aria-label="Elenco ordini" className="flex min-w-0 flex-col gap-2.5">
+          <div className="grid grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+            <section aria-label="Elenco ordini" className="flex min-w-0 flex-col gap-2.5 lg:-mx-1.5 lg:overflow-y-auto lg:px-1.5 lg:pt-1.5 lg:pb-8">
               {filteredOrders.map((order) => {
                 const isOpen = expanded === order.id;
                 const isCancelled = order.status === "annullato";
@@ -522,7 +526,7 @@ export default function OrdersPage() {
                   <article
                     key={order.id}
                     className={cn(
-                      "overflow-hidden rounded-xl border bg-card shadow-card transition-[border-color,box-shadow]",
+                      "shrink-0 overflow-hidden rounded-xl border bg-card shadow-card transition-[border-color,box-shadow]",
                       isOpen ? "border-primary ring-4 ring-primary/10" : isCancelled ? "border-red-200 dark:border-red-900/60" : "border-border/80",
                       isCancelled && "bg-red-50/30 dark:bg-red-950/10"
                     )}
@@ -585,7 +589,7 @@ export default function OrdersPage() {
 
             <section
               aria-label="Dettaglio ordine"
-              className="sticky top-6 hidden max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-panel lg:block"
+              className="hidden max-h-[calc(100%-2rem)] self-start overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-panel lg:mt-1.5 lg:block"
             >
               {selectedOrder ? (
                 <>
@@ -615,7 +619,7 @@ export default function OrdersPage() {
 
       <Link
         href="/orders/new"
-        className="no-print fixed right-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 inline-flex h-14 items-center gap-2 rounded-2xl bg-primary pr-5 pl-4 text-[15px] font-semibold text-primary-foreground shadow-primary transition-colors hover:bg-primary-hover lg:hidden"
+        className="no-print fixed right-4 bottom-[calc(var(--app-tabbar-h)+0.75rem)] z-30 inline-flex h-14 items-center gap-2 rounded-2xl bg-primary pr-5 pl-4 text-[15px] font-semibold text-primary-foreground shadow-primary transition-colors hover:bg-primary-hover lg:hidden"
       >
         <Plus className="h-5 w-5" />
         Nuovo ordine

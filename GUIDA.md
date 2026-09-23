@@ -41,8 +41,8 @@ Ordini Ivicolors è lo strumento che usi per:
 ### Muoversi nell'app
 
 - **Su telefono** le sezioni (**Ordini**, **Preventivi**, **Listino** e, per gli admin, **Admin**) sono nella barra in basso. Le tue iniziali in alto a destra aprono il menu utente (notifiche ed **Esci**). Nelle pagine Ordini e Preventivi il pulsante blu **Nuovo ordine** / **Nuovo preventivo** resta in basso a destra.
-- **Su computer e tablet in orizzontale** le stesse voci sono nella barra laterale a sinistra, con in cima il pulsante **Nuovo ordine** e in fondo il tuo nome, le notifiche ed **Esci**.
-- Durante la compilazione di un ordine o di un preventivo la navigazione sparisce: in alto vedi solo cliente e pulsante **Esci**.
+- **Su computer e tablet in orizzontale** le stesse voci sono nella barra laterale a sinistra, con in cima i pulsanti **Nuovo ordine** e **Nuovo preventivo** e in fondo il tuo nome, le notifiche ed **Esci**.
+- La navigazione resta sempre visibile, anche mentre compili un ordine o un preventivo. Se tocchi un'altra sezione (o **Esci** in cima al wizard) con dati non ancora salvati, l'app ti chiede cosa fare: per gli ordini **Salva bozza e esci**, **Esci senza salvare** o **Continua a modificare**; per i preventivi **Esci senza salvare** o **Continua a modificare**.
 
 ### Cambiare password
 
@@ -188,6 +188,8 @@ Regole utili:
 
 ### 4.2 Preventivi
 
+La pagina **Preventivi** funziona come la cronologia ordini: su computer l'elenco è a sinistra e il dettaglio del preventivo selezionato a destra (con PDF, Modifica, Trasforma in ordine ed Elimina); su telefono il dettaglio si apre sotto la riga. Titolo, ricerca e schede restano sempre in vista mentre scorri.
+
 Il wizard dei preventivi ha gli stessi step dell'ordine (cliente, articoli, dati, riepilogo). Nello step **Dati** trovi:
 
 - **Data consegna prevista** e **validità** (7, 15 o 30 giorni).
@@ -260,6 +262,7 @@ Il menu **Ordini** mostra l'elenco di tutti i tuoi ordini.
 - **Ricerca** in alto — cerca per numero ordine, cliente, cantiere o nome agente.
 - Ogni riga mostra: numero, cliente, cantiere, data, magazzino, totale articoli, **stato** (badge colorato).
 - Tocca una riga per vedere il dettaglio: cliente completo, articoli con quantità/sconto/prezzo, note. Su telefono il dettaglio si apre sotto la riga; su computer compare nel pannello a destra dell'elenco.
+- Titolo, ricerca e schede **Attivi / Annullati** restano sempre in vista mentre scorri l'elenco.
 
 ### Stati possibili
 

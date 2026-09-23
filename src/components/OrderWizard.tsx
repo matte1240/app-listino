@@ -30,8 +30,12 @@ import { MAGAZZINI, type AnagraficaSearchItem, type OrderHistoryItem } from "@/t
 import type { Order, OrderLine } from "@/types";
 import ExitOrderDialog from "@/components/ExitOrderDialog";
 import WizardStepper from "@/components/WizardStepper";
+import WizardHeader from "@/components/WizardHeader";
+import { useNavigationGuard } from "@/lib/navigation-guard";
 
 const STEP_LABELS = ["Cliente", "Materiali", "Dettagli", "Riepilogo"] as const;
+const WIZARD_EYEBROW = "Ordini";
+const EXIT_HREF = "/orders";
 
 interface PublicCodeFieldProps {
   id: string;
@@ -412,12 +416,39 @@ export default function OrderWizard({ editingOrder }: Props) {
     </>
   );
 
+  // Uscita dal wizard (pulsante Esci o link della navigazione): con dati inseriti passa dalla conferma.
+  const [exitTarget, setExitTarget] = useState(EXIT_HREF);
+  const hasProgress = orderInfo.cliente.trim() !== "" || lines.length > 0;
+  const setNavigationGuard = useNavigationGuard((s) => s.setGuard);
+
+  const requestExit = useCallback((href: string) => {
+    if (!hasProgress) {
+      router.push(href);
+      return;
+    }
+    setExitTarget(href);
+    setExitDialogOpen(true);
+  }, [hasProgress, router, setExitDialogOpen]);
+
+  useEffect(() => {
+    setNavigationGuard((href) => {
+      if (!hasProgress) return true;
+      setExitTarget(href);
+      setExitDialogOpen(true);
+      return false;
+    });
+    return () => setNavigationGuard(null);
+  }, [hasProgress, setExitDialogOpen, setNavigationGuard]);
+
+  const wizardTitle = editingOrder ? `Modifica ordine #${editingOrder.id}` : "Nuovo ordine";
+  const wizardCustomer = orderInfo.cliente.trim();
+
   const handleSaveDraftAndExit = useCallback(async () => {
     // If no meaningful data, just exit
     if (!orderInfo.cliente.trim() || flaggedCount === 0) {
       resetOrder();
       setExitDialogOpen(false);
-      router.push("/orders");
+      router.push(exitTarget);
       return;
     }
     setSavingDraft(true);
@@ -434,9 +465,9 @@ export default function OrderWizard({ editingOrder }: Props) {
       setSavingDraft(false);
       resetOrder();
       setExitDialogOpen(false);
-      router.push("/orders");
+      router.push(exitTarget);
     }
-  }, [orderInfo, flaggedCount, getRequestConfig, resetOrder, router, setExitDialogOpen]);
+  }, [orderInfo, flaggedCount, getRequestConfig, resetOrder, router, setExitDialogOpen, exitTarget]);
 
   const handleSave = useCallback(async (status: "bozza" | "confermato") => {
     if (saving) return;
@@ -476,7 +507,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         open={exitDialogOpen}
         saving={savingDraft}
         onSaveDraft={handleSaveDraftAndExit}
-        onExitWithoutSaving={() => { resetOrder(); setExitDialogOpen(false); router.push("/orders"); }}
+        onExitWithoutSaving={() => { resetOrder(); setExitDialogOpen(false); router.push(exitTarget); }}
         onContinue={() => setExitDialogOpen(false)}
       />
     );
@@ -509,12 +540,15 @@ export default function OrderWizard({ editingOrder }: Props) {
   };
 
   const Stepper = () => (
-    <WizardStepper
-      labels={STEP_LABELS}
-      currentStep={currentStep}
-      canReachStep={canReachStep}
-      onStepClick={(step) => void goToStep(step)}
-    />
+    <>
+      <WizardHeader eyebrow={WIZARD_EYEBROW} title={wizardTitle} subtitle={wizardCustomer || undefined} onExit={() => requestExit(EXIT_HREF)} />
+      <WizardStepper
+        labels={STEP_LABELS}
+        currentStep={currentStep}
+        canReachStep={canReachStep}
+        onStepClick={(step) => void goToStep(step)}
+      />
+    </>
   );
 
   // ────────────────────────────────────────────
@@ -522,7 +556,7 @@ export default function OrderWizard({ editingOrder }: Props) {
   // ────────────────────────────────────────────
   if (currentStep === 1) {
     return (
-        <div className="max-w-xl mx-auto px-4 pt-6 pb-10">
+        <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8">
           {exitDialog}
           <Stepper />
         <div className="flex flex-col gap-4">
@@ -621,7 +655,10 @@ export default function OrderWizard({ editingOrder }: Props) {
       <div ref={step2RootRef} className="min-h-dvh flex flex-col" style={{ "--step2-header-h": "49px" } as CSSProperties}>
           {exitDialog}
         {/* Header sticky: ricerca + casella righe manuali/note, sempre visibili scorrendo la lista */}
-        <div ref={stickyHeaderRef} className="sticky top-14 z-30 bg-background/95 backdrop-blur-md border-b border-border">
+        <div className="max-w-6xl mx-auto w-full px-4 pt-6 lg:pt-8">
+          <Stepper />
+        </div>
+        <div ref={stickyHeaderRef} className="sticky top-[var(--app-header-h)] z-30 bg-background border-b border-border">
           <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2.5 lg:pr-[22rem]">
             <SearchBar autoFocus />
             <div>
@@ -633,7 +670,6 @@ export default function OrderWizard({ editingOrder }: Props) {
         <div className="flex flex-1 flex-col lg:flex-row max-w-6xl mx-auto w-full">
           {/* Materials catalog */}
           <main className="flex-1 min-w-0 px-4 py-5">
-            <Stepper />
             <MaterialList
               onArticleConfirmed={handleArticleConfirmed}
               openArticleRequest={openArticleRequest}
@@ -645,7 +681,7 @@ export default function OrderWizard({ editingOrder }: Props) {
           {/* Sticky sidebar */}
           <aside
             className="hidden lg:flex w-80 shrink-0 flex-col gap-4 my-5 mr-4 rounded-2xl border border-border/80 bg-card p-5 shadow-panel sticky self-start overflow-y-auto"
-            style={{ top: "calc(3.5rem + var(--step2-header-h) + 1.25rem)", maxHeight: "calc(100dvh - 3.5rem - var(--step2-header-h) - 2.5rem)" }}
+            style={{ top: "calc(var(--app-header-h) + var(--step2-header-h) + 1.25rem)", maxHeight: "calc(100dvh - var(--app-header-h) - var(--step2-header-h) - 2.5rem)" }}
           >
             {renderCartSummary("max-h-[46dvh]")}
             <div className="flex gap-2">
@@ -688,7 +724,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         </Drawer>
 
         {/* Mobile sticky bottom bar */}
-        <div className="lg:hidden sticky bottom-0 z-30 flex items-center gap-2.5 border-t border-border bg-card/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_-18px_rgb(15_27_45/0.35)] backdrop-blur-md">
+        <div className="lg:hidden sticky bottom-[var(--app-tabbar-h)] z-30 flex items-center gap-2.5 border-t border-border bg-card px-4 py-3 shadow-[0_-10px_30px_-18px_rgb(15_27_45/0.35)]">
           <Button
             variant="outline"
             size="icon"
@@ -741,7 +777,7 @@ export default function OrderWizard({ editingOrder }: Props) {
   // ────────────────────────────────────────────
   if (currentStep === 3) {
     return (
-      <div className="max-w-xl mx-auto px-4 pt-6 pb-10">
+      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8">
           {exitDialog}
         <Stepper />
         <div className="flex flex-col gap-4">
@@ -906,7 +942,7 @@ export default function OrderWizard({ editingOrder }: Props) {
   // ────────────────────────────────────────────
   if (saved) {
     return (
-      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 flex flex-col items-center gap-4 text-center">
+      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8 flex flex-col items-center gap-4 text-center">
           {exitDialog}
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <CheckCircle2 className="h-8 w-8 text-primary" />
@@ -918,7 +954,7 @@ export default function OrderWizard({ editingOrder }: Props) {
   }
 
   return (
-    <div className="max-w-xl mx-auto px-4 pt-6 pb-10">
+    <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8">
         {exitDialog}
       <Stepper />
       <div className="flex flex-col gap-5">
