@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,26 +33,40 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm overflow-hidden rounded-2xl shadow-lg border border-border">
-        {/* Header navy con logo IVI */}
-        <div className="bg-primary px-6 py-8 flex flex-col items-center gap-2">
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-primary sm:items-center sm:justify-center sm:px-4 sm:py-10">
+      {/* Marchio IVI in trasparenza come texture di sfondo */}
+      <Image
+        src="/IVI_white_marchio.png"
+        alt=""
+        width={1385}
+        height={1821}
+        className="pointer-events-none absolute -top-16 -right-36 w-[26rem] max-w-none opacity-[0.08] brightness-0 invert select-none sm:-top-24 sm:-right-24 sm:w-[34rem]"
+        priority
+      />
+
+      <div className="relative flex w-full flex-1 flex-col sm:max-w-md sm:flex-none">
+        <div className="flex flex-col gap-5 px-7 pt-[max(4.5rem,calc(env(safe-area-inset-top)+3rem))] pb-10 sm:px-2 sm:pt-0 sm:pb-8">
           <Image
-            src="/IVI_white_marchio.png"
+            src="/brand/ivicolors-white.svg"
             alt="IVI Colors"
-            width={150}
-            height={50}
-            className="h-10 w-auto object-contain"
+            width={257}
+            height={52}
+            className="h-auto w-52"
             priority
+            unoptimized
           />
-          <p className="text-primary-foreground/70 text-sm mt-1">Accedi per ordinare materiali</p>
+          <p className="text-xs font-semibold tracking-[0.16em] text-white/80 uppercase">Ordini · Preventivi · Listino</p>
         </div>
 
-        {/* Form su sfondo chiaro */}
-        <div className="bg-card px-6 py-6 space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+        <main className="flex flex-1 flex-col gap-7 rounded-t-[28px] bg-card px-7 pt-9 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_-12px_rgb(8_20_40/0.45)] sm:flex-none sm:rounded-[28px] sm:p-9">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-[34px] leading-[1.05] font-bold text-foreground">Accesso</h1>
+            <p className="text-[15px] text-muted-foreground">Accedi per ordinare materiali</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="username" className="text-[13px] font-semibold text-foreground/80">Username</Label>
               <Input
                 id="username"
                 type="text"
@@ -61,11 +75,12 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Inserisci username"
+                className="h-12"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="password" className="text-[13px] font-semibold text-foreground/80">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -75,29 +90,30 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Inserisci password"
-                  className="pr-10"
+                  className="h-12 pr-12"
                 />
                 <button
                   type="button"
                   aria-label={showPassword ? "Nascondi password" : "Mostra password"}
                   aria-pressed={showPassword}
                   onClick={() => setShowPassword((current) => !current)}
-                  className="absolute right-0 top-0 flex h-9 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                  className="absolute top-0.5 right-0.5 flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
 
             {error && (
-              <p className="text-sm text-destructive font-medium">{error}</p>
+              <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm font-medium text-destructive">{error}</p>
             )}
 
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" size="lg" className="mt-2 h-[54px] w-full text-base" disabled={submitting}>
               {submitting ? "Accesso..." : "Accedi"}
+              {!submitting && <ArrowRight className="h-5 w-5" />}
             </Button>
           </form>
-        </div>
+        </main>
       </div>
     </div>
   );

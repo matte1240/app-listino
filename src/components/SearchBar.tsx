@@ -1,9 +1,8 @@
 "use client";
 
 import { forwardRef } from "react";
-import { Search, X } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+import SearchField from "@/components/SearchField";
+import { Switch } from "@/components/ui/switch";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 
@@ -26,55 +25,33 @@ const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar({ autoF
   const setSearchQuery = store === "quotation" ? quotationSetSearchQuery : orderSetSearchQuery;
   const showObsolete = store === "quotation" ? quotationShowObsolete : orderShowObsolete;
   const setShowObsolete = store === "quotation" ? quotationSetShowObsolete : orderSetShowObsolete;
+  const switchId = `show-obsolete-${store}`;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-        <Input
-          ref={ref}
-          type="text"
-          inputMode="search"
-          placeholder="Cerca codice o descrizione..."
-          value={searchQuery}
-          autoFocus={autoFocus}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Backspace" && searchQuery.length === 0) {
-              e.stopPropagation();
-            }
-          }}
-          className="pl-9 pr-9 text-sm h-11 rounded-xl bg-card border-border shadow-sm placeholder:text-muted-foreground/55 focus-visible:ring-ring/50"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
-            aria-label="Cancella ricerca"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      <div className="inline-flex items-center gap-2 pl-1 text-xs text-muted-foreground select-none">
-        <Checkbox
-          id="show-obsolete"
+    <div className="flex items-center gap-3">
+      <SearchField
+        ref={ref}
+        className="min-w-0 flex-1"
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Codice o descrizione"
+        ariaLabel="Cerca articoli"
+        autoFocus={autoFocus}
+        onKeyDown={(e) => {
+          if (e.key === "Backspace" && searchQuery.length === 0) {
+            e.stopPropagation();
+          }
+        }}
+      />
+      <div className="flex shrink-0 items-center gap-2 select-none">
+        <Switch
+          id={switchId}
           checked={showObsolete}
           onCheckedChange={(checked) => setShowObsolete(checked === true)}
-          className="h-4 w-4"
         />
-        <button
-          type="button"
-          onClick={() => setShowObsolete(!showObsolete)}
-          className="hover:text-foreground transition-colors"
-        >
-          Mostra obsoleti
-        </button>
+        <label htmlFor={switchId} className="cursor-pointer text-[13px] font-semibold text-muted-foreground">
+          Obsoleti
+        </label>
       </div>
     </div>
   );

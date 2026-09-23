@@ -3,7 +3,8 @@
 import { MessageSquare, Truck } from "lucide-react";
 import type { OrderHistoryItem } from "@/types";
 import { getLineType, lineRequiresApproval } from "@/lib/order-lines";
-import { formatOrderCurrency, formatSconto, getDiscountedUnitPrice, getLineTotal } from "@/lib/order-totals";
+import { formatOrderCurrency, formatSconto, formatUnitPrice, getDiscountedUnitPrice, getLineTotal } from "@/lib/order-totals";
+import { Chip } from "@/components/ui/chip";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -12,18 +13,22 @@ interface Props {
   variant?: "order" | "quotation";
   /** Evidenzia le righe con sconto libero (pagina approvazioni). */
   highlightApproval?: boolean;
+  /** Classi aggiuntive (es. padding orizzontale allineato al contenitore). */
+  className?: string;
 }
 
 /** Riga di sola lettura per liste e dettagli: gestisce articoli, manuali, note e trasporto. */
-export default function OrderLineRow({ item, variant = "order", highlightApproval = false }: Props) {
+export default function OrderLineRow({ item, variant = "order", highlightApproval = false, className }: Props) {
   const tipo = getLineType(item);
   const needsApproval = highlightApproval && lineRequiresApproval(item);
 
   if (tipo === "commento") {
     return (
-      <div className="flex items-start gap-2 px-4 py-2 bg-muted/40">
-        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-        <p className="text-xs italic text-muted-foreground whitespace-pre-wrap">{item.descrizione}</p>
+      <div className={cn("px-4 py-2.5", className)}>
+        <p className="inline-flex max-w-full items-start gap-2 rounded-lg bg-muted/70 px-3 py-1.5 text-[13px] text-foreground/75 italic">
+          <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="whitespace-pre-wrap">{item.descrizione}</span>
+        </p>
       </div>
     );
   }
@@ -33,40 +38,49 @@ export default function OrderLineRow({ item, variant = "order", highlightApprova
   const sconto = item.sconto ?? 0;
 
   return (
-    <div className={cn("flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3", needsApproval && "bg-amber-50 dark:bg-amber-950/20")}>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-bold font-mono text-foreground flex items-center gap-1.5">
-          {isTrasporto && <Truck className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+    <div
+      className={cn(
+        "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-4",
+        needsApproval && "bg-amber-50 dark:bg-amber-950/20",
+        className
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 font-mono text-xs text-primary">
+          {isTrasporto && <Truck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
           <span className="truncate">{item.codice}</span>
           {isManuale && (
-            <span className="rounded bg-muted px-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide font-sans">manuale</span>
+            <span className="rounded bg-muted px-1.5 font-sans text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">manuale</span>
           )}
           {needsApproval && (
-            <span className="rounded bg-amber-200 px-1 text-[10px] font-semibold text-amber-900 uppercase tracking-wide font-sans">sconto libero</span>
+            <span className="rounded bg-amber-200 px-1.5 font-sans text-[10px] font-semibold tracking-wide text-amber-900 uppercase">sconto libero</span>
           )}
         </p>
-        <p className="text-xs text-muted-foreground truncate mt-0.5">{item.descrizione}</p>
+        <p className="mt-0.5 text-sm leading-snug font-semibold text-foreground">{item.descrizione}</p>
       </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs sm:shrink-0 sm:justify-end">
-        {!isTrasporto && <span className="font-bold text-foreground">{item.qty}</span>}
-        {!isTrasporto && <span className="text-muted-foreground">{item.um}</span>}
-        {variant === "order" ? (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] tabular-nums sm:shrink-0 sm:justify-end sm:pt-3">
+        {!isTrasporto && (
+          <span className="text-foreground">
+            <strong className="font-bold">{item.qty}</strong> <span className="text-muted-foreground">{item.um}</span>
+          </span>
+        )}
+        {isTrasporto ? null : variant === "order" ? (
           sconto > 0 ? (
-            <span className="flex flex-wrap items-center gap-1 sm:justify-end">
-              <span className="line-through text-muted-foreground/50">€{item.prezzoListino.toFixed(3)}</span>
-              <span className="font-semibold text-primary">€{getDiscountedUnitPrice(item).toFixed(3)}</span>
-              <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{formatSconto(sconto)}%</span>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground/70 line-through">{formatUnitPrice(item.prezzoListino)}</span>
+              <span className="font-semibold text-foreground/85">{formatUnitPrice(getDiscountedUnitPrice(item))}</span>
+              <Chip tone="primary" className="h-5 px-2 text-[11px]">−{formatSconto(sconto)}%</Chip>
             </span>
           ) : (
-            <span className="text-muted-foreground/60">€{item.prezzoListino.toFixed(3)}</span>
+            <span className="text-muted-foreground">{formatUnitPrice(item.prezzoListino)}</span>
           )
         ) : (
           <>
-            <span>{formatOrderCurrency(item.prezzoListino)}</span>
-            {sconto > 0 && <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{formatSconto(sconto)}%</span>}
-            <span className="font-semibold text-foreground">{formatOrderCurrency(getLineTotal(item))}</span>
+            <span className="text-muted-foreground">{formatOrderCurrency(item.prezzoListino)}</span>
+            {sconto > 0 && <Chip tone="primary" className="h-5 px-2 text-[11px]">−{formatSconto(sconto)}%</Chip>}
           </>
         )}
+        <span className="min-w-[5.5rem] text-right text-sm font-bold text-foreground">{formatOrderCurrency(getLineTotal(item))}</span>
       </div>
     </div>
   );

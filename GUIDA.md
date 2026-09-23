@@ -38,6 +38,12 @@ Ordini Ivicolors è lo strumento che usi per:
 2. Inserisci il tuo **username** e la **password** che ti ha fornito l'amministratore.
 3. Clicca **Accedi**. Resti loggato per qualche ora; se chiudi e riapri, di norma non devi rifare login.
 
+### Muoversi nell'app
+
+- **Su telefono** le sezioni (**Ordini**, **Preventivi**, **Listino** e, per gli admin, **Admin**) sono nella barra in basso. Le tue iniziali in alto a destra aprono il menu utente (notifiche ed **Esci**). Nelle pagine Ordini e Preventivi il pulsante blu **Nuovo ordine** / **Nuovo preventivo** resta in basso a destra.
+- **Su computer e tablet in orizzontale** le stesse voci sono nella barra laterale a sinistra, con in cima il pulsante **Nuovo ordine** e in fondo il tuo nome, le notifiche ed **Esci**.
+- Durante la compilazione di un ordine o di un preventivo la navigazione sparisce: in alto vedi solo cliente e pulsante **Esci**.
+
 ### Cambiare password
 
 Solo l'amministratore può cambiare la tua password (vedi sezione 11.7). Se l'hai dimenticata, chiedigli un reset.
@@ -69,7 +75,7 @@ Ordini Ivicolors è una **PWA**: la puoi installare sulla home del telefono e us
 
 ### Attivare le notifiche
 
-Dal menu utente (le tue iniziali in alto a destra) premi **Attiva notifiche** e accetta la richiesta del browser. Da quel momento su questo dispositivo ricevi:
+Dal menu utente (su telefono le tue iniziali in alto a destra, su computer la voce sopra il tuo nome nella barra laterale) premi **Attiva notifiche** e accetta la richiesta del browser. Da quel momento su questo dispositivo ricevi:
 
 - se sei **admin**: una notifica per ogni ordine, modifica o preventivo con sconti liberi da approvare (tocca la notifica per aprire la pagina Approvazioni);
 - se sei **agente**: l'esito delle tue richieste di approvazione.
@@ -92,7 +98,7 @@ In alto trovi una **barra di ricerca**. Scrivi una parte del codice o della desc
 
 ### Filtri
 
-- **Mostra obsoleti** — di default gli articoli marcati come obsoleti sono nascosti. Attiva l'opzione per vederli.
+- **Obsoleti** — di default gli articoli marcati come obsoleti sono nascosti. Attiva l'interruttore accanto alla barra di ricerca per vederli.
 - Gli articoli sono raggruppati per **categoria**: scorri per esplorarli tutti.
 
 ### Descrizione "AI" e descrizione originale
@@ -109,7 +115,7 @@ In ogni riga c'è un pulsante per aggiungere l'articolo all'ordine in corso. Qua
 
 ## 4. Creare un ordine
 
-Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
+Premi **Nuovo ordine** (su telefono il pulsante blu in basso a destra nella pagina Ordini, su computer in cima alla barra laterale). Si apre il **wizard a 4 step**; la barra in cima mostra a che passo sei e puoi toccare un passo già completato per tornarci.
 
 ### Step 1 — Cliente
 
@@ -120,12 +126,12 @@ Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 
 ### Step 2 — Articoli
 
-- Usa la barra di ricerca per trovare gli articoli e premi sul pulsante per aggiungerli.
+- Usa la barra di ricerca per trovare gli articoli e premi **+** sulla scheda dell'articolo: si aprono quantità e sconto, e sotto vedi subito l'importo della riga. Premi **Conferma** per metterlo nel carrello.
 - Per ogni articolo nel carrello imposti:
   - **Quantità** (con i tasti `+` / `−` o digitando il numero),
   - **Sconto a riga**: `0%`, `8%`, `15%` oppure **Libero** (digiti tu la percentuale). Lo sconto si applica al prezzo di listino dell'articolo specifico.
 - Sotto la barra di ricerca, sempre visibile anche scorrendo la lista, c'è la casella **Articolo manuale / Nota** (vedi sotto): serve per aggiungere righe non presenti a listino senza aprire il carrello.
-- Su mobile la barra in basso mostra **articoli e totale**: toccala (o tocca **Carrello** in alto) per aprire il carrello dal basso e vedere, riordinare o modificare le righe.
+- Su mobile la barra in basso mostra **articoli e totale**: toccala per aprire il carrello dal basso e vedere, riordinare o modificare le righe. Su computer il carrello è sempre visibile nel pannello a destra.
 - Puoi rimuovere un articolo con l'icona **X**.
 
 > **Sconto libero = approvazione dell'amministratore.** Qualsiasi percentuale diversa da 0, 8 e 15 fa passare l'ordine (o il preventivo) da un amministratore prima dell'invio: vedi la sezione 4.1.
@@ -253,7 +259,7 @@ Il menu **Ordini** mostra l'elenco di tutti i tuoi ordini.
 
 - **Ricerca** in alto — cerca per numero ordine, cliente, cantiere o nome agente.
 - Ogni riga mostra: numero, cliente, cantiere, data, magazzino, totale articoli, **stato** (badge colorato).
-- Tocca una riga per espandere il dettaglio: cliente completo, articoli con quantità/sconto/prezzo, note.
+- Tocca una riga per vedere il dettaglio: cliente completo, articoli con quantità/sconto/prezzo, note. Su telefono il dettaglio si apre sotto la riga; su computer compare nel pannello a destra dell'elenco.
 
 ### Stati possibili
 

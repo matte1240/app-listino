@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Minus, Plus, Sparkles, AlertCircle } from "lucide-react";
+import { Check, Minus, Plus, Sparkles, AlertCircle, X } from "lucide-react";
+import { Chip } from "@/components/ui/chip";
 import DiscountSelector from "@/components/DiscountSelector";
+import { formatOrderCurrency, formatSconto, formatUnitPrice } from "@/lib/order-totals";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { useAuth } from "@/lib/auth-context";
@@ -188,122 +188,115 @@ export default function MaterialCard({
     };
   }, [expanded, draftQty]);
 
+  const draftUnitPrice = prezzoListino * (1 - draftSconto / 100);
+  const toggleEditor = () => {
+    if (expanded) {
+      dismissKeyboard();
+      resetDraft();
+      return;
+    }
+    openEditor({ resetValues: true, mode: "add" });
+  };
+
   return (
     <div
       ref={cardRef}
       className={cn(
-        "rounded-2xl border transition-all duration-200 select-none overflow-hidden flex",
-        isInCart
-          ? "border-primary/35 bg-card shadow-md shadow-primary/10"
-          : "border-border bg-card shadow-sm hover:shadow-md hover:border-border/80",
-        obsoleto && (isInCart ? "bg-muted/35" : "bg-muted/40 border-border/70")
+        "rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] duration-200 select-none",
+        expanded
+          ? "border-primary ring-4 ring-primary/10"
+          : isInCart
+            ? "border-primary/45"
+            : obsoleto
+              ? "border-dashed border-input bg-muted/40 shadow-none"
+              : "border-border/80 hover:border-primary/30"
       )}
     >
-      {/* Colored left accent strip when flagged */}
-      <div className={cn(
-        "w-1 shrink-0 rounded-l-2xl transition-all duration-200",
-        isInCart ? "bg-gradient-to-b from-primary to-primary/50" : "bg-transparent"
-      )} />
-
-      <div className="p-4 flex-1 min-w-0">
-        {/* Top row: checkbox + codice + badge pz/bancale */}
-        <div className="flex items-start gap-3">
-          {!isReadOnlyCatalog && (
-            <Checkbox
-              id={`flag-${codice}`}
-              checked={expanded}
-              onCheckedChange={(checked) => {
-                if (checked === true) {
-                  openEditor({ resetValues: !expanded, mode: "add" });
-                  return;
-                }
-                resetDraft();
-              }}
-              className="mt-1 h-5 w-5 shrink-0"
-            />
-          )}
-          <label
-            onClick={() => {
-              if (!isReadOnlyCatalog) {
-                if (expanded) {
-                  qtyInputRef.current?.focus();
-                } else {
-                  openEditor({ resetValues: true, mode: "add" });
-                }
+      <div className="flex items-start gap-3">
+        <div
+          onClick={() => {
+            if (!isReadOnlyCatalog) {
+              if (expanded) {
+                qtyInputRef.current?.focus();
+              } else {
+                openEditor({ resetValues: true, mode: "add" });
               }
-            }}
-            className={cn("flex-1 min-w-0", !isReadOnlyCatalog && "cursor-pointer")}
-          >
-            {/* Codice + badges */}
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className={cn(
-                "font-bold text-sm tracking-wide font-mono leading-tight",
-                obsoleto ? "text-muted-foreground" : "text-foreground"
-              )}>
+            }
+          }}
+          className={cn("flex min-w-0 flex-1 flex-col gap-1.5", !isReadOnlyCatalog && "cursor-pointer")}
+        >
+          {/* Codice, badge e prezzo */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span
+                className={cn(
+                  "rounded-md px-2 py-0.5 font-mono text-[13px] leading-5 font-medium",
+                  obsoleto ? "bg-muted text-muted-foreground" : "bg-secondary text-primary"
+                )}
+              >
                 {codice}
               </span>
-              {obsoleto && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] px-2 py-0 h-5 shrink-0 uppercase tracking-wide border-muted-foreground/30 text-muted-foreground bg-background/70"
-                >
-                  Obsoleto
-                </Badge>
-              )}
               {um && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-xs px-2 py-0 h-5 shrink-0 font-medium",
-                    obsoleto && "border-muted-foreground/30 text-muted-foreground"
-                  )}
-                >
-                  U.M.: {um}
-                </Badge>
+                <span className="rounded-full border border-border px-2 text-[11px] leading-5 font-bold tracking-wide text-foreground/70">
+                  {um}
+                </span>
+              )}
+              {obsoleto && (
+                <span className="rounded-full bg-sunken px-2 text-[11px] leading-5 font-bold tracking-wide text-muted-foreground uppercase">
+                  Obsoleto
+                </span>
               )}
               {isInCart && (
-                <Badge className="text-[10px] px-2 py-0 h-5 shrink-0 bg-primary/10 text-primary border border-primary/30">
-                  Nel carrello: {cartQty} {um || "pz"}
-                </Badge>
+                <Chip tone="solid" className="h-5 px-2 text-[11px]">
+                  <Check className="size-3!" />
+                  {cartQty} {um || "pz"}
+                  {cartSconto > 0 && ` · -${formatSconto(cartSconto)}%`}
+                </Chip>
               )}
             </div>
+            <span
+              className={cn(
+                "shrink-0 text-[17px] leading-6 font-bold whitespace-nowrap tabular-nums",
+                obsoleto ? "text-muted-foreground line-through" : "text-foreground"
+              )}
+            >
+              {formatUnitPrice(prezzoListino)}
+            </span>
+          </div>
 
-            {/* Descrizione AI (primaria - grande e visibile) */}
-            <p className={cn(
-              "text-sm leading-snug break-words mt-0.5 font-medium",
-              obsoleto ? "text-muted-foreground" : "text-foreground/90"
-            )}>
-              {descrizioneAI || descrizione}
-            </p>
-            {/* Descrizione originale (secondaria - piccola e grigia) */}
-            {descrizioneAI && descrizione && (
-              <p className="text-xs text-muted-foreground/70 leading-snug break-words mt-1 italic">
-                {descrizione}
-              </p>
+          {/* Descrizione AI (primaria) */}
+          <p className={cn("text-[15px] leading-snug font-semibold break-words text-pretty", obsoleto ? "text-muted-foreground" : "text-foreground")}>
+            {descrizioneAI || descrizione}
+          </p>
+
+          {/* Descrizione originale e raggruppamento */}
+          {((descrizioneAI && descrizione) || raggr) && (
+            <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
+              {descrizioneAI && descrizione ? <span className="min-w-0 font-mono break-words">{descrizione}</span> : <span />}
+              {raggr && <span className="shrink-0 font-semibold">{raggr}</span>}
+            </div>
+          )}
+        </div>
+
+        {(!isReadOnlyCatalog || isAdmin) && (
+          <div className="flex max-w-[140px] shrink-0 flex-col items-end gap-2">
+            {!isReadOnlyCatalog && (
+              <button
+                type="button"
+                onClick={toggleEditor}
+                aria-label={expanded ? `Chiudi ${codice}` : `Aggiungi ${codice}`}
+                aria-expanded={expanded}
+                className={cn(
+                  "flex size-11 items-center justify-center rounded-lg border transition-colors",
+                  expanded
+                    ? "border-input bg-card text-muted-foreground hover:text-foreground"
+                    : "border-primary/15 bg-secondary text-primary hover:border-primary/40"
+                )}
+              >
+                {expanded ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5" strokeWidth={2.4} />}
+              </button>
             )}
-
-            {/* Prezzi */}
-            <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-              <div className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1",
-                obsoleto ? "bg-background/70" : "bg-muted"
-              )}>
-                <span className="text-xs text-muted-foreground font-medium">Listino</span>
-                <span className={cn(
-                  "text-xs font-bold",
-                  obsoleto ? "text-muted-foreground" : "text-foreground"
-                )}>€{prezzoListino.toFixed(3)}</span>
-              </div>
-              {raggr && (
-                <span className={cn(
-                  "text-xs font-medium",
-                  obsoleto ? "text-muted-foreground/85" : "text-muted-foreground/70"
-                )}>{raggr}</span>
-              )}
-            </div>
-          </label>
-          {isAdmin && (
-            <div className="shrink-0 flex flex-col items-end gap-1 max-w-[140px]">
+            {isAdmin && (
               <button
                 type="button"
                 onClick={handleRegenerateAI}
@@ -311,56 +304,62 @@ export default function MaterialCard({
                 title={enriching ? "Rigenerazione in corso…" : "Rigenera descrizione AI"}
                 aria-label="Rigenera descrizione AI"
                 className={cn(
-                  "inline-flex items-center gap-1 h-6 px-2 rounded-md border text-[10px] font-semibold uppercase tracking-wide transition-colors",
+                  "inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-[11px] font-semibold tracking-wide uppercase transition-colors",
                   enriching
-                    ? "border-primary/40 bg-primary/10 text-primary cursor-wait"
-                    : "border-border text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5"
+                    ? "cursor-wait border-primary/40 bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                 )}
               >
-                <Sparkles className={cn("h-3 w-3", enriching && "animate-spin")} />
+                <Sparkles className={cn("h-3.5 w-3.5", enriching && "animate-spin")} />
                 AI
               </button>
-              {enrichError && (
-                <div className="flex items-start gap-1 text-[11px] text-destructive text-right">
-                  <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
-                  <span className="break-words">{enrichError}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Quantity + discount rows — shown when expanded or flagged, hidden in catalog mode */}
-        {!isReadOnlyCatalog && showQtyRow && (
-          <div className="mt-4 flex flex-col gap-3">
-            {materialMetrics.length > 0 && (
-              <div className="flex flex-wrap gap-2 pl-8">
-                {materialMetrics.map((metric) => (
-                  <div
-                    key={metric.label}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1 text-xs"
-                  >
-                    <span className="font-medium text-muted-foreground">{metric.label}</span>
-                    <span className="font-semibold text-foreground">{metric.value}</span>
-                  </div>
-                ))}
+            )}
+            {isAdmin && enrichError && (
+              <div className="flex items-start gap-1 text-right text-[11px] text-destructive">
+                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                <span className="break-words">{enrichError}</span>
               </div>
             )}
+          </div>
+        )}
+      </div>
 
-            <div className="flex items-center gap-3 pl-8">
-              <span className="text-sm font-medium text-muted-foreground shrink-0">Qtà ordine:</span>
-              <div className="flex items-center rounded-xl border border-primary/30 bg-background overflow-hidden shadow-sm">
+      {/* Quantità e sconto — solo nel wizard, a card aperta */}
+      {!isReadOnlyCatalog && showQtyRow && (
+        <div className="mt-3.5 flex flex-col gap-3.5 rounded-lg bg-muted/70 p-3.5">
+          {materialMetrics.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {materialMetrics.map((metric) => (
+                <div
+                  key={metric.label}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs"
+                >
+                  <span className="font-medium text-muted-foreground">{metric.label}</span>
+                  <span className="font-semibold text-foreground">{metric.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor={`qty-${codice}`} className="text-[13px] font-semibold text-foreground/80">
+              {editorMode === "edit" ? "Quantità" : isInCart ? "Quantità da aggiungere" : "Quantità"}
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center overflow-hidden rounded-lg border border-input bg-card">
                 <button
+                  type="button"
                   onClick={() => {
                     dismissKeyboard();
                     setDraftQtyValue(draftQty - 1);
                   }}
-                  className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
+                  className="flex size-11 items-center justify-center text-primary transition-colors hover:bg-primary/8 active:bg-primary/15"
                   aria-label="Diminuisci quantità"
                 >
-                  <Minus className="h-3.5 w-3.5" />
+                  <Minus className="h-4 w-4" strokeWidth={2.4} />
                 </button>
                 <input
+                  id={`qty-${codice}`}
                   ref={qtyInputRef}
                   type="text"
                   value={draftQtyInput}
@@ -374,60 +373,69 @@ export default function MaterialCard({
                   }}
                   placeholder="0"
                   inputMode="decimal"
-                  className="w-14 h-10 text-center font-bold bg-background border-x border-primary/30 focus:outline-none focus:bg-primary/5"
-                  style={{ fontSize: "16px" }}
+                  className="h-11 w-16 border-x border-border bg-card text-center font-bold tabular-nums focus:bg-primary/5 focus:outline-none"
+                  style={{ fontSize: "17px" }}
                 />
                 <button
+                  type="button"
                   onClick={() => {
                     dismissKeyboard();
                     setDraftQtyValue(draftQty + 1);
                   }}
-                  className="flex items-center justify-center h-10 w-11 text-primary hover:bg-primary/8 active:bg-primary/15 transition-colors"
+                  className="flex size-11 items-center justify-center text-primary transition-colors hover:bg-primary/8 active:bg-primary/15"
                   aria-label="Aumenta quantità"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-4 w-4" strokeWidth={2.4} />
                 </button>
               </div>
-              {um && (
-                <span className="text-xs font-semibold text-muted-foreground">{um}</span>
-              )}
-            </div>
-
-            {/* Discount selector */}
-            <div className="flex items-center gap-2 pl-8">
-              <span className="text-sm font-medium text-muted-foreground shrink-0">Sconto:</span>
-              <DiscountSelector value={draftSconto} onChange={setDraftSconto} onInteract={dismissKeyboard} />
-            </div>
-
-            <div className="flex items-center gap-2 pl-8">
-              <button
-                onClick={() => {
-                  dismissKeyboard();
-                  handleConfirm();
-                }}
-                disabled={draftQty <= 0}
-                className={cn(
-                  "h-8 px-3 rounded-lg text-xs font-semibold border transition-colors",
-                  draftQty > 0
-                    ? "bg-primary text-primary-foreground border-primary hover:opacity-95"
-                    : "bg-muted text-muted-foreground border-border cursor-not-allowed"
-                )}
-              >
-                {editorMode === "edit" ? "Salva modifica" : "Conferma"}
-              </button>
-              <button
-                onClick={() => {
-                  dismissKeyboard();
-                  resetDraft();
-                }}
-                className="h-8 px-3 rounded-lg text-xs font-semibold border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-              >
-                Annulla
-              </button>
+              {um && <span className="w-8 text-xs font-semibold text-muted-foreground">{um}</span>}
             </div>
           </div>
-        )}
-      </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-semibold text-foreground/80">Sconto</span>
+            <DiscountSelector value={draftSconto} onChange={setDraftSconto} onInteract={dismissKeyboard} size="lg" />
+          </div>
+
+          {draftQty > 0 && (
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-3 tabular-nums">
+              <span className="text-[13px] text-muted-foreground">
+                {draftQtyInput || draftQty} × {formatUnitPrice(draftUnitPrice)}
+              </span>
+              <span className="text-base font-bold text-foreground">{formatOrderCurrency(draftUnitPrice * draftQty)}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                dismissKeyboard();
+                resetDraft();
+              }}
+              className="h-11 rounded-lg border border-input bg-card text-sm font-semibold text-foreground/80 transition-colors hover:border-primary/40 hover:text-foreground"
+            >
+              Annulla
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                dismissKeyboard();
+                handleConfirm();
+              }}
+              disabled={draftQty <= 0}
+              className={cn(
+                "h-11 rounded-lg text-sm font-semibold transition-colors",
+                draftQty > 0
+                  ? "bg-primary text-primary-foreground shadow-primary hover:bg-primary-hover"
+                  : "cursor-not-allowed bg-muted text-muted-foreground"
+              )}
+            >
+              {editorMode === "edit" ? "Salva modifica" : "Conferma"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { PackagePlus, PackageSearch, Tag } from "lucide-react";
+import { PackagePlus, PackageSearch } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import MaterialCard from "@/components/MaterialCard";
 import type { Material } from "@/types";
+import { cn } from "@/lib/utils";
 
 function materialSearchText(m: Material): string {
   return `${m.codice} ${m.descrizione} ${m.descrizioneAI ?? ""} ${m.categoria} ${m.raggr} ${m.um}`.toLowerCase();
@@ -78,9 +79,9 @@ export default function MaterialList({
 
   if (materials.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-          <PackageSearch className="h-9 w-9 text-muted-foreground/50" />
+      <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border py-16 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent">
+          <PackageSearch className="h-7 w-7 text-primary" />
         </div>
         <div>
           <p className="font-semibold text-foreground">Nessun listino caricato</p>
@@ -95,9 +96,9 @@ export default function MaterialList({
   if (filtered.length === 0) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-            <PackageSearch className="h-9 w-9 text-muted-foreground/50" />
+        <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border py-14 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent">
+            <PackageSearch className="h-7 w-7 text-primary" />
           </div>
           <div>
             <p className="font-semibold text-foreground">Nessun risultato</p>
@@ -109,7 +110,7 @@ export default function MaterialList({
             <button
               type="button"
               onClick={() => onCreateManualFromSearch(searchQuery.trim())}
-              className="h-10 px-4 rounded-xl border border-primary/40 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-2"
+              className="h-11 px-4 rounded-lg border border-primary/20 bg-secondary text-sm font-semibold text-primary hover:border-primary/40 transition-colors inline-flex items-center gap-2"
             >
               <PackagePlus className="h-4 w-4" />
               Inseriscilo come articolo manuale
@@ -120,38 +121,25 @@ export default function MaterialList({
     );
   }
 
-  let totalLabel = searchQuery
-    ? `${filtered.length} articoli trovati per "${searchQuery}"`
-    : `${filtered.length} articoli nel listino`;
-
-  if (!showObsolete && hiddenObsoleteCount > 0) {
-    totalLabel = `${totalLabel} (${hiddenObsoleteCount} obsoleti nascosti)`;
-  }
+  const summaryLabel = searchQuery ? `articoli trovati per "${searchQuery}"` : "articoli nel listino";
+  const hiddenLabel = !showObsolete && hiddenObsoleteCount > 0 ? ` · ${hiddenObsoleteCount} obsoleti nascosti` : "";
 
   return (
-    <div className="flex flex-col gap-1">
-      {/* Summary pill */}
-      <div className="flex items-center gap-2 px-1 mb-3">
-        <span className="inline-flex items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold px-2.5 py-0.5">
-          {filtered.length}
-        </span>
-        <p className="text-xs text-muted-foreground">{totalLabel}</p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <p className="px-1 text-[13px] text-muted-foreground">
+        <strong className="font-bold text-foreground tabular-nums">{filtered.length.toLocaleString("it-IT")}</strong> {summaryLabel}
+        {hiddenLabel}
+      </p>
 
-      {/* Grouped sections */}
+      {/* Sezioni per categoria */}
       {Array.from(grouped.entries()).map(([categoria, items]) => (
-        <div key={categoria} className="mb-5">
-          {/* Category header */}
-          <div className="flex items-center gap-2.5 mb-3 px-0.5">
-            <div className="flex items-center gap-1.5 bg-primary/10 text-primary rounded-xl px-3 py-1">
-              <Tag className="h-3 w-3 shrink-0" />
-              <h2 className="text-xs font-bold tracking-tight">{categoria}</h2>
-            </div>
-            <span className="text-xs text-muted-foreground/70 font-medium tabular-nums">{items.length} art.</span>
-            <div className="flex-1 h-px bg-border" />
+        <section key={categoria} className="flex flex-col gap-3">
+          <div className="flex items-center gap-2.5 px-1">
+            <h2 className="text-xs font-bold tracking-[0.1em] text-primary uppercase">{categoria}</h2>
+            <span className="text-xs font-semibold text-muted-foreground tabular-nums">{items.length}</span>
+            <div className="h-px flex-1 bg-border" />
           </div>
-          {/* Cards */}
-          <div className="flex flex-col gap-2.5">
+          <div className={cn("grid gap-2.5", isReadOnlyCatalog && "lg:grid-cols-2 lg:gap-3")}>
             {items.map((material) => (
               <MaterialCard
                 key={material.codice}
@@ -164,7 +152,7 @@ export default function MaterialList({
               />
             ))}
           </div>
-        </div>
+        </section>
       ))}
     </div>
   );

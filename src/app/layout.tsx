@@ -1,13 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans } from "next/font/google";
+import { Bricolage_Grotesque, DM_Mono, DM_Sans } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
-import Navbar from "@/components/Navbar";
+import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";
 import PushSync from "@/components/PushSync";
 import "./globals.css";
 import { Toaster } from "sonner";
 
-const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-bricolage", axes: ["opsz"] });
+const dmMono = DM_Mono({ subsets: ["latin"], variable: "--font-dm-mono", weight: ["400", "500"] });
 
 export const metadata: Metadata = {
   title: "Ordini Ivicolors",
@@ -16,7 +18,7 @@ export const metadata: Metadata = {
   applicationName: "Ordini Ivicolors",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black",
+    statusBarStyle: "default",
     title: "Ordini Ivicolors",
   },
   formatDetection: {
@@ -40,7 +42,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#0C2B57",
+  themeColor: "#FFFFFF",
   viewportFit: "cover",
 };
 
@@ -50,14 +52,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="it" className={dmSans.variable}>
+    <html lang="it" className={`${dmSans.variable} ${bricolage.variable} ${dmMono.variable}`}>
       <body className="font-sans antialiased">
         <PwaRegister />
         <div className="min-h-dvh bg-background text-foreground">
           <AuthProvider>
             <PushSync />
-            <Navbar />
-            {children}
+            <AppShell>{children}</AppShell>
           </AuthProvider>
         </div>
         <Toaster position="top-right" richColors closeButton />

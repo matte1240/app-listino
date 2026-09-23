@@ -151,13 +151,13 @@ export default function EnrichPage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 pt-5 pb-6 flex flex-col gap-6">
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 lg:px-10 pt-6 lg:pt-8 pb-6 flex flex-col gap-6">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
           <ChevronRight className="h-3.5 w-3.5" />
           <span className="text-foreground font-medium">AI</span>
         </div>
-        <h1 className="font-bold text-lg">Arricchimento AI</h1>
+        <h1 className="text-[28px] leading-tight font-bold">Arricchimento AI</h1>
         {/* Info card */}
         <div className="rounded-2xl border bg-card p-5">
           <h2 className="font-bold text-sm mb-2">Come funziona</h2>

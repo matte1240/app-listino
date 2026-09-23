@@ -344,7 +344,7 @@ export default function AdminBackupPage() {
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
-            <h1 className="font-bold text-lg">Backup database</h1>
+            <h1 className="text-[28px] leading-tight font-bold">Backup database</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Crea snapshot consistenti del database SQLite e scaricali per conservazione esterna.
             </p>

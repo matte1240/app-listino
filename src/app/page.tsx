@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import SearchBar from "@/components/SearchBar";
 import MaterialList from "@/components/MaterialList";
 import { Button } from "@/components/ui/button";
+import PageHeader from "@/components/PageHeader";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -67,37 +68,44 @@ export default function Home() {
   return (
     <div className="min-h-dvh flex flex-col bg-background">
       <div className="no-print min-h-dvh flex flex-col">
-        <div className="sticky top-14 z-30 bg-background/80 backdrop-blur-md border-b border-border/60">
-          <div className="max-w-2xl mx-auto px-4 py-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex-1">
-              <SearchBar />
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.print()}
-              disabled={materials.length === 0}
-              className="gap-2 justify-center sm:shrink-0"
-            >
-              <Printer className="h-4 w-4" />
-              Esporta PDF
-            </Button>
-            {isAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportExcel}
-                disabled={materials.length === 0 || exporting}
-                className="gap-2 justify-center sm:shrink-0"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                {exporting ? "Esportazione..." : "Esporta Excel"}
-              </Button>
-            )}
+        <div className="mx-auto w-full max-w-2xl px-4 pt-6 lg:max-w-5xl lg:px-10 lg:pt-8">
+          <PageHeader
+            eyebrow="Catalogo"
+            title="Listino"
+            actions={
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => window.print()}
+                  disabled={materials.length === 0}
+                  className="flex-1 justify-center sm:flex-none"
+                >
+                  <Printer />
+                  Esporta PDF
+                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    onClick={handleExportExcel}
+                    disabled={materials.length === 0 || exporting}
+                    className="flex-1 justify-center sm:flex-none"
+                  >
+                    <FileSpreadsheet />
+                    {exporting ? "Esportazione..." : "Esporta Excel"}
+                  </Button>
+                )}
+              </div>
+            }
+          />
+        </div>
+
+        <div className="sticky top-14 z-30 mt-4 border-b border-border/70 bg-background/95 backdrop-blur-md lg:top-0">
+          <div className="mx-auto max-w-2xl px-4 py-3 lg:max-w-5xl lg:px-10">
+            <SearchBar />
           </div>
         </div>
 
-        <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-5">
+        <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-5 pb-8 lg:max-w-5xl lg:px-10">
           <MaterialList isReadOnlyCatalog={true} />
         </main>
       </div>

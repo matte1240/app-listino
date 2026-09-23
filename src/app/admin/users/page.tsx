@@ -171,7 +171,7 @@ export default function AdminUsersPage() {
           <span className="text-foreground font-medium">Utenti</span>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="font-bold text-lg">Gestione Utenti</h1>
+          <h1 className="text-[28px] leading-tight font-bold">Gestione Utenti</h1>
           <Button size="sm" onClick={openCreate} className="gap-1.5 h-9 w-full justify-center sm:w-auto">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Nuovo utente</span>

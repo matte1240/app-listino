@@ -31,6 +31,7 @@ import AddressAutocompleteInput, {
   type AddressData,
 } from "@/components/AddressAutocompleteInput";
 import MaterialList from "@/components/MaterialList";
+import WizardStepper from "@/components/WizardStepper";
 import OrderLinesEditor from "@/components/OrderLinesEditor";
 import QuickLineComposer, { type LineComposerRequest, type QuickLineComposerHandle } from "@/components/QuickLineComposer";
 import SearchBar from "@/components/SearchBar";
@@ -351,60 +352,34 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   };
 
   const Stepper = () => (
-    <div className="flex items-center gap-0 mb-6">
-      {STEP_LABELS.map((label, idx) => {
-        const stepNum = (idx + 1) as 1 | 2 | 3 | 4;
-        const isActive = currentStep === stepNum;
-        const isDone = currentStep > stepNum;
-        const reachable = canReachStep(stepNum);
-        return (
-          <div key={label} className="flex items-center flex-1 last:flex-none">
-            <button
-              type="button"
-              onClick={() => void goToStep(stepNum)}
-              disabled={!reachable}
-              aria-current={isActive ? "step" : undefined}
-              aria-label={`Vai allo step ${stepNum}: ${label}`}
-              className={`group flex flex-col items-center gap-1 shrink-0 rounded-lg px-1 -mx-1 transition-colors ${
-                reachable && !isActive ? "cursor-pointer hover:bg-primary/5" : "cursor-default"
-              }`}
-            >
-              <div className={`flex h-7 w-7 rounded-full items-center justify-center text-xs font-bold transition-all ${
-                isDone || isActive ? "bg-primary text-primary-foreground" : reachable ? "bg-muted text-muted-foreground group-hover:bg-primary/15 group-hover:text-primary" : "bg-muted text-muted-foreground"
-              } ${isActive ? "ring-4 ring-primary/20" : isDone ? "group-hover:ring-4 group-hover:ring-primary/20" : ""}`}>
-                {isDone ? <CheckCircle2 className="h-4 w-4" /> : stepNum}
-              </div>
-              <span className={`text-[10px] font-semibold tracking-wide uppercase whitespace-nowrap ${isActive ? "text-primary" : "text-muted-foreground"}`}>
-                {label}
-              </span>
-            </button>
-            {idx < STEP_LABELS.length - 1 && <div className={`flex-1 h-px mx-2 mt-[-10px] ${isDone ? "bg-primary/40" : "bg-border"}`} />}
-          </div>
-        );
-      })}
-    </div>
+    <WizardStepper
+      labels={STEP_LABELS}
+      currentStep={currentStep}
+      canReachStep={canReachStep}
+      onStepClick={(step) => void goToStep(step)}
+    />
   );
 
   const renderCartSummary = (itemsHeightClass: string) => (
     <>
-      <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <User className="h-4 w-4 text-muted-foreground shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Cliente</p>
-            <p className="text-sm font-semibold truncate">{quotationInfo.cliente || "Non selezionato"}</p>
-          </div>
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <p className="font-display text-xl leading-tight font-bold text-foreground">Carrello</p>
+          <p className="truncate text-[13px] text-muted-foreground">
+            {flaggedCount > 0 ? `${flaggedCount} ${flaggedCount === 1 ? "articolo" : "articoli"} · ${totalQty} pz` : "Nessun articolo selezionato"}
+          </p>
         </div>
-        <div className="text-xs text-muted-foreground">
-          <strong className="text-foreground">{flaggedCount}</strong> articoli · <strong className="text-foreground">{totalQty}</strong> pezzi
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Totale: <strong className="text-foreground">{formatCurrency(total)}</strong>
-        </div>
+        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
+          <ShoppingCart className="h-5 w-5" />
+          {flaggedCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-card bg-brand-yellow px-1 text-[10px] font-extrabold text-primary">
+            {flaggedCount}
+          </span>
+        )}
+        </span>
       </div>
-
-      <div className="rounded-2xl border border-border bg-card p-3 flex flex-col gap-2">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Righe preventivo</p>
+      <div className="flex flex-col gap-2">
+        <p className="px-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Righe preventivo</p>
         <OrderLinesEditor
           store="quotation"
           mode="cart"
@@ -413,6 +388,10 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           onAddNoteAbove={handleAddNoteAbove}
           listHeightClass={itemsHeightClass}
         />
+      </div>
+      <div className="flex items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
+        <span className="text-sm font-semibold text-foreground/80">Totale imponibile</span>
+        <span className="font-display text-2xl font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
       </div>
     </>
   );
@@ -423,7 +402,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <CheckCircle2 className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="text-xl font-bold">{savedPendingApproval ? "Preventivo inviato per approvazione" : "Preventivo salvato"}</h2>
+        <h2 className="font-display text-2xl font-bold tracking-tight">{savedPendingApproval ? "Preventivo inviato per approvazione" : "Preventivo salvato"}</h2>
         <p className="text-sm text-muted-foreground">
           {savedPendingApproval ? "Un amministratore deve approvare gli sconti liberi prima che sia utilizzabile. Apro il dettaglio..." : "Apro il dettaglio..."}
         </p>
@@ -437,7 +416,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
         <Stepper />
         <div className="flex flex-col gap-4">
           <div>
-            <h2 className="text-lg font-bold text-foreground mb-0.5">Cliente preventivo</h2>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-foreground mb-1">Cliente preventivo</h2>
             <p className="text-sm text-muted-foreground">Cerca nelle anagrafiche o inserisci il nome manualmente.</p>
           </div>
 
@@ -458,7 +437,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
                   setQuotationInfo({ cliente: event.target.value, clienteId: null });
                   setCustomerDropdownOpen(true);
                 }}
-                className="h-11 rounded-xl text-base bg-background"
+                className="h-12 rounded-lg text-base bg-card"
                 style={{ fontSize: "16px" }}
                 autoComplete="organization"
               />
@@ -511,16 +490,16 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     return (
       <div ref={step2RootRef} className="min-h-dvh flex flex-col" style={{ "--step2-header-h": "49px" } as CSSProperties}>
         {/* Header sticky: ricerca + casella righe manuali/note, sempre visibili scorrendo la lista */}
-        <div ref={stickyHeaderRef} className="sticky top-14 z-30 bg-background/90 backdrop-blur-md border-b border-border">
-          <div className="max-w-5xl mx-auto px-4 py-2 flex flex-col gap-2">
+        <div ref={stickyHeaderRef} className="sticky top-14 z-30 bg-background/95 backdrop-blur-md border-b border-border">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2.5 lg:pr-[22rem]">
             <SearchBar ref={searchInputRef} autoFocus store="quotation" />
-            <div className="lg:mr-72">
+            <div>
               <QuickLineComposer ref={composerRef} store="quotation" onAdded={handleArticleConfirmed} />
             </div>
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col lg:flex-row max-w-5xl mx-auto w-full">
+        <div className="flex flex-1 flex-col lg:flex-row max-w-6xl mx-auto w-full">
           <main className="flex-1 min-w-0 px-4 py-5">
             <Stepper />
             <MaterialList
@@ -533,24 +512,25 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </main>
 
           <aside
-            className="hidden lg:flex w-72 shrink-0 flex-col gap-3 px-4 py-5 border-l border-border sticky self-start overflow-y-auto"
-            style={{ top: "calc(3.5rem + var(--step2-header-h))", maxHeight: "calc(100dvh - 3.5rem - var(--step2-header-h))" }}
+            className="hidden lg:flex w-80 shrink-0 flex-col gap-4 my-5 mr-4 rounded-2xl border border-border/80 bg-card p-5 shadow-panel sticky self-start overflow-y-auto"
+            style={{ top: "calc(3.5rem + var(--step2-header-h) + 1.25rem)", maxHeight: "calc(100dvh - 3.5rem - var(--step2-header-h) - 2.5rem)" }}
           >
             {renderCartSummary("max-h-[46dvh]")}
-            <Button variant="outline" className="gap-2 text-sm" onClick={() => setStep(1)}>
-              <ChevronLeft className="h-4 w-4" />
-              Indietro
-            </Button>
-            <Button className="gap-2 text-sm font-semibold" disabled={!canGoNextStep2} onClick={() => setStep(3)}>
-              Avanti
-              <ChevronRight className="h-4 w-4" />
-              {flaggedCount > 0 && <Badge className="ml-1 rounded-full px-2 py-0 h-5 text-xs">{flaggedCount}</Badge>}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="lg" className="px-4" onClick={() => setStep(1)}>
+                <ChevronLeft className="h-4 w-4" />
+                Indietro
+              </Button>
+              <Button size="lg" className="flex-1 px-4" disabled={!canGoNextStep2} onClick={() => setStep(3)}>
+                Avanti
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </aside>
         </div>
 
         <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
-          <DrawerContent className="lg:hidden p-0 rounded-t-2xl">
+          <DrawerContent className="lg:hidden p-0 rounded-t-3xl">
             <DrawerHeader className="px-4 py-3 border-b border-border">
               <div className="flex items-center justify-between gap-2">
                 <DrawerTitle className="text-sm flex items-center gap-2">
@@ -558,7 +538,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
                   Articoli preventivo
                 </DrawerTitle>
                 <DrawerClose asChild>
-                  <button type="button" className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex items-center justify-center" aria-label="Chiudi carrello">
+                  <button type="button" className="size-10 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex items-center justify-center" aria-label="Chiudi carrello">
                     <X className="h-4 w-4" />
                   </button>
                 </DrawerClose>
@@ -570,26 +550,43 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </DrawerContent>
         </Drawer>
 
-        <div className="lg:hidden sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border px-4 py-3 flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setStep(1)}>
-            <ChevronLeft className="h-4 w-4" />
-            Indietro
+        <div className="lg:hidden sticky bottom-0 z-30 flex items-center gap-2.5 border-t border-border bg-card/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_-18px_rgb(15_27_45/0.35)] backdrop-blur-md">
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-12 shrink-0"
+            aria-label="Indietro"
+            onClick={() => setStep(1)}
+          >
+            <ChevronLeft className="h-5 w-5" />
           </Button>
           <button
             type="button"
             onClick={() => setMobileCartOpen(true)}
             aria-label={`Apri carrello, ${flaggedCount} articoli`}
-            className="flex-1 min-w-0 h-10 rounded-xl border border-border bg-card px-2 flex items-center justify-center gap-2 text-sm hover:border-primary/40 active:bg-muted transition-colors"
+            className="flex h-12 min-w-0 flex-1 items-center gap-3 rounded-lg border border-input bg-card px-3 text-left transition-colors hover:border-primary/40 active:bg-muted"
           >
-            <ShoppingCart className="h-4 w-4 text-primary shrink-0" />
-            <span className="flex flex-col items-start leading-tight min-w-0">
-              <span className="font-semibold truncate">
-                {flaggedCount} <span className="font-normal text-muted-foreground">articoli</span>
-              </span>
-              <span className="text-[11px] text-muted-foreground tabular-nums truncate">{formatCurrency(total)}</span>
+            <span className="relative flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-primary">
+              <ShoppingCart className="h-[18px] w-[18px]" />
+              {flaggedCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-card bg-brand-yellow px-1 text-[10px] font-extrabold text-primary">
+            {flaggedCount}
+          </span>
+        )}
+            </span>
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate text-xs font-medium text-muted-foreground">Carrello · {flaggedCount} {flaggedCount === 1 ? "articolo" : "articoli"}</span>
+              <span className="truncate text-[15px] font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
             </span>
           </button>
-          <Button size="sm" className="gap-1.5 font-semibold" disabled={!canGoNextStep2} onClick={() => { setMobileCartOpen(false); setStep(3); }}>
+          <Button
+            className="h-12 shrink-0 px-4 text-[15px]"
+            disabled={!canGoNextStep2}
+            onClick={() => {
+              setMobileCartOpen(false);
+              setStep(3);
+            }}
+          >
             Avanti
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -604,7 +601,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
         <Stepper />
         <div className="flex flex-col gap-4">
           <div>
-            <h2 className="text-lg font-bold text-foreground mb-0.5">Dati preventivo</h2>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-foreground mb-1">Dati preventivo</h2>
             <p className="text-sm text-muted-foreground">Preventivo per <strong>{quotationInfo.cliente}</strong> · {flaggedCount} articoli selezionati</p>
           </div>
 
@@ -629,7 +626,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               min={quotationInfo.dataPreventivo}
               value={dataConsegnaPrevista}
               onChange={(event) => setQuotationInfo({ dataConsegnaPrevista: event.target.value })}
-              className="h-11 rounded-xl text-base bg-background"
+              className="h-12 rounded-lg text-base bg-card"
               style={{ fontSize: "16px" }}
             />
           </div>
@@ -647,7 +644,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
                 if (value) setQuotationInfo({ luogoConsegna: value });
               }}
               disabled={!quotationInfo.clienteId || recentDestinationsLoading || recentDestinations.length === 0}
-              className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60"
+              className="h-12 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60"
             >
               <option value="">
                 {recentDestinationsLoading
@@ -675,7 +672,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
                 setIsAddressValid(valid);
                 if (!valid) addressDataRef.current = null;
               }}
-              className="h-11 rounded-xl text-base bg-background"
+              className="h-12 rounded-lg text-base bg-card"
               style={{ fontSize: "16px" }}
             />
             <p className="text-xs text-muted-foreground">Se lasci vuoto, nel PDF la destinazione sarà &quot;STESSA&quot; (sede del cliente).</p>
@@ -715,7 +712,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               placeholder="Note da mostrare nel preventivo"
               value={quotationInfo.note}
               onChange={(event) => setQuotationInfo({ note: event.target.value })}
-              className="rounded-xl text-base bg-background resize-none"
+              className="rounded-lg text-base bg-card resize-none"
               rows={4}
               style={{ fontSize: "16px" }}
             />
@@ -747,11 +744,11 @@ export default function QuotationWizard({ editingQuotation }: Props) {
       <Stepper />
       <div className="flex flex-col gap-5">
         <div>
-          <h2 className="text-lg font-bold text-foreground mb-0.5">Riepilogo preventivo</h2>
+          <h2 className="font-display text-2xl font-bold tracking-tight text-foreground mb-1">Riepilogo preventivo</h2>
           <p className="text-sm text-muted-foreground">Controlla i dati prima di salvare.</p>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3 text-sm">
+        <div className="rounded-2xl border border-border/80 bg-card shadow-card p-4 flex flex-col gap-3 text-sm">
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 text-muted-foreground shrink-0" />
             <div>
@@ -800,7 +797,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="rounded-2xl border border-border/80 bg-card shadow-card overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Package className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">Articoli</span>
