@@ -139,7 +139,7 @@ export default function MaterialList({
             <span className="text-xs font-semibold text-muted-foreground tabular-nums">{items.length}</span>
             <div className="h-px flex-1 bg-border" />
           </div>
-          <div className={cn("grid gap-2.5", isReadOnlyCatalog && "lg:grid-cols-2 lg:gap-3")}>
+          <div className={cn("grid grid-cols-1 gap-2.5", isReadOnlyCatalog && "lg:grid-cols-2 lg:gap-3")}>
             {items.map((material) => (
               <MaterialCard
                 key={material.codice}
