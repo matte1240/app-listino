@@ -8,8 +8,8 @@ import { cn, parseLocalizedNumber } from "@/lib/utils";
 interface Props {
   value: number;
   onChange: (value: number) => void;
-  /** Dimensione compatta per le righe dell'editor. */
-  size?: "sm" | "md";
+  /** "sm" compatta per le righe dell'editor, "lg" a griglia con pulsanti da 44 px per il touch. */
+  size?: "sm" | "md" | "lg";
   onInteract?: () => void;
 }
 
@@ -29,11 +29,12 @@ export default function DiscountSelector({ value, onChange, size = "md", onInter
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   const showFree = freeMode || !isPresetDiscount(value);
-  const buttonClass = size === "sm" ? "h-6 px-2 text-[11px]" : "h-7 px-2.5 text-xs";
+  const isLarge = size === "lg";
+  const buttonClass = size === "sm" ? "h-6 px-2 text-[11px]" : isLarge ? "h-11 px-2 text-sm" : "h-7 px-2.5 text-xs";
   const displayValue = focused ? text : value > 0 ? formatSconto(value) : "";
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sconto">
+    <div className={cn(isLarge ? "grid grid-cols-4 gap-1.5" : "flex flex-wrap items-center gap-1.5")} role="group" aria-label="Sconto">
       {PRESET_DISCOUNTS.map((pct) => {
         const selected = !showFree && value === pct;
         return (
@@ -46,11 +47,11 @@ export default function DiscountSelector({ value, onChange, size = "md", onInter
               onChange(pct);
             }}
             className={cn(
-              "rounded-lg font-semibold border transition-colors",
+              "rounded-md font-semibold border transition-colors",
               buttonClass,
               selected
                 ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                : "bg-card border-input text-foreground/75 hover:border-primary/50 hover:text-foreground"
             )}
           >
             {pct === 0 ? "Nessuno" : `-${formatSconto(pct)}%`}
@@ -65,17 +66,17 @@ export default function DiscountSelector({ value, onChange, size = "md", onInter
         }}
         title="Sconto libero: richiede l'approvazione di un amministratore"
         className={cn(
-          "rounded-lg font-semibold border transition-colors",
+          "rounded-md font-semibold border transition-colors",
           buttonClass,
           showFree
             ? "bg-amber-500 text-white border-amber-500"
-            : "bg-background border-border text-muted-foreground hover:border-amber-500/60 hover:text-foreground"
+            : "bg-card border-dashed border-amber-500/70 text-amber-800 hover:border-amber-500 dark:text-amber-300"
         )}
       >
         Libero
       </button>
       {showFree && (
-        <span className="inline-flex items-center gap-1">
+        <span className={cn("inline-flex items-center gap-1", isLarge && "col-span-4 gap-2")}>
           <input
             type="text"
             inputMode="decimal"
@@ -94,11 +95,12 @@ export default function DiscountSelector({ value, onChange, size = "md", onInter
             }}
             className={cn(
               "w-16 rounded-lg border border-amber-400 bg-background px-2 text-center font-bold text-foreground focus:outline-none focus:ring-[3px] focus:ring-amber-400/40",
-              size === "sm" ? "h-7 text-xs" : "h-8 text-sm"
+              size === "sm" ? "h-7 text-xs" : isLarge ? "h-11 w-24 text-sm" : "h-8 text-sm"
             )}
             style={{ fontSize: "16px" }}
           />
           <span className="text-xs font-semibold text-muted-foreground">%</span>
+          {isLarge && <span className="text-xs text-amber-800 dark:text-amber-300">Richiede l&apos;approvazione di un amministratore</span>}
         </span>
       )}
     </div>

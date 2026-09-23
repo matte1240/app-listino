@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2, ShieldCheck } from "lucide-react";
+import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2, ShieldCheck, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import UploadExcel from "@/components/UploadExcel";
+import PageHeader from "@/components/PageHeader";
+import { cn } from "@/lib/utils";
 
 const adminSections = [
   {
@@ -89,47 +91,61 @@ export default function AdminHomePage() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 pt-5 pb-6 flex flex-col gap-5">
-        <div>
-          <h1 className="font-bold text-lg">Pannello Admin</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Seleziona l&apos;area amministrativa che vuoi gestire.
-          </p>
-        </div>
+      <main className="mx-auto flex max-w-2xl flex-col gap-6 px-4 pt-6 pb-8 lg:max-w-[1200px] lg:px-10 lg:pt-8">
+        <PageHeader
+          eyebrow="Amministrazione"
+          title="Pannello Admin"
+          description="Seleziona l'area amministrativa che vuoi gestire."
+        />
 
         {/* Upload listino */}
-        <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="font-semibold text-sm">Importa listino</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Carica un file Excel per aggiornare il catalogo materiali.</p>
+        <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card p-5 shadow-card sm:flex-row sm:items-center sm:gap-5 sm:px-6">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <FileSpreadsheet className="h-6 w-6" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-bold text-foreground">Importa listino</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Carica un file Excel per aggiornare il catalogo materiali.</p>
           </div>
           <UploadExcel />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {adminSections.map(({ href, title, description, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="group rounded-2xl border border-border bg-card p-4 hover:bg-muted/40 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
-                  <Icon className="h-4.5 w-4.5" />
-                </div>
-                <div className="flex items-center gap-2">
-                  {href === "/admin/approvazioni" && pendingApprovals !== null && pendingApprovals > 0 && (
-                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-2 text-xs font-bold text-primary">
-                      {pendingApprovals}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+          {adminSections.map(({ href, title, description, icon: Icon }) => {
+            const highlight = href === "/admin/approvazioni" && pendingApprovals !== null && pendingApprovals > 0;
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  "group flex min-h-40 flex-col gap-3 rounded-2xl border p-5 transition-all",
+                  highlight
+                    ? "border-primary bg-primary text-primary-foreground shadow-primary hover:bg-primary-hover"
+                    : "border-border/80 bg-card text-foreground shadow-card hover:border-primary/30"
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span
+                    className={cn(
+                      "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                      highlight ? "bg-white/15 text-white" : "bg-secondary text-primary"
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  {highlight ? (
+                    <span className="inline-flex h-6 items-center rounded-full bg-brand-yellow px-2.5 text-xs font-extrabold text-primary">
+                      {pendingApprovals} in attesa
                     </span>
+                  ) : (
+                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                   )}
-                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 mt-0.5" />
                 </div>
-              </div>
-              <h2 className="font-semibold text-sm mt-3">{title}</h2>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>
-            </Link>
-          ))}
+                <h2 className="mt-1 text-base font-bold">{title}</h2>
+                <p className={cn("text-[13px] leading-relaxed", highlight ? "text-white/80" : "text-muted-foreground")}>{description}</p>
+              </Link>
+            );
+          })}
         </div>
       </main>
     </div>

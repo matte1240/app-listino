@@ -29,6 +29,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (data?.user) setUser(data.user);
       })
+      .catch(() => {
+        // Sessione assente o risposta non valida: si resta non autenticati.
+      })
       .finally(() => setLoading(false));
   }, []);
 

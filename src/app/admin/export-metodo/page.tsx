@@ -119,7 +119,7 @@ export default function AdminExportMetodoPage() {
         </div>
 
         <div>
-          <h1 className="font-bold text-lg flex items-center gap-2">
+          <h1 className="text-[28px] leading-tight font-bold flex items-center gap-2">
             <FileCode2 className="h-5 w-5" />
             Export ordine in XML per Metodo
           </h1>

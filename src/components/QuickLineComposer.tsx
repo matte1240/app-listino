@@ -50,7 +50,7 @@ function resolveManualUnit(um: string): string {
 }
 
 const fieldClass =
-  "h-9 w-full rounded-lg border border-border bg-background px-2 text-sm font-semibold focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40";
+  "h-10 w-full rounded-md border border-input bg-card px-2.5 text-sm font-semibold focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/12";
 
 const invalidFieldClass = "border-destructive focus:border-destructive focus:ring-destructive/30";
 
@@ -182,18 +182,18 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
 
   const tabClass = (active: boolean) =>
     cn(
-      "flex-1 h-10 rounded-xl border text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors",
+      "flex-1 h-11 rounded-full border text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors sm:flex-none sm:px-4",
       active
         ? "bg-primary text-primary-foreground border-primary"
-        : "bg-card border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
+        : "bg-card border-input text-foreground/75 hover:text-foreground hover:border-primary/50"
     );
 
   return (
     <div
       data-testid="quick-line-composer"
       className={cn(
-        "rounded-2xl border bg-card shadow-sm p-2.5 flex flex-col gap-2.5",
-        mode === "closed" ? "border-border" : "border-primary/40 shadow-md shadow-primary/10"
+        "flex flex-col gap-3 rounded-2xl transition-all",
+        mode === "closed" ? "" : "border border-primary bg-card p-3 ring-4 ring-primary/10"
       )}
     >
       <div className="flex items-center gap-2">
@@ -280,7 +280,7 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
           <div className="flex items-center gap-2 pt-0.5">
             <button
               type="submit"
-              className="flex-1 sm:flex-none h-10 px-4 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground border border-primary hover:opacity-95 transition-colors"
+              className="flex-1 sm:flex-none h-11 px-4 rounded-lg text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground shadow-primary hover:bg-primary-hover transition-colors"
             >
               {isEditing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {isEditing ? "Salva modifica" : "Aggiungi"}
@@ -288,7 +288,7 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
             <button
               type="button"
               onClick={close}
-              className="h-10 px-4 rounded-xl text-sm font-semibold border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors inline-flex items-center gap-1.5"
+              className="h-11 px-4 rounded-lg text-sm font-semibold border border-input bg-card text-foreground/75 hover:text-foreground hover:border-primary/40 transition-colors inline-flex items-center gap-1.5"
             >
               <X className="h-4 w-4" />
               Annulla
@@ -318,14 +318,14 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
                 addNote();
               }
             }}
-            className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm italic resize-y min-h-[3rem] focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40"
+            className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-sm italic resize-y min-h-[3rem] focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/12"
             style={IOS_FONT}
           />
           <div className="flex items-center gap-2">
             <button
               type="submit"
               disabled={!canAddNote}
-              className="flex-1 sm:flex-none h-10 px-4 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground border border-primary hover:opacity-95 disabled:bg-muted disabled:text-muted-foreground disabled:border-border disabled:cursor-not-allowed transition-colors"
+              className="flex-1 sm:flex-none h-11 px-4 rounded-lg text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground shadow-primary hover:bg-primary-hover disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:cursor-not-allowed transition-colors"
             >
               {isEditing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {isEditing ? "Salva modifica" : "Aggiungi nota"}
@@ -333,7 +333,7 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
             <button
               type="button"
               onClick={close}
-              className="h-10 px-4 rounded-xl text-sm font-semibold border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors inline-flex items-center gap-1.5"
+              className="h-11 px-4 rounded-lg text-sm font-semibold border border-input bg-card text-foreground/75 hover:text-foreground hover:border-primary/40 transition-colors inline-flex items-center gap-1.5"
             >
               <X className="h-4 w-4" />
               Annulla

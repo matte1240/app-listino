@@ -26,6 +26,11 @@ export function formatOrderCurrency(value: number): string {
   return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }
 
+/** Prezzo unitario di listino con tre decimali: 48.9 → "€ 48,900". */
+export function formatUnitPrice(value: number): string {
+  return `€ ${value.toLocaleString("it-IT", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
+}
+
 /** Percentuale di sconto senza zeri inutili: 8 → "8", 12.5 → "12,5". */
 export function formatSconto(value: number | undefined): string {
   return (value ?? 0).toLocaleString("it-IT", { maximumFractionDigits: 2 });

@@ -95,7 +95,7 @@ export default function QuotationDetailPage() {
             </Button>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-lg font-bold">Preventivo {quotation.numero}</h1>
+                <h1 className="text-2xl leading-tight font-bold">Preventivo {quotation.numero}</h1>
                 <Badge variant="outline">{formatDate(quotation.dataPreventivo)}</Badge>
                 {quotation.status === "convertito" && <Badge className="gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Ordine creato</Badge>}
                 {quotation.status === "in_approvazione" && (

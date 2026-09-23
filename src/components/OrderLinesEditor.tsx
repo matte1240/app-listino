@@ -21,7 +21,7 @@ import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { getTrasportoLine, isTrasportoLine } from "@/lib/order-lines";
 import type { LineActions } from "@/lib/order-lines-store";
-import { formatOrderCurrency, formatSconto, getDiscountedUnitPrice, getLineTotal } from "@/lib/order-totals";
+import { formatOrderCurrency, formatSconto, formatUnitPrice, getDiscountedUnitPrice, getLineTotal } from "@/lib/order-totals";
 import { cn } from "@/lib/utils";
 import type { OrderLine } from "@/types";
 
@@ -110,11 +110,11 @@ function ArticleRowContent({ line, mode, onEditArticle }: Pick<RowProps, "line" 
         {mode === "summary" && (
           sconto > 0 ? (
             <span className="flex items-center gap-1">
-              <span className="line-through text-muted-foreground/50">€{line.prezzoListino.toFixed(3)}</span>
-              <span className="font-semibold text-primary">€{getDiscountedUnitPrice(line).toFixed(3)}</span>
+              <span className="line-through text-muted-foreground/50">{formatUnitPrice(line.prezzoListino)}</span>
+              <span className="font-semibold text-primary">{formatUnitPrice(getDiscountedUnitPrice(line))}</span>
             </span>
           ) : (
-            <span className="text-muted-foreground/70">€{line.prezzoListino.toFixed(3)}</span>
+            <span className="text-muted-foreground/70">{formatUnitPrice(line.prezzoListino)}</span>
           )
         )}
         {mode === "summary" && <span className="ml-auto font-semibold text-foreground">{formatOrderCurrency(getLineTotal(line))}</span>}
@@ -138,11 +138,11 @@ function ManualRowContent({ line, mode, onEditLine }: Pick<RowProps, "line" | "m
         {mode === "summary" && (
           sconto > 0 ? (
             <span className="flex items-center gap-1">
-              <span className="line-through text-muted-foreground/50">€{line.prezzoListino.toFixed(3)}</span>
-              <span className="font-semibold text-primary">€{getDiscountedUnitPrice(line).toFixed(3)}</span>
+              <span className="line-through text-muted-foreground/50">{formatUnitPrice(line.prezzoListino)}</span>
+              <span className="font-semibold text-primary">{formatUnitPrice(getDiscountedUnitPrice(line))}</span>
             </span>
           ) : (
-            <span className="text-muted-foreground/70">€{line.prezzoListino.toFixed(3)}</span>
+            <span className="text-muted-foreground/70">{formatUnitPrice(line.prezzoListino)}</span>
           )
         )}
         {mode === "summary" && <span className="ml-auto font-semibold text-foreground">{formatOrderCurrency(getLineTotal(line))}</span>}
@@ -180,8 +180,8 @@ function SortableLineRow({ line, index, count, mode, actions, onEditArticle, onE
       ref={setNodeRef}
       style={style}
       className={cn(
-        "rounded-xl border bg-background",
-        isComment ? "border-dashed border-border bg-muted/30" : "border-border/70",
+        "rounded-lg border bg-card",
+        isComment ? "border-dashed border-input bg-muted/50" : "border-border",
         isDragging && "relative z-10 opacity-80 shadow-lg ring-2 ring-primary/30"
       )}
     >
