@@ -561,10 +561,13 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           className={fill ? "min-h-0 flex-auto" : undefined}
         />
       </div>
-      <div className="flex shrink-0 items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
-        <span className="text-sm font-semibold text-foreground/80">Totale imponibile</span>
-        <span className="font-display text-2xl font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
-      </div>
+      {/* Nella sidebar il totale sta nel piede fissato insieme ai pulsanti. */}
+      {!fill && (
+        <div className="flex shrink-0 items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
+          <span className="text-sm font-semibold text-foreground/80">Totale imponibile</span>
+          <span className="font-display text-2xl font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
+        </div>
+      )}
     </>
   );
 
@@ -695,15 +698,22 @@ export default function QuotationWizard({ editingQuotation }: Props) {
             style={{ top: "calc(var(--app-header-h) + var(--step2-header-h) + 1.25rem)", maxHeight: "calc(100dvh - var(--app-header-h) - var(--step2-header-h) - 2.5rem)" }}
           >
             {renderCartSummary("min-h-0 flex-auto", true)}
-            <div className="sticky bottom-0 -mb-5 flex shrink-0 gap-2 bg-card pb-5">
-              <Button variant="outline" size="lg" className="px-4" onClick={() => setStep(1)}>
-                <ChevronLeft className="h-4 w-4" />
-                Indietro
-              </Button>
-              <Button size="lg" className="flex-1 px-4" disabled={!canGoNextStep2} onClick={() => setStep(3)}>
-                Avanti
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+            {/* Piede fissato sul bordo della sidebar (-bottom-5 annulla il padding del contenitore che scorre). */}
+            <div className="sticky -bottom-5 -mb-5 flex shrink-0 flex-col gap-4 bg-card pb-5">
+              <div className="flex items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
+                <span className="text-sm font-semibold text-foreground/80">Totale imponibile</span>
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="lg" className="px-4" onClick={() => setStep(1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                  Indietro
+                </Button>
+                <Button size="lg" className="flex-1 px-4" disabled={!canGoNextStep2} onClick={() => setStep(3)}>
+                  Avanti
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </aside>
         </div>

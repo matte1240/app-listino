@@ -596,7 +596,7 @@ function OrdersPageContent() {
                 />
                 {/* Da lg larga fino a 360px ma restringibile: accanto al titolo anche a 1024px */}
                 <SearchField
-                  className="order-1 sm:flex-1 lg:order-2 lg:w-0 lg:max-w-[360px] lg:min-w-48"
+                  className="order-1 sm:flex-1 lg:order-2 lg:w-0 lg:max-w-[360px] lg:min-w-56"
                   value={searchQuery}
                   onChange={setSearchQuery}
                   placeholder="Numero, cliente, cantiere, agente"

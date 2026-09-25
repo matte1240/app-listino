@@ -186,7 +186,9 @@ export default function AdminApprovalsPage() {
         await load();
         return;
       }
-      toast.success(action === "approve" ? `${card.title} approvato` : `${card.title} rifiutato`);
+      // "Modifica ordine" è femminile: approvata/rifiutata.
+      const ending = card.kind === "draft" ? "a" : "o";
+      toast.success(`${card.title} ${action === "approve" ? "approvat" : "rifiutat"}${ending}`);
       setRejecting(null);
       setRejectNote("");
       setCards((prev) => prev.filter((c) => c.key !== card.key));

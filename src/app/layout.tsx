@@ -68,7 +68,10 @@ export default function RootLayout({
           richColors
           closeButton
           // Azioni dei toast (es. "Annulla") toccabili anche col dito.
-          toastOptions={{ actionButtonStyle: { height: 40, paddingInline: 14, fontSize: 13 } }}
+          toastOptions={{
+            actionButtonStyle: { height: 40, paddingInline: 14, fontSize: 13 },
+            classNames: { closeButton: "pointer-coarse:size-7!" },
+          }}
         />
       </body>
     </html>

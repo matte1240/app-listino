@@ -10,7 +10,7 @@ import SegmentedTabs from "@/components/SegmentedTabs";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { getLineType } from "@/lib/order-lines";
-import { calculateOrderDiscountedTotal, formatSconto, getLineTotal } from "@/lib/order-totals";
+import { calculateOrderDiscountedTotal, formatSconto, getLineTotal, roundToCents } from "@/lib/order-totals";
 import type { Anagrafica, Quotation, QuotationItem } from "@/types";
 
 const VAT_RATE = 0.22;
@@ -186,8 +186,8 @@ export default function QuotationPrintPage() {
   }, [params?.id, authLoading, user]);
 
   const total = useMemo(() => (quotation ? quotationTotal(quotation) : 0), [quotation]);
-  const vatTotal = useMemo(() => total * VAT_RATE, [total]);
-  const documentTotal = useMemo(() => total + vatTotal, [total, vatTotal]);
+  const vatTotal = useMemo(() => roundToCents(total * VAT_RATE), [total]);
+  const documentTotal = useMemo(() => roundToCents(total + vatTotal), [total, vatTotal]);
   const fillerHeightMm = useMemo(() => (quotation ? quotationFillerHeightMm(quotation) : 0), [quotation]);
 
   if (authLoading || loading) {

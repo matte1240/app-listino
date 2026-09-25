@@ -158,7 +158,7 @@ export default function AdminExportMetodoPage() {
             placeholder="Cerca per numero, cliente, cantiere, agente"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-12 h-11 rounded-xl border border-border bg-card text-sm shadow-sm placeholder:text-muted-foreground/55 focus:outline-none focus:ring-[3px] focus:ring-ring/50 focus:border-ring transition-[color,box-shadow]"
+            className="w-full pl-9 pr-12 h-11 rounded-xl border border-border bg-card text-sm text-ellipsis shadow-sm placeholder:text-muted-foreground/55 focus:outline-none focus:ring-[3px] focus:ring-ring/50 focus:border-ring transition-[color,box-shadow]"
           />
           {searchQuery && (
             <button

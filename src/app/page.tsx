@@ -88,17 +88,17 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh flex flex-col bg-background">
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex flex-col bg-background">
       <div
         ref={rootRef}
-        className="no-print min-h-dvh flex flex-col"
+        className="no-print min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex flex-col"
         style={{ "--listino-header-h": "69px" } as CSSProperties}
       >
         <div className="mx-auto w-full max-w-2xl px-4 pt-6 lg:max-w-5xl lg:px-10 lg:pt-8">
