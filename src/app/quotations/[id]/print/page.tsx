@@ -1,12 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SegmentedTabs from "@/components/SegmentedTabs";
 import { useAuth } from "@/lib/auth-context";
+import { cn } from "@/lib/utils";
 import { getLineType } from "@/lib/order-lines";
 import { calculateOrderDiscountedTotal, formatSconto, getLineTotal } from "@/lib/order-totals";
 import type { Anagrafica, Quotation, QuotationItem } from "@/types";
@@ -68,6 +70,68 @@ function quotationFillerHeightMm(quotation: Quotation) {
     0
   );
   return Math.max(MIN_FILLER_ROW_MM, TABLE_BODY_AVAILABLE_MM - rowsHeight - estimateNotesRowHeightMm(quotation.note));
+}
+
+/**
+ * Anteprima del foglio A4: sugli schermi stretti viene rimpicciolito per stare tutto in larghezza,
+ * con la possibilità di tornare al 100% scorrendo di lato. In stampa resta sempre 1:1.
+ */
+function SheetPreview({ children }: { children: ReactNode }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
+  const [size, setSize] = useState({ available: 0, width: 0, height: 0 });
+  const [zoom, setZoom] = useState<"fit" | "actual">("fit");
+
+  // Misura prima del paint, così il foglio non compare per un attimo a grandezza naturale.
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const sheet = sheetRef.current;
+    if (!frame || !sheet) return;
+    const update = () =>
+      setSize({ available: frame.clientWidth, width: sheet.offsetWidth, height: sheet.offsetHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(frame);
+    observer.observe(sheet);
+    return () => observer.disconnect();
+  }, []);
+
+  const fitScale = size.available && size.width ? Math.min(1, size.available / size.width) : 1;
+  const canFit = fitScale < 0.99;
+  const scale = canFit && zoom === "fit" ? fitScale : 1;
+
+  return (
+    <>
+      {canFit && (
+        <div className="no-print mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">Anteprima ridotta: il PDF resta in formato A4.</p>
+          <SegmentedTabs
+            className="w-40 shrink-0"
+            options={[
+              { value: "fit", label: "Adatta" },
+              { value: "actual", label: "100%" },
+            ]}
+            value={zoom}
+            onChange={setZoom}
+          />
+        </div>
+      )}
+      <div ref={frameRef} className={cn("sheet-frame", canFit && zoom === "actual" && "overflow-x-auto")}>
+        <div
+          className="sheet-viewport"
+          style={size.width ? { width: size.width * scale, height: size.height * scale } : undefined}
+        >
+          <section
+            ref={sheetRef}
+            className="metodo-sheet shadow-sm"
+            style={scale < 1 ? { transform: `scale(${scale})` } : undefined}
+          >
+            {children}
+          </section>
+        </div>
+      </div>
+    </>
+  );
 }
 
 export default function QuotationPrintPage() {
@@ -179,6 +243,15 @@ export default function QuotationPrintPage() {
           line-height: 1.12;
           padding: 9mm 6.8mm 6mm;
           overflow: hidden;
+        }
+
+        .sheet-viewport {
+          margin: 0 auto;
+        }
+
+        .sheet-viewport .metodo-sheet {
+          margin: 0;
+          transform-origin: top left;
         }
 
         .company-header {
@@ -453,6 +526,19 @@ export default function QuotationPrintPage() {
             padding: 0 !important;
           }
 
+          .sheet-frame {
+            overflow: visible !important;
+          }
+
+          .sheet-viewport {
+            width: auto !important;
+            height: auto !important;
+          }
+
+          .metodo-sheet {
+            transform: none !important;
+          }
+
           .metodo-sheet {
             width: 210mm !important;
             height: 297mm !important;
@@ -483,7 +569,7 @@ export default function QuotationPrintPage() {
           </div>
         </div>
 
-        <section className="metodo-sheet shadow-sm">
+        <SheetPreview>
           <header className="company-header">
             <div>
               <Image
@@ -682,7 +768,7 @@ export default function QuotationPrintPage() {
               </tr>
             </tbody>
           </table>
-        </section>
+        </SheetPreview>
       </main>
     </div>
   );
