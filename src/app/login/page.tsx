@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
@@ -9,26 +9,50 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+/**
+ * Pagina da aprire dopo il login: `?next=` (messo dal proxy) solo se resta su questo sito,
+ * altrimenti /orders. Niente "//host" o "/\host", che il browser leggerebbe come un altro dominio.
+ */
+function getLoginTarget(): string {
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (!next?.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/orders";
+  try {
+    const url = new URL(next, window.location.origin);
+    if (url.origin !== window.location.origin || url.pathname === "/login" || url.pathname.startsWith("/api/")) return "/orders";
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return "/orders";
+  }
+}
+
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const router = useRouter();
+
+  // Già autenticato (anche subito dopo il login riuscito): si va alla pagina richiesta.
+  useEffect(() => {
+    if (user) router.replace(getLoginTarget());
+  }, [user, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSubmitting(true);
 
-    const err = await login(username, password);
+    let err: string | null;
+    try {
+      err = await login(username, password);
+    } catch {
+      err = "Connessione non disponibile, riprova";
+    }
     if (err) {
       setError(err);
       setSubmitting(false);
-    } else {
-      router.push("/orders");
     }
   }
 
@@ -71,6 +95,9 @@ export default function LoginPage() {
                 id="username"
                 type="text"
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}

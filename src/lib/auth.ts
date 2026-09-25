@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
+import { getDb, type DbUser } from "@/lib/db";
 
 const secret = new TextEncoder().encode(
   process.env.JWT_SECRET || "dev-secret-change-me-in-production"
@@ -24,13 +25,31 @@ export async function signToken(payload: JwtPayload): Promise<string> {
     .sign(secret);
 }
 
+/**
+ * Verifica firma e scadenza del token, poi ricarica l'utente dal DB: un utente eliminato perde
+ * subito l'accesso e ruolo/nome sono quelli attuali, non quelli scritti nel token al login.
+ */
 export async function verifyToken(token: string): Promise<JwtPayload | null> {
+  let payload: Partial<JwtPayload>;
   try {
-    const { payload } = await jwtVerify(token, secret);
-    return payload as unknown as JwtPayload;
+    payload = (await jwtVerify(token, secret)).payload as Partial<JwtPayload>;
   } catch {
     return null;
   }
+  if (typeof payload.id !== "number") return null;
+
+  const user = getDb()
+    .prepare("SELECT id, username, role, full_name, email FROM users WHERE id = ?")
+    .get(payload.id) as Omit<DbUser, "password" | "created_at"> | undefined;
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    fullName: user.full_name || user.username,
+    email: user.email,
+  };
 }
 
 export async function getServerSession() {

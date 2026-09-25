@@ -12,7 +12,10 @@ export async function GET() {
 
   const payload = await verifyToken(token);
   if (!payload) {
-    return NextResponse.json({ error: "Token non valido" }, { status: 401 });
+    // Token scaduto o utente eliminato: si toglie il cookie, così il proxy rimanda al login.
+    const response = NextResponse.json({ error: "Token non valido" }, { status: 401 });
+    response.cookies.set(COOKIE_NAME, "", { maxAge: 0, path: "/" });
+    return response;
   }
 
   return NextResponse.json({

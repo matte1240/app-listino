@@ -61,7 +61,15 @@ export default function RootLayout({
             <AppShell>{children}</AppShell>
           </AuthProvider>
         </div>
-        <Toaster position="top-right" richColors closeButton />
+        <Toaster
+          position="bottom-center"
+          offset={{ bottom: "var(--app-toast-bottom)" }}
+          mobileOffset={{ bottom: "var(--app-toast-bottom)" }}
+          richColors
+          closeButton
+          // Azioni dei toast (es. "Annulla") toccabili anche col dito.
+          toastOptions={{ actionButtonStyle: { height: 40, paddingInline: 14, fontSize: 13 } }}
+        />
       </body>
     </html>
   );

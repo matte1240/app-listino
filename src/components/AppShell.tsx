@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ComponentProps, type ComponentType } from "react";
 import { ClipboardList, FileText, FilePlus2, LayoutList, LogOut, Plus, Shield } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { canNavigateTo } from "@/lib/navigation-guard";
+import { canNavigateTo, LOGOUT_HREF } from "@/lib/navigation-guard";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import PushToggle from "@/components/PushToggle";
@@ -93,7 +93,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  // Conteggio documenti in attesa di approvazione (solo admin): al mount, ad ogni cambio pagina, ogni 60 s e al focus.
+  // Il menu utente si chiude cambiando pagina e passando alla sidebar (es. ruotando il tablet).
+  const [menuPathname, setMenuPathname] = useState(pathname);
+  if (menuPathname !== pathname) {
+    setMenuPathname(pathname);
+    setIsUserMenuOpen(false);
+  }
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 64rem)");
+    const close = () => setIsUserMenuOpen(false);
+    desktop.addEventListener("change", close);
+    return () => desktop.removeEventListener("change", close);
+  }, []);
+
+  // Il logout passa dalla guardia dei wizard come i link: con dati non salvati si apre prima la conferma.
+  const handleLogout = () => {
+    setIsUserMenuOpen(false);
+    if (!canNavigateTo(LOGOUT_HREF)) return;
+    void logout();
+  };
+
+  // Conteggio documenti in attesa di approvazione (solo admin): al mount, ad ogni cambio pagina, ogni 60 s,
+  // al focus e quando una pagina segnala una decisione (evento "approvals:changed").
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const isAdmin = user?.role === "admin";
   useEffect(() => {
@@ -110,10 +131,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     load();
     const timer = window.setInterval(load, 60_000);
     window.addEventListener("focus", load);
+    window.addEventListener("approvals:changed", load);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
       window.removeEventListener("focus", load);
+      window.removeEventListener("approvals:changed", load);
     };
   }, [isAdmin, pathname]);
 
@@ -181,10 +204,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={handleLogout}
                   aria-label="Esci"
                   title="Esci"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                 >
                   <LogOut className="h-4 w-4" />
                 </button>
@@ -230,10 +253,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       />
                       <button
                         type="button"
-                        onClick={() => {
-                          setIsUserMenuOpen(false);
-                          logout();
-                        }}
+                        onClick={handleLogout}
                         className="flex h-12 w-full items-center gap-3 px-4 text-sm font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       >
                         <LogOut className="h-4 w-4" />
