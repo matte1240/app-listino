@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Minus, Plus, Sparkles, AlertCircle, X } from "lucide-react";
+import { Check, Minus, Plus, Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
 import { Chip } from "@/components/ui/chip";
 import DiscountSelector from "@/components/DiscountSelector";
+import { formatNumberInput } from "@/components/NumberField";
 import { formatOrderCurrency, formatSconto, formatUnitPrice } from "@/lib/order-totals";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
@@ -42,14 +44,14 @@ export default function MaterialCard({
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [enriching, setEnriching] = useState(false);
-  const [enrichError, setEnrichError] = useState<string | null>(null);
 
   const handleRegenerateAI = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (enriching) return;
     setEnriching(true);
-    setEnrichError(null);
+    // Errore come toast: scritto nella colonna delle azioni allargava la card e spostava il prezzo.
+    const showError = (message: string) => toast.error(`Rigenerazione AI non riuscita per ${codice}: ${message}`);
     try {
       const res = await fetch("/api/ai/enrich/single", {
         method: "POST",
@@ -58,14 +60,14 @@ export default function MaterialCard({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setEnrichError(data?.error || `Errore (${res.status})`);
+        showError(data?.error || `errore ${res.status}`);
         return;
       }
       if (typeof data?.descrizioneAI === "string") {
         setMaterialDescrizioneAI(codice, data.descrizioneAI);
       }
     } catch (err) {
-      setEnrichError(err instanceof Error ? err.message : "Errore di rete");
+      showError(err instanceof Error ? err.message : "errore di rete");
     } finally {
       setEnriching(false);
     }
@@ -120,7 +122,24 @@ export default function MaterialCard({
   const setDraftQtyValue = (qty: number) => {
     const nextQty = Math.max(0, qty);
     setDraftQty(nextQty);
-    setDraftQtyInput(nextQty === 0 ? "" : String(nextQty));
+    setDraftQtyInput(formatNumberInput(nextQty));
+  };
+
+  /**
+   * L'editor si apre verso il basso: la card va portata tutta a schermo, fuori da ricerca sticky, barra del carrello e
+   * tab bar (i suoi margini di scorrimento). Come scrollIntoView "nearest", che però in Chromium non scorre se la card
+   * è già dentro la finestra, anche quando è coperta da una barra fissa.
+   */
+  const revealCard = () => {
+    const card = cardRef.current;
+    if (!card) return;
+    const style = getComputedStyle(card);
+    const rect = card.getBoundingClientRect();
+    const top = rect.top - (parseFloat(style.scrollMarginTop) || 0);
+    const overflowBottom = rect.bottom + (parseFloat(style.scrollMarginBottom) || 0) - window.innerHeight;
+    // Se non entra tutta, conta l'inizio (il campo quantità è in alto).
+    const delta = top < 0 ? top : overflowBottom > 0 ? Math.min(overflowBottom, top) : 0;
+    if (Math.abs(delta) >= 1) window.scrollBy({ top: delta, behavior: "smooth" });
   };
 
   const openEditor = ({ resetValues = true, mode = "add" }: { resetValues?: boolean; mode?: "add" | "edit" } = {}) => {
@@ -135,7 +154,10 @@ export default function MaterialCard({
         setDraftSconto(isInCart ? cartSconto : 0);
       }
     }
-    window.requestAnimationFrame(() => qtyInputRef.current?.focus());
+    window.requestAnimationFrame(() => {
+      revealCard();
+      qtyInputRef.current?.focus({ preventScroll: true });
+    });
   };
 
   const handleQtyChange = (value: string) => {
@@ -156,9 +178,6 @@ export default function MaterialCard({
     if (!openArticleRequest || openArticleRequest.codice !== codice) return;
 
     openEditor({ resetValues: true, mode: "edit" });
-    window.requestAnimationFrame(() => {
-      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
     onOpenArticleRequestHandled?.(openArticleRequest.requestId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openArticleRequest, codice, cartQty, cartSconto, onOpenArticleRequestHandled]);
@@ -202,7 +221,9 @@ export default function MaterialCard({
     <div
       ref={cardRef}
       className={cn(
-        "rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] duration-200 select-none",
+        "scroll-mt-[calc(var(--catalog-sticky-top)+0.5rem)] scroll-mb-[calc(var(--app-tabbar-h)+5.5rem)] rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] duration-200 lg:scroll-mb-4",
+        // Nel listino di sola consultazione il tocco non fa nulla: codici e descrizioni restano copiabili.
+        !isReadOnlyCatalog && "select-none",
         expanded
           ? "border-primary ring-4 ring-primary/10"
           : isInCart
@@ -249,7 +270,7 @@ export default function MaterialCard({
               {isInCart && (
                 <Chip tone="solid" className="h-5 px-2 text-[11px]">
                   <Check className="size-3!" />
-                  {cartQty} {um || "pz"}
+                  {formatMetricValue(cartQty)} {um || "pz"}
                   {cartSconto > 0 && ` · -${formatSconto(cartSconto)}%`}
                 </Chip>
               )}
@@ -296,7 +317,8 @@ export default function MaterialCard({
                 {expanded ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5" strokeWidth={2.4} />}
               </button>
             )}
-            {isAdmin && (
+            {/* Manutenzione del catalogo: solo nel listino, non mentre si compila un ordine o un preventivo. */}
+            {isAdmin && isReadOnlyCatalog && (
               <button
                 type="button"
                 onClick={handleRegenerateAI}
@@ -304,7 +326,7 @@ export default function MaterialCard({
                 title={enriching ? "Rigenerazione in corso…" : "Rigenera descrizione AI"}
                 aria-label="Rigenera descrizione AI"
                 className={cn(
-                  "inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-[11px] font-semibold tracking-wide uppercase transition-colors",
+                  "inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-md border px-2.5 text-[11px] font-semibold tracking-wide uppercase transition-colors",
                   enriching
                     ? "cursor-wait border-primary/40 bg-primary/10 text-primary"
                     : "border-border text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
@@ -313,12 +335,6 @@ export default function MaterialCard({
                 <Sparkles className={cn("h-3.5 w-3.5", enriching && "animate-spin")} />
                 AI
               </button>
-            )}
-            {isAdmin && enrichError && (
-              <div className="flex items-start gap-1 text-right text-[11px] text-destructive">
-                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-                <span className="break-words">{enrichError}</span>
-              </div>
             )}
           </div>
         )}
@@ -371,8 +387,17 @@ export default function MaterialCard({
                     }
                     setDraftQtyValue(parseLocalizedNumber(e.target.value));
                   }}
+                  onKeyDown={(e) => {
+                    // Invio sulla tastiera conferma come il pulsante
+                    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+                    e.preventDefault();
+                    if (draftQty <= 0) return;
+                    dismissKeyboard();
+                    handleConfirm();
+                  }}
                   placeholder="0"
                   inputMode="decimal"
+                  enterKeyHint="done"
                   className="h-11 w-16 border-x border-border bg-card text-center font-bold tabular-nums focus:bg-primary/5 focus:outline-none"
                   style={{ fontSize: "17px" }}
                 />
@@ -400,7 +425,7 @@ export default function MaterialCard({
           {draftQty > 0 && (
             <div className="flex items-center justify-between gap-3 border-t border-border pt-3 tabular-nums">
               <span className="text-[13px] text-muted-foreground">
-                {draftQtyInput || draftQty} × {formatUnitPrice(draftUnitPrice)}
+                {formatNumberInput(draftQty)} × {formatUnitPrice(draftUnitPrice)}
               </span>
               <span className="text-base font-bold text-foreground">{formatOrderCurrency(draftUnitPrice * draftQty)}</span>
             </div>

@@ -17,10 +17,13 @@ interface Props {
 
 /** Margine interno della traccia, così il primo e l'ultimo marcatore non escono dalla barra. */
 const TRACK_PAD = 10;
-/** Distanza minima tra due marcatori: una riga di etichetta. */
+/** Distanza minima tra due marcatori: una riga di etichetta (con il dito: un bersaglio alto 36px, etichetta su due righe). */
 const MIN_SEGMENT = 24;
+const MIN_SEGMENT_COARSE = 36;
 /** Sotto questa distanza le etichette si sovrapporrebbero: se ne mostra una ogni tanto. */
 const MIN_LABEL_GAP = 16;
+const MIN_LABEL_GAP_COARSE = 28; // etichetta su due righe (11px, interlinea 1.25)
+const COARSE_POINTER = "(pointer: coarse)";
 const BOTTOM_GAP = 20;
 const MIN_HEIGHT = 120;
 
@@ -29,6 +32,7 @@ interface Geometry {
   markers: number[];
   thumb: number;
   active: number;
+  coarse: boolean;
 }
 
 /**
@@ -94,6 +98,7 @@ function sameGeometry(a: Geometry | null, b: Geometry): boolean {
     a.height === b.height &&
     a.thumb === b.thumb &&
     a.active === b.active &&
+    a.coarse === b.coarse &&
     a.markers.length === b.markers.length &&
     a.markers.every((y, i) => y === b.markers[i])
   );
@@ -110,6 +115,8 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
   const mappingRef = useRef<Mapping | null>(null);
   const [geometry, setGeometry] = useState<Geometry | null>(null);
   const [dragging, setDragging] = useState(false);
+  /** Trascinamento in corso: punto di partenza sullo schermo e sulla traccia. */
+  const dragRef = useRef<{ startClientY: number; startY: number } | null>(null);
 
   const measure = useCallback(() => {
     const list = listRef.current;
@@ -140,8 +147,9 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
     const listBottomAtEnd = list.getBoundingClientRect().bottom + scrollY - maxScroll;
     const height = Math.round(Math.max(MIN_HEIGHT, Math.min(viewport - BOTTOM_GAP, listBottomAtEnd) - railTop));
 
+    const coarse = window.matchMedia(COARSE_POINTER).matches;
     const lengths = bounds.slice(1).map((b, i) => Math.max(1, b - bounds[i]));
-    const hs = allocate(lengths, height - 2 * TRACK_PAD, MIN_SEGMENT);
+    const hs = allocate(lengths, height - 2 * TRACK_PAD, coarse ? MIN_SEGMENT_COARSE : MIN_SEGMENT);
     const ys: number[] = [];
     hs.reduce((y, h) => {
       ys.push(y);
@@ -162,6 +170,7 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
       markers: ys.map(round),
       thumb: round(ys[active] + progress * hs[active]),
       active,
+      coarse,
     };
     setGeometry((prev) => (sameGeometry(prev, next) ? prev : next));
   }, [listRef]);
@@ -178,6 +187,9 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
     schedule();
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
+    // Mouse o dito (tablet con tastiera/trackpad): cambiano la distanza minima tra i marcatori.
+    const pointerQuery = window.matchMedia(COARSE_POINTER);
+    pointerQuery.addEventListener("change", schedule);
     // Carte che si aprono, filtri, header sticky che cambia altezza: tutto sposta le sezioni.
     const observer = new ResizeObserver(schedule);
     if (listRef.current) observer.observe(listRef.current);
@@ -186,6 +198,7 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
       if (frame) cancelAnimationFrame(frame);
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
+      pointerQuery.removeEventListener("change", schedule);
       observer.disconnect();
     };
   }, [measure, listRef, categories]);
@@ -199,11 +212,10 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
     window.scrollTo({ top: scrollForReading(mapping, mapping.bounds[index]), behavior: scrollBehavior() });
   };
 
-  const scrubTo = (clientY: number) => {
+  /** Scorre la pagina fino al punto `y` della traccia. */
+  const scrubTo = (y: number) => {
     const mapping = mappingRef.current;
-    const rail = railRef.current;
-    if (!mapping || !rail) return;
-    const y = clientY - rail.getBoundingClientRect().top;
+    if (!mapping) return;
     let index = 0;
     mapping.ys.forEach((start, i) => {
       if (y >= start) index = i;
@@ -213,23 +225,35 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
     window.scrollTo({ top: scrollForReading(mapping, target), behavior: "instant" });
   };
 
+  // Il trascinamento è relativo al punto di partenza: il primo salto aggancia la barra (sticky) più in alto e
+  // la allunga, e rileggere la posizione del dito rispetto alla barra spostata la farebbe saltare di migliaia di px.
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
+    const rail = railRef.current;
+    if (e.button !== 0 || !rail) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    const startY = e.clientY - rail.getBoundingClientRect().top;
+    dragRef.current = { startClientY: e.clientY, startY };
     setDragging(true);
-    scrubTo(e.clientY);
+    scrubTo(startY);
   };
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (dragging) scrubTo(e.clientY);
+    const drag = dragRef.current;
+    if (!drag || !geometry) return;
+    const y = drag.startY + (e.clientY - drag.startClientY);
+    scrubTo(Math.min(geometry.height - TRACK_PAD, Math.max(TRACK_PAD, y)));
   };
 
-  const stopDragging = () => setDragging(false);
+  const stopDragging = () => {
+    dragRef.current = null;
+    setDragging(false);
+  };
 
+  const labelGap = geometry?.coarse ? MIN_LABEL_GAP_COARSE : MIN_LABEL_GAP;
   const labelEvery =
     geometry && categories.length > 0
-      ? Math.max(1, Math.ceil(MIN_LABEL_GAP / ((geometry.height - 2 * TRACK_PAD) / categories.length)))
+      ? Math.max(1, Math.ceil(labelGap / ((geometry.height - 2 * TRACK_PAD) / categories.length)))
       : 1;
 
   return (
@@ -247,12 +271,12 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
           {/* Traccia e avanzamento */}
           <div
             aria-hidden
-            className="absolute left-[7px] w-0.5 rounded-full bg-border"
+            className="absolute left-[7px] w-0.5 rounded-full bg-border pointer-coarse:left-[15px]"
             style={{ top: TRACK_PAD, bottom: TRACK_PAD }}
           />
           <div
             aria-hidden
-            className="absolute left-[7px] w-0.5 rounded-full bg-primary"
+            className="absolute left-[7px] w-0.5 rounded-full bg-primary pointer-coarse:left-[15px]"
             style={{ top: TRACK_PAD, height: Math.max(0, geometry.thumb - TRACK_PAD) }}
           />
 
@@ -267,11 +291,11 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
                 type="button"
                 onClick={() => jumpToCategory(i)}
                 aria-current={isActive ? "location" : undefined}
-                title={`${category.label} · ${category.count} articoli`}
-                className="group absolute inset-x-0 flex h-5 -translate-y-1/2 items-center gap-2 rounded-md pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                title={`${category.label} · ${category.count} ${category.count === 1 ? "articolo" : "articoli"}`}
+                className="group absolute inset-x-0 flex h-5 -translate-y-1/2 items-center gap-2 rounded-md pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:h-9"
                 style={{ top: geometry.markers[i] }}
               >
-                <span className="flex w-4 shrink-0 justify-center">
+                <span className="flex w-4 shrink-0 justify-center pointer-coarse:w-8">
                   <span
                     className={cn(
                       "rounded-full transition-all",
@@ -287,7 +311,8 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
                   <>
                     <span
                       className={cn(
-                        "min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.08em] transition-colors",
+                        // Con il dito il title non si legge: i nomi lunghi vanno a capo invece di essere troncati.
+                        "min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.08em] transition-colors pointer-coarse:line-clamp-2 pointer-coarse:leading-tight pointer-coarse:tracking-[0.04em] pointer-coarse:whitespace-normal",
                         isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
                       )}
                     >
@@ -316,7 +341,7 @@ export default function CategoryTimeline({ categories, listRef, className }: Pro
             onPointerCancel={stopDragging}
             onLostPointerCapture={stopDragging}
             className={cn(
-              "group/track absolute inset-y-0 left-0 z-10 w-4 touch-none",
+              "group/track absolute inset-y-0 left-0 z-10 w-4 touch-none pointer-coarse:w-8",
               dragging ? "cursor-grabbing" : "cursor-grab"
             )}
           >

@@ -36,7 +36,11 @@ const SearchField = forwardRef<HTMLInputElement, Props>(function SearchField(
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
-        className="h-12 w-full rounded-lg border border-border bg-card pr-11 pl-11 text-base shadow-xs transition-[color,box-shadow,border-color] outline-none placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/12 md:text-[15px]"
+        // Nei campi stretti (tablet in orizzontale) il segnaposto finisce con "…" invece di essere tagliato.
+        className={cn(
+          "h-12 w-full rounded-lg border border-border bg-card pl-11 text-base text-ellipsis shadow-xs transition-[color,box-shadow,border-color] outline-none placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/12 md:text-[15px]",
+          value ? "pr-11" : "pr-3"
+        )}
       />
       {value && (
         <button
