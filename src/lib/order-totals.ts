@@ -17,11 +17,6 @@ export function calculateOrderDiscountedTotal(
   return items.reduce((sum, item) => sum + getLineTotal(item), 0);
 }
 
-/** Somma delle quantità delle sole righe articolo/manuale (esclude note e trasporto). */
-export function calculateOrderTotalPieces(items: ReadonlyArray<Pick<OrderHistoryItem, "tipo" | "qty">>): number {
-  return items.reduce((sum, item) => (isArticleLine(item) ? sum + item.qty : sum), 0);
-}
-
 /** Quantità con la virgola decimale: 12.5 → "12,5". */
 export function formatQuantity(value: number): string {
   return value.toLocaleString("it-IT", { maximumFractionDigits: 3 });

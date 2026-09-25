@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
-import Link from "next/link";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import UploadAnagrafiche from "@/components/UploadAnagrafiche";
 import { useAuth } from "@/lib/auth-context";
+import AdminBreadcrumb from "../AdminBreadcrumb";
 
 interface UserOption {
   id: number;
@@ -34,6 +34,9 @@ export default function AdminAnagrafichePage() {
   const [usedRapNumbers, setUsedRapNumbers] = useState<number[]>([]);
   const [assignmentByRap, setAssignmentByRap] = useState<Map<number, number>>(new Map());
   const [savingRap, setSavingRap] = useState<number | null>(null);
+  /** Rap appena salvato: mostra "Salvato" per un attimo come conferma. */
+  const [savedRap, setSavedRap] = useState<number | null>(null);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [rapError, setRapError] = useState("");
   const [rapLoaded, setRapLoaded] = useState(false);
 
@@ -79,8 +82,13 @@ export default function AdminAnagrafichePage() {
     loadRapData();
   }, [user, loading, router, loadRapData]);
 
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+  }, []);
+
   async function handleAssign(rap: number, userId: number | null) {
     setSavingRap(rap);
+    setSavedRap(null);
     setRapError("");
     try {
       const res = await fetch("/api/admin/rap-assignments", {
@@ -98,6 +106,9 @@ export default function AdminAnagrafichePage() {
         else next.set(rap, userId);
         return next;
       });
+      setSavedRap(rap);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSavedRap(null), 1500);
     } catch (err) {
       setRapError(err instanceof Error ? err.message : "Errore salvataggio");
     } finally {
@@ -107,20 +118,16 @@ export default function AdminAnagrafichePage() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] bg-background">
       <main className="max-w-4xl mx-auto px-4 sm:px-5 lg:px-10 pt-6 lg:pt-8 pb-6 flex flex-col gap-5">
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground font-medium">Anagrafiche</span>
-        </div>
+        <AdminBreadcrumb current="Anagrafiche" />
 
         <div>
           <h1 className="text-[28px] leading-tight font-bold">Anagrafiche clienti</h1>
@@ -166,33 +173,44 @@ export default function AdminAnagrafichePage() {
               {usedRapNumbers.map((rap) => {
                 const currentUserId = assignmentByRap.get(rap) ?? "";
                 const isSaving = savingRap === rap;
+                const isSaved = savedRap === rap;
                 return (
                   <div
                     key={rap}
                     className="flex flex-col gap-2 rounded-xl border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="text-sm font-medium">Rap {rap}</div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={String(currentUserId)}
-                        disabled={isSaving}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          handleAssign(rap, val === "" ? null : Number(val));
-                        }}
-                        className="h-9 w-full sm:w-64 rounded-xl border border-input bg-transparent px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                      >
-                        <option value="">— Non assegnato —</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={String(u.id)}>
-                            {u.fullName || u.username} ({u.role})
-                          </option>
-                        ))}
-                      </select>
-                      {isSaving && (
-                        <span className="text-xs text-muted-foreground">Salvataggio…</span>
-                      )}
+                    {/* Stato del salvataggio accanto all'etichetta: il menu a destra non si sposta mentre compare */}
+                    <div className="flex min-h-5 items-center gap-2">
+                      <label htmlFor={`rap-${rap}`} className="text-sm font-medium">Rap {rap}</label>
+                      {isSaving ? (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Salvataggio…
+                        </span>
+                      ) : isSaved ? (
+                        <span className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300" role="status">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Salvato
+                        </span>
+                      ) : null}
                     </div>
+                    <select
+                      id={`rap-${rap}`}
+                      value={String(currentUserId)}
+                      disabled={isSaving}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        handleAssign(rap, val === "" ? null : Number(val));
+                      }}
+                      className="h-10 min-w-0 w-full sm:w-auto sm:min-w-64 sm:max-w-md rounded-xl border border-input bg-transparent px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                      <option value="">— Non assegnato —</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={String(u.id)}>
+                          {u.fullName || u.username} ({u.role})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 );
               })}

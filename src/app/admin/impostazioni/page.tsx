@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { CheckCircle2, ChevronRight, FileCode2, Loader2, Save } from "lucide-react";
+import { CheckCircle2, FileCode2, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+import AdminBreadcrumb from "../AdminBreadcrumb";
 
 interface SettingsForm {
   metodoCodiceTrasporto: string;
@@ -15,6 +15,11 @@ interface SettingsForm {
 }
 
 const EMPTY_FORM: SettingsForm = { metodoCodiceTrasporto: "", metodoCodiceManuale: "" };
+
+/** I codici Metodo sono maiuscoli: il valore salvato è quello mostrato nel campo (anche il server lo normalizza). */
+function normalizeCode(value: string): string {
+  return value.trim().toUpperCase();
+}
 
 export default function AdminSettingsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -47,7 +52,10 @@ export default function AdminSettingsPage() {
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          metodoCodiceTrasporto: normalizeCode(form.metodoCodiceTrasporto),
+          metodoCodiceManuale: normalizeCode(form.metodoCodiceManuale),
+        }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
@@ -63,23 +71,19 @@ export default function AdminSettingsPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] bg-background">
       <main className="max-w-4xl mx-auto px-4 sm:px-5 lg:px-10 pt-6 lg:pt-8 pb-6 flex flex-col gap-5">
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground font-medium">Impostazioni</span>
-        </div>
+        <AdminBreadcrumb current="Impostazioni" />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-[28px] leading-tight font-bold">Impostazioni</h1>
-          <Button onClick={handleSave} disabled={saving || saved} size="sm" className="w-full justify-center sm:w-auto">
+          <Button onClick={handleSave} disabled={saving || saved} className="w-full justify-center sm:w-auto">
             {saved ? (
               <><CheckCircle2 className="h-4 w-4" /> Salvato</>
             ) : saving ? (
@@ -117,7 +121,11 @@ export default function AdminSettingsPage() {
               placeholder="TRASPORTO"
               value={form.metodoCodiceTrasporto}
               onChange={(e) => setForm((prev) => ({ ...prev, metodoCodiceTrasporto: e.target.value }))}
+              onBlur={() => setForm((prev) => ({ ...prev, metodoCodiceTrasporto: normalizeCode(prev.metodoCodiceTrasporto) }))}
               className="text-sm bg-background font-mono uppercase"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
               maxLength={40}
             />
           </div>
@@ -132,7 +140,11 @@ export default function AdminSettingsPage() {
               placeholder="MANUALE"
               value={form.metodoCodiceManuale}
               onChange={(e) => setForm((prev) => ({ ...prev, metodoCodiceManuale: e.target.value }))}
+              onBlur={() => setForm((prev) => ({ ...prev, metodoCodiceManuale: normalizeCode(prev.metodoCodiceManuale) }))}
               className="text-sm bg-background font-mono uppercase"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
               maxLength={40}
             />
           </div>

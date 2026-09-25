@@ -14,6 +14,12 @@ async function requireAdmin() {
   return payload;
 }
 
+function countAdmins(db: ReturnType<typeof getDb>): number {
+  return (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number }).n;
+}
+
+const LAST_ADMIN_ERROR = "Deve restare almeno un amministratore";
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -29,7 +35,10 @@ export async function PUT(
     return NextResponse.json({ error: "ID non valido" }, { status: 400 });
   }
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Dati non validi" }, { status: 400 });
+  }
   const { username, password, role, fullName, full_name, email } = body as {
     username?: string;
     password?: string;
@@ -60,6 +69,15 @@ export async function PUT(
 
   const newUsername = username || existing.username;
   const newRole = role || existing.role;
+  // Un admin non può togliersi il ruolo da solo e l'app non deve mai restare senza amministratori.
+  if (newRole !== existing.role) {
+    if (userId === admin.id) {
+      return NextResponse.json({ error: "Non puoi cambiare il tuo ruolo" }, { status: 400 });
+    }
+    if (existing.role === "admin" && countAdmins(db) <= 1) {
+      return NextResponse.json({ error: LAST_ADMIN_ERROR }, { status: 400 });
+    }
+  }
   const newPassword = password ? hashSync(password, 10) : existing.password;
   const submittedFullName = fullName ?? full_name;
   const newFullName = submittedFullName !== undefined ? submittedFullName.trim() : existing.full_name;
@@ -97,10 +115,15 @@ export async function DELETE(
   }
 
   const db = getDb();
-  const result = db.prepare("DELETE FROM users WHERE id = ?").run(userId);
-  if (result.changes === 0) {
+  const existing = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as Pick<DbUser, "role"> | undefined;
+  if (!existing) {
     return NextResponse.json({ error: "Utente non trovato" }, { status: 404 });
   }
+  if (existing.role === "admin" && countAdmins(db) <= 1) {
+    return NextResponse.json({ error: LAST_ADMIN_ERROR }, { status: 400 });
+  }
+
+  db.prepare("DELETE FROM users WHERE id = ?").run(userId);
 
   return NextResponse.json({ ok: true });
 }

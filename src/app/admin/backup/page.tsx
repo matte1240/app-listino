@@ -1,11 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CloudUpload,
-  ChevronRight,
   Clock3,
   Database,
   Download,
@@ -17,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
+import AdminBreadcrumb from "../AdminBreadcrumb";
 
 const DEFAULT_VISIBLE_BACKUPS = 5;
 
@@ -323,7 +322,7 @@ export default function AdminBackupPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
@@ -332,29 +331,23 @@ export default function AdminBackupPage() {
   if (!isAdmin) return null;
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] bg-background">
       <main className="max-w-5xl mx-auto px-4 sm:px-5 pt-5 pb-6 flex flex-col gap-5">
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link href="/admin" className="hover:text-foreground transition-colors">
-            Admin
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground font-medium">Backup DB</span>
-        </div>
+        <AdminBreadcrumb current="Backup DB" />
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
+        {/* Azioni accanto al titolo solo da xl: con la sidebar dei tablet orizzontali il terzo pulsante andava a capo da solo */}
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 max-w-2xl">
             <h1 className="text-[28px] leading-tight font-bold">Backup database</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Crea snapshot consistenti del database SQLite e scaricali per conservazione esterna.
             </p>
           </div>
 
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:w-auto xl:shrink-0 xl:flex-nowrap xl:justify-end">
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={() => void fetchBackups(true)}
               disabled={refreshing || creating || creatingS3}
               className="w-full justify-center sm:w-auto"
@@ -363,7 +356,7 @@ export default function AdminBackupPage() {
               Aggiorna
             </Button>
 
-            <Button type="button" size="sm" onClick={handleCreateBackup} disabled={creating || creatingS3 || refreshing} className="w-full justify-center sm:w-auto">
+            <Button type="button" onClick={handleCreateBackup} disabled={creating || creatingS3 || refreshing} className="w-full justify-center sm:w-auto">
               {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
               Nuovo backup
             </Button>
@@ -371,7 +364,6 @@ export default function AdminBackupPage() {
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={handleCreateAndUploadS3Backup}
               disabled={!s3Configured || creating || creatingS3 || refreshing}
               className="w-full justify-center sm:w-auto"
@@ -413,7 +405,9 @@ export default function AdminBackupPage() {
 
         {!s3Configured && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
-            Backup S3 non configurato: imposta le variabili `DB_BACKUP_S3_*` per abilitare upload automatici su Hetzner Object Storage.
+            Backup S3 non configurato: imposta le variabili{" "}
+            <code className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-xs">DB_BACKUP_S3_*</code> per abilitare
+            upload automatici su Hetzner Object Storage.
           </div>
         )}
 
@@ -431,7 +425,6 @@ export default function AdminBackupPage() {
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => setShowAllLocalBackups((prev) => !prev)}
                 className="w-full justify-center sm:w-auto"
               >
@@ -465,7 +458,7 @@ export default function AdminBackupPage() {
                 </div>
 
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end shrink-0">
-                  <Button asChild variant="outline" size="sm" className="w-full justify-center sm:w-auto">
+                  <Button asChild variant="outline" className="w-full justify-center sm:w-auto">
                     <a href={`/api/admin/db-backups/${encodeURIComponent(backup.fileName)}`}>
                       <Download className="h-4 w-4" />
                       Scarica
@@ -474,7 +467,6 @@ export default function AdminBackupPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     onClick={() => void handleRestoreLocalBackup(backup.fileName)}
                     disabled={restoringLocalFile === backup.fileName || restoringS3Key !== null}
                     className="w-full justify-center sm:w-auto"
@@ -489,7 +481,6 @@ export default function AdminBackupPage() {
                   <Button
                     type="button"
                     variant="destructive"
-                    size="sm"
                     onClick={() => void handleDeleteBackup(backup.fileName)}
                     disabled={deletingFile === backup.fileName || restoringLocalFile !== null || restoringS3Key !== null}
                     className="w-full justify-center sm:w-auto"
@@ -519,7 +510,6 @@ export default function AdminBackupPage() {
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => setShowAllS3Backups((prev) => !prev)}
                 className="w-full justify-center sm:w-auto"
               >
@@ -561,7 +551,6 @@ export default function AdminBackupPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     onClick={() => void handleRestoreS3Backup(backup)}
                     disabled={restoringS3Key === backup.key || restoringLocalFile !== null}
                     className="w-full justify-center sm:w-auto"

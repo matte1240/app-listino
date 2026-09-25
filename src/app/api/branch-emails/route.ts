@@ -9,6 +9,17 @@ interface DbBranchEmail {
   email_cc: string;
 }
 
+const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
+/** Primo indirizzo non valido di un elenco separato da virgole (vuoto = nessun indirizzo, ammesso). */
+function findInvalidEmail(value: string): string | null {
+  for (const part of value.split(",")) {
+    const email = part.trim();
+    if (email && !EMAIL_RE.test(email)) return email;
+  }
+  return null;
+}
+
 /** GET /api/branch-emails — list email config for all branches (admin only) */
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -47,6 +58,25 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Dati non validi" }, { status: 400 });
   }
 
+  // Valida tutto prima di scrivere: con un indirizzo errato non si salva nulla.
+  const entries: Array<{ magazzino: string; emailTo: string; emailCc: string }> = [];
+  for (const magazzino of MAGAZZINI) {
+    const entry = body.config[magazzino];
+    if (!entry || typeof entry !== "object") continue;
+    const emailTo = typeof entry.emailTo === "string" ? entry.emailTo.trim() : "";
+    const emailCc = typeof entry.emailCc === "string" ? entry.emailCc.trim() : "";
+    for (const [field, value, label] of [["emailTo", emailTo, "To"], ["emailCc", emailCc, "CC"]] as const) {
+      const invalid = findInvalidEmail(value);
+      if (invalid) {
+        return NextResponse.json(
+          { error: `Indirizzo email non valido per ${magazzino} (${label}): ${invalid}`, magazzino, field },
+          { status: 400 }
+        );
+      }
+    }
+    entries.push({ magazzino, emailTo, emailCc });
+  }
+
   const db = getDb();
   const upsert = db.prepare(
     `INSERT INTO branch_emails (magazzino, email_to, email_cc) VALUES (?, ?, ?)
@@ -54,11 +84,8 @@ export async function PUT(req: NextRequest) {
   );
 
   const runAll = db.transaction(() => {
-    for (const magazzino of MAGAZZINI) {
-      const entry = body.config[magazzino];
-      if (entry) {
-        upsert.run(magazzino, (entry.emailTo ?? "").trim(), (entry.emailCc ?? "").trim());
-      }
+    for (const { magazzino, emailTo, emailCc } of entries) {
+      upsert.run(magazzino, emailTo, emailCc);
     }
   });
   runAll();

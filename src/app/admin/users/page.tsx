@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, X, ChevronRight } from "lucide-react";
-import Link from "next/link";
+import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import AdminBreadcrumb from "../AdminBreadcrumb";
 
 interface UserRow {
   id: number;
@@ -42,6 +43,7 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLElement>(null);
 
   const fetchUsers = useCallback(async () => {
     const res = await fetch("/api/users");
@@ -80,11 +82,26 @@ export default function AdminUsersPage() {
     return () => { cancelled = true; };
   }, [user, loading, router]);
 
+  /**
+   * Il form sta sopra l'elenco: aprendolo da una riga in fondo resterebbe fuori schermo, quindi lo porta in vista.
+   * In creazione il fuoco va sul primo campo; in modifica sul riquadro, per non aprire la tastiera su tablet.
+   */
+  function revealForm(focusFirstField: boolean) {
+    requestAnimationFrame(() => {
+      const el = formRef.current;
+      if (!el) return;
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+      (focusFirstField ? document.getElementById("form-username") : el)?.focus({ preventScroll: true });
+    });
+  }
+
   function openCreate() {
     setEditingId(null);
     setForm(emptyForm);
     setFormError("");
     setShowForm(true);
+    revealForm(true);
   }
 
   function openEdit(u: UserRow) {
@@ -92,6 +109,7 @@ export default function AdminUsersPage() {
     setForm({ username: u.username, fullName: u.fullName ?? "", password: "", role: u.role, email: u.email });
     setFormError("");
     setShowForm(true);
+    revealForm(false);
   }
 
   function closeForm() {
@@ -123,15 +141,22 @@ export default function AdminUsersPage() {
       return;
     }
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      setFormError("Connessione non disponibile, riprova");
+      setSaving(false);
+      return;
+    }
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (!res.ok) {
-      setFormError(data.error || "Errore nel salvataggio");
+      setFormError(data?.error || "Errore nel salvataggio");
       setSaving(false);
       return;
     }
@@ -156,37 +181,49 @@ export default function AdminUsersPage() {
 
   if (loading || loadingUsers) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
   }
 
+  // Il ruolo non si cambia sul proprio account né sull'ultimo admin rimasto (l'API rifiuta comunque).
+  const adminCount = users.filter((u) => u.role === "admin").length;
+  const editingUser = editingId !== null ? users.find((u) => u.id === editingId) : undefined;
+  const roleLockReason = !editingUser
+    ? null
+    : editingUser.id === user?.id
+      ? "Non puoi cambiare il tuo ruolo."
+      : editingUser.role === "admin" && adminCount <= 1
+        ? "Deve restare almeno un amministratore."
+        : null;
+
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] bg-background">
       <main className="max-w-4xl mx-auto w-full px-4 sm:px-5 pt-5 pb-5 space-y-4">
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground font-medium">Utenti</span>
-        </div>
+        <AdminBreadcrumb current="Utenti" />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-[28px] leading-tight font-bold">Gestione Utenti</h1>
-          <Button size="sm" onClick={openCreate} className="gap-1.5 h-9 w-full justify-center sm:w-auto">
+          <Button onClick={openCreate} className="gap-1.5 w-full justify-center sm:w-auto">
             <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Nuovo utente</span>
+            Nuovo utente
           </Button>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {/* Form overlay */}
         {showForm && (
-          <div className="rounded-2xl border border-border bg-card shadow-sm p-4 space-y-4">
+          <section
+            ref={formRef}
+            tabIndex={-1}
+            aria-labelledby="user-form-title"
+            className="rounded-2xl border border-border bg-card shadow-sm p-4 space-y-4 scroll-mt-[calc(var(--app-header-h)+1rem)] outline-none"
+          >
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-sm">
-                {editingId ? "Modifica utente" : "Nuovo utente"}
+              <h2 id="user-form-title" className="font-semibold text-sm">
+                {editingUser ? `Modifica utente ${editingUser.fullName || editingUser.username}` : editingId ? "Modifica utente" : "Nuovo utente"}
               </h2>
-              <Button variant="ghost" size="icon" onClick={closeForm} className="h-7 w-7">
+              <Button variant="ghost" size="icon" onClick={closeForm} aria-label="Chiudi" className="-mr-2">
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -234,12 +271,17 @@ export default function AdminUsersPage() {
                 <select
                   id="form-role"
                   value={form.role}
+                  disabled={roleLockReason !== null}
+                  aria-describedby={roleLockReason ? "form-role-hint" : undefined}
                   onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as "admin" | "agente" }))}
-                  className="h-9 w-full rounded-xl border border-input bg-transparent px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  className="h-10 w-full rounded-xl border border-input bg-transparent px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="agente">Agente</option>
                   <option value="admin">Admin</option>
                 </select>
+                {roleLockReason && (
+                  <p id="form-role-hint" className="text-xs text-muted-foreground">{roleLockReason}</p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -256,15 +298,15 @@ export default function AdminUsersPage() {
               {formError && <p className="text-sm text-destructive">{formError}</p>}
 
               <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
-                <Button type="submit" size="sm" disabled={saving} className="w-full justify-center sm:w-auto">
+                <Button type="submit" disabled={saving} className="w-full justify-center sm:w-auto">
                   {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Crea utente"}
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={closeForm} className="w-full justify-center sm:w-auto">
+                <Button type="button" variant="outline" onClick={closeForm} className="w-full justify-center sm:w-auto">
                   Annulla
                 </Button>
               </div>
             </form>
-          </div>
+          </section>
         )}
 
         {/* Users list */}
@@ -274,7 +316,10 @@ export default function AdminUsersPage() {
             return (
             <div
               key={u.id}
-              className="flex flex-col gap-3 rounded-2xl border border-border bg-card shadow-sm p-3 sm:flex-row sm:items-center sm:justify-between"
+              className={cn(
+                "flex flex-col gap-3 rounded-2xl border border-border bg-card shadow-sm p-3 sm:flex-row sm:items-center sm:justify-between",
+                showForm && editingId === u.id && "border-primary ring-2 ring-primary/15"
+              )}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -290,25 +335,24 @@ export default function AdminUsersPage() {
                   Creato: {new Date(u.created_at).toLocaleDateString("it-IT")}
                 </p>
               </div>
-              <div className="flex w-full gap-1 shrink-0 sm:w-auto sm:justify-end">
+              <div className="flex w-full gap-2 shrink-0 sm:w-auto sm:justify-end">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
                   onClick={() => openEdit(u)}
                   aria-label={`Modifica ${displayName}`}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <Pencil className="h-4 w-4" />
                 </Button>
                 {u.id !== user?.id && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-red-500 hover:text-red-600"
+                    className="text-red-500 hover:text-red-600"
                     onClick={() => handleDelete(u)}
                     aria-label={`Elimina ${displayName}`}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 )}
               </div>

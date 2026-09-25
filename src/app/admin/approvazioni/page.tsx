@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, ChevronRight, ClipboardList, FileText, Loader2, Pencil, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { Check, ClipboardList, ExternalLink, FileText, Loader2, Pencil, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { computeOrderDiff, type OrderDiff } from "@/lib/order-diff";
 import { getApprovalLines } from "@/lib/order-lines";
 import { calculateOrderDiscountedTotal, formatOrderCurrency } from "@/lib/order-totals";
 import type { Order, OrderHistoryItem, Quotation } from "@/types";
+import AdminBreadcrumb from "../AdminBreadcrumb";
 
 interface PendingApprovals {
   orders: Order[];
@@ -35,12 +36,38 @@ interface PendingCard {
   items: OrderHistoryItem[];
   diff?: OrderDiff;
   extra?: string;
+  /** Dati di testata da valutare insieme agli sconti (consegna, CIG/CUP). */
+  details: string[];
+  note: string;
+  /** Pagina con il documento completo. */
+  href: string;
   endpoint: string;
+}
+
+/** Avvisa la shell (badge Approvazioni nella navigazione) che il numero di richieste in attesa può essere cambiato. */
+function notifyApprovalsChanged() {
+  window.dispatchEvent(new Event("approvals:changed"));
 }
 
 function formatDateTime(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/** Data di consegna (YYYY-MM-DD) in formato italiano, senza passare dal fuso orario. */
+function formatDay(value: string) {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString("it-IT");
+}
+
+function headerDetails(fields: { dataConsegna?: string; consegnaLabel?: string; cig?: string; cup?: string }): string[] {
+  const details: string[] = [];
+  if (fields.dataConsegna) details.push(`${fields.consegnaLabel ?? "Consegna"}: ${formatDay(fields.dataConsegna)}`);
+  if (fields.cig) details.push(`CIG ${fields.cig}`);
+  if (fields.cup) details.push(`CUP ${fields.cup}`);
+  return details;
 }
 
 function toCards(data: PendingApprovals): PendingCard[] {
@@ -54,6 +81,9 @@ function toCards(data: PendingApprovals): PendingCard[] {
     requestedAt: order.approvalRequestedAt,
     items: order.items,
     extra: `${order.magazzino}${order.luogoConsegna ? ` · ${order.luogoConsegna}` : ""}`,
+    details: headerDetails(order),
+    note: order.note ?? "",
+    href: `/orders?open=${order.id}`,
     endpoint: `/api/orders/${order.id}/approval`,
   }));
 
@@ -72,6 +102,9 @@ function toCards(data: PendingApprovals): PendingCard[] {
         items: draft.items,
         diff: computeOrderDiff(order, draft),
         extra: `${draft.magazzino}${draft.luogoConsegna ? ` · ${draft.luogoConsegna}` : ""}`,
+        details: headerDetails(draft),
+        note: draft.note ?? "",
+        href: `/orders?open=${order.id}`,
         endpoint: `/api/orders/${order.id}/draft/approval`,
       };
     });
@@ -86,6 +119,9 @@ function toCards(data: PendingApprovals): PendingCard[] {
     requestedAt: quotation.approvalRequestedAt,
     items: quotation.items,
     extra: `Validità ${quotation.validitaGiorni} giorni${quotation.luogoConsegna ? ` · ${quotation.luogoConsegna}` : ""}`,
+    details: headerDetails({ dataConsegna: quotation.dataConsegnaPrevista, consegnaLabel: "Consegna prevista" }),
+    note: quotation.note ?? "",
+    href: `/quotations/${quotation.id}`,
     endpoint: `/api/quotations/${quotation.id}/approval`,
   }));
 
@@ -128,6 +164,7 @@ export default function AdminApprovalsPage() {
       setError("Impossibile caricare le richieste di approvazione");
     } finally {
       setLoading(false);
+      notifyApprovalsChanged();
     }
   }, []);
 
@@ -153,6 +190,7 @@ export default function AdminApprovalsPage() {
       setRejecting(null);
       setRejectNote("");
       setCards((prev) => prev.filter((c) => c.key !== card.key));
+      notifyApprovalsChanged();
     } finally {
       setBusy(null);
     }
@@ -160,20 +198,16 @@ export default function AdminApprovalsPage() {
 
   if (authLoading || (loading && cards.length === 0)) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] bg-background">
       <main className="max-w-4xl mx-auto px-4 sm:px-5 lg:px-10 pt-6 lg:pt-8 pb-8 flex flex-col gap-5">
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground font-medium">Approvazioni</span>
-        </div>
+        <AdminBreadcrumb current="Approvazioni" />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-[28px] leading-tight font-bold flex items-center gap-2">
@@ -185,7 +219,7 @@ export default function AdminApprovalsPage() {
               Documenti con sconti liberi (diversi da 0, 8% e 15%) in attesa della tua decisione. Le righe interessate sono evidenziate.
             </p>
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 w-full justify-center sm:w-auto" onClick={() => void load()} disabled={loading}>
+          <Button variant="outline" className="gap-1.5 w-full justify-center sm:w-auto" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Aggiorna
           </Button>
@@ -218,16 +252,30 @@ export default function AdminApprovalsPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Icon className="h-4 w-4 text-primary shrink-0" />
-                      <span className="font-bold text-sm">{card.title}</span>
+                      <Link
+                        href={card.href}
+                        className="-my-2 inline-flex min-h-10 items-center gap-1 font-bold text-sm text-foreground underline-offset-4 hover:text-primary hover:underline"
+                      >
+                        {card.title}
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                      </Link>
                       <Badge variant="outline" className="text-xs px-2 py-0 h-5 text-orange-700 border-orange-300 bg-orange-50">
                         {approvalLines.length} {approvalLines.length === 1 ? "riga a sconto libero" : "righe a sconto libero"}
                       </Badge>
                     </div>
-                    <p className="text-sm font-semibold mt-1 truncate">{card.cliente}</p>
+                    <p className="text-sm font-semibold mt-1 wrap-anywhere">{card.cliente}</p>
                     <p className="text-xs text-muted-foreground">
                       Richiesto da <strong>{card.agente}</strong> il {formatDateTime(card.requestedAt)}
                       {card.extra ? ` · ${card.extra}` : ""}
                     </p>
+                    {card.details.length > 0 && (
+                      <p className="text-xs text-foreground/80 mt-0.5">{card.details.join(" · ")}</p>
+                    )}
+                    {card.note.trim() && (
+                      <p className="mt-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs text-foreground/80 whitespace-pre-line wrap-anywhere">
+                        <strong>Note:</strong> {card.note.trim()}
+                      </p>
+                    )}
                     {card.diff && (
                       <p className="text-xs text-muted-foreground mt-1">
                         <strong>Differenze rispetto all&apos;ordine inviato:</strong> {diffSummary(card.diff)}
@@ -269,10 +317,10 @@ export default function AdminApprovalsPage() {
                         autoFocus
                       />
                       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                        <Button variant="outline" size="sm" onClick={() => { setRejecting(null); setRejectNote(""); }} disabled={isBusy} className="w-full justify-center sm:w-auto">
+                        <Button variant="outline" onClick={() => { setRejecting(null); setRejectNote(""); }} disabled={isBusy} className="w-full justify-center sm:w-auto">
                           Annulla
                         </Button>
-                        <Button variant="destructive" size="sm" onClick={() => void decide(card, "reject", rejectNote)} disabled={isBusy} className="gap-1.5 w-full justify-center sm:w-auto">
+                        <Button variant="destructive" onClick={() => void decide(card, "reject", rejectNote)} disabled={isBusy} className="gap-1.5 w-full justify-center sm:w-auto">
                           {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
                           Conferma rifiuto
                         </Button>
@@ -282,7 +330,6 @@ export default function AdminApprovalsPage() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                       <Button
                         variant="outline"
-                        size="sm"
                         onClick={() => { setRejecting(card.key); setRejectNote(""); }}
                         disabled={isBusy}
                         className="gap-1.5 text-destructive hover:text-destructive w-full justify-center sm:w-auto"
@@ -290,7 +337,7 @@ export default function AdminApprovalsPage() {
                         <X className="h-3.5 w-3.5" />
                         Rifiuta
                       </Button>
-                      <Button size="sm" onClick={() => void decide(card, "approve")} disabled={isBusy} className="gap-1.5 w-full justify-center sm:w-auto">
+                      <Button onClick={() => void decide(card, "approve")} disabled={isBusy} className="gap-1.5 w-full justify-center sm:w-auto">
                         {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                         {card.kind === "quotation" ? "Approva preventivo" : card.kind === "draft" ? "Approva e applica modifica" : "Approva e invia al magazzino"}
                       </Button>

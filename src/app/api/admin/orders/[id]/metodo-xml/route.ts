@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { dbOrderToOrder, type DbOrder } from "@/lib/orders";
+import { dbOrderToOrder, isUnsentOrderStatus, type DbOrder } from "@/lib/orders";
 import { buildMetodoOrderXmlForOrder } from "@/lib/metodo-xml";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +31,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!row) return NextResponse.json({ error: "Ordine non trovato" }, { status: 404 });
 
   const order = dbOrderToOrder(row);
+  // Solo ordini inviati al magazzino: bozze, ordini in approvazione e annullati non vanno importati in Metodo.
+  if (isUnsentOrderStatus(order.status) || order.status === "annullato") {
+    const stato =
+      order.status === "annullato" ? "annullato" : order.status === "bozza" ? "in bozza" : "in attesa di approvazione";
+    return NextResponse.json(
+      { error: `L'ordine #${order.id} è ${stato}: non è esportabile in Metodo.` },
+      { status: 409 }
+    );
+  }
+
   const result = buildMetodoOrderXmlForOrder(order);
 
   if (!result.ok) {
