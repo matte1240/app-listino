@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import { FileSpreadsheet, Printer } from "lucide-react";
 import { toast } from "sonner";
@@ -30,6 +30,9 @@ export default function Home() {
   const { user, loading } = useAuth();
   const isAdmin = user?.role === "admin";
   const [exporting, setExporting] = useState(false);
+  // Altezza della ricerca sticky, per allineare la timeline delle categorie subito sotto.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const stickyHeaderRef = useRef<HTMLDivElement>(null);
   const headerCellClass = "border border-black px-2 py-1";
   const bodyCellClass = "border border-black px-2 py-1";
 
@@ -57,6 +60,17 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const header = stickyHeaderRef.current;
+    const root = rootRef.current;
+    if (!header || !root) return;
+    const observer = new ResizeObserver(() => {
+      root.style.setProperty("--listino-header-h", `${header.offsetHeight}px`);
+    });
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [loading]);
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
@@ -67,7 +81,11 @@ export default function Home() {
 
   return (
     <div className="min-h-dvh flex flex-col bg-background">
-      <div className="no-print min-h-dvh flex flex-col">
+      <div
+        ref={rootRef}
+        className="no-print min-h-dvh flex flex-col"
+        style={{ "--listino-header-h": "69px" } as CSSProperties}
+      >
         <div className="mx-auto w-full max-w-2xl px-4 pt-6 lg:max-w-5xl lg:px-10 lg:pt-8">
           <PageHeader
             eyebrow="Catalogo"
@@ -99,14 +117,14 @@ export default function Home() {
           />
         </div>
 
-        <div className="sticky top-14 z-30 mt-4 border-b border-border/70 bg-background/95 backdrop-blur-md lg:top-0">
+        <div ref={stickyHeaderRef} className="sticky top-14 z-30 mt-4 border-b border-border/70 bg-background/95 backdrop-blur-md lg:top-0">
           <div className="mx-auto max-w-2xl px-4 py-3 lg:max-w-5xl lg:px-10">
             <SearchBar />
           </div>
         </div>
 
         <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-5 pb-8 lg:max-w-5xl lg:px-10">
-          <MaterialList isReadOnlyCatalog={true} />
+          <MaterialList isReadOnlyCatalog={true} stickyTop="var(--app-header-h) + var(--listino-header-h)" />
         </main>
       </div>
 

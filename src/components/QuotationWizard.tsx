@@ -557,6 +557,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               openArticleRequest={openArticleRequest}
               onOpenArticleRequestHandled={handleOpenArticleRequestHandled}
               onCreateManualFromSearch={handleCreateManualFromSearch}
+              stickyTop="var(--app-header-h) + var(--step2-header-h)"
             />
           </main>
 

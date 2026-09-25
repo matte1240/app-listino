@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, type CSSProperties } from "react";
 import { PackagePlus, PackageSearch } from "lucide-react";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import MaterialCard from "@/components/MaterialCard";
+import CategoryTimeline from "@/components/CategoryTimeline";
 import type { Material } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,8 @@ interface Props {
   onOpenArticleRequestHandled?: (requestId: number) => void;
   /** "Nessun risultato": apre la casella righe manuali con la descrizione precompilata dal testo cercato. */
   onCreateManualFromSearch?: (descrizione: string) => void;
+  /** Altezza di ciò che resta fisso in cima scorrendo (espressione CSS): serve ad allineare la timeline e i salti di categoria. */
+  stickyTop?: string;
 }
 
 export default function MaterialList({
@@ -29,7 +32,9 @@ export default function MaterialList({
   openArticleRequest,
   onOpenArticleRequestHandled,
   onCreateManualFromSearch,
+  stickyTop = "var(--app-header-h)",
 }: Props) {
+  const listRef = useRef<HTMLDivElement>(null);
   const orderMaterials = useOrderStore((s) => s.materials);
   const orderSearchQuery = useOrderStore((s) => s.searchQuery);
   const orderShowObsolete = useOrderStore((s) => s.showObsolete);
@@ -76,6 +81,11 @@ export default function MaterialList({
     }
     return map;
   }, [filtered]);
+
+  const timelineCategories = useMemo(
+    () => Array.from(grouped, ([label, items]) => ({ label, count: items.length })),
+    [grouped]
+  );
 
   if (materials.length === 0) {
     return (
@@ -125,35 +135,47 @@ export default function MaterialList({
   const hiddenLabel = !showObsolete && hiddenObsoleteCount > 0 ? ` · ${hiddenObsoleteCount} obsoleti nascosti` : "";
 
   return (
-    <div className="flex flex-col gap-6">
-      <p className="px-1 text-[13px] text-muted-foreground">
-        <strong className="font-bold text-foreground tabular-nums">{filtered.length.toLocaleString("it-IT")}</strong> {summaryLabel}
-        {hiddenLabel}
-      </p>
+    // Su desktop la lista resta a una colonna e lo spazio laterale va alla timeline delle categorie
+    // (solo se la colonna è abbastanza larga: nel wizard c'è anche il carrello).
+    <div className="@container" style={{ "--catalog-sticky-top": `calc(${stickyTop})` } as CSSProperties}>
+      <div className="grid grid-cols-1 gap-8 lg:@2xl:grid-cols-[minmax(0,1fr)_11rem]">
+        <div ref={listRef} className="flex min-w-0 flex-col gap-6">
+          <p className="px-1 text-[13px] text-muted-foreground">
+            <strong className="font-bold text-foreground tabular-nums">{filtered.length.toLocaleString("it-IT")}</strong> {summaryLabel}
+            {hiddenLabel}
+          </p>
 
-      {/* Sezioni per categoria */}
-      {Array.from(grouped.entries()).map(([categoria, items]) => (
-        <section key={categoria} className="flex flex-col gap-3">
-          <div className="flex items-center gap-2.5 px-1">
-            <h2 className="text-xs font-bold tracking-[0.1em] text-primary uppercase">{categoria}</h2>
-            <span className="text-xs font-semibold text-muted-foreground tabular-nums">{items.length}</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <div className={cn("grid grid-cols-1 gap-2.5", isReadOnlyCatalog && "lg:grid-cols-2 lg:gap-3")}>
-            {items.map((material) => (
-              <MaterialCard
-                key={material.codice}
-                material={material}
-                isReadOnlyCatalog={isReadOnlyCatalog}
-                store={store}
-                onArticleConfirmed={onArticleConfirmed}
-                openArticleRequest={openArticleRequest}
-                onOpenArticleRequestHandled={onOpenArticleRequestHandled}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+          {/* Sezioni per categoria */}
+          {Array.from(grouped.entries()).map(([categoria, items]) => (
+            <section
+              key={categoria}
+              data-catalog-section
+              className="flex scroll-mt-[calc(var(--catalog-sticky-top)+1rem)] flex-col gap-3"
+            >
+              <div className="flex items-center gap-2.5 px-1">
+                <h2 className="text-xs font-bold tracking-[0.1em] text-primary uppercase">{categoria}</h2>
+                <span className="text-xs font-semibold text-muted-foreground tabular-nums">{items.length}</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <div className={cn("flex flex-col gap-2.5", isReadOnlyCatalog && "lg:gap-3")}>
+                {items.map((material) => (
+                  <MaterialCard
+                    key={material.codice}
+                    material={material}
+                    isReadOnlyCatalog={isReadOnlyCatalog}
+                    store={store}
+                    onArticleConfirmed={onArticleConfirmed}
+                    openArticleRequest={openArticleRequest}
+                    onOpenArticleRequestHandled={onOpenArticleRequestHandled}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        <CategoryTimeline categories={timelineCategories} listRef={listRef} className="hidden lg:@2xl:block" />
+      </div>
     </div>
   );
 }
