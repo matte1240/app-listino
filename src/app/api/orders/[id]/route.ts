@@ -17,7 +17,7 @@ import {
 } from "@/lib/orders";
 import { getDbQuotation, markQuotationConverted, type DbQuotation } from "@/lib/quotations";
 import { userOwnsCustomerByRap } from "@/lib/rap";
-import { countArticleLines, itemsRequireApproval, normalizeOrderItems } from "@/lib/order-lines";
+import { getOrderIncompleteReason, itemsRequireApproval, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
 import { normalizeCig, normalizeCup } from "@/lib/cig-cup";
 import { getAppBaseUrl } from "@/lib/app-url";
@@ -119,8 +119,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     resolvedCliente = selectedCustomer.ragione_sociale;
   }
 
-  if (!resolvedCliente || !magazzino?.trim() || countArticleLines(items) === 0) {
-    return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
+  // Bozze (anche di modifica) senza magazzino o con CIG/CUP incompleti: i controlli completi valgono per l'invio.
+  const resolvedMagazzino = typeof magazzino === "string" ? magazzino.trim() : "";
+  const incompleteReason = getOrderIncompleteReason({ cliente: resolvedCliente, magazzino: resolvedMagazzino, cig, cup, items }, requestedStatus);
+  if (incompleteReason) {
+    return NextResponse.json({ error: incompleteReason }, { status: 400 });
   }
 
   const existingStatus = resolveOrderStatus(existing.status);
@@ -135,7 +138,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const orderWriteData: OrderWriteData = {
     cliente: resolvedCliente,
     clienteId: resolvedClienteId,
-    magazzino,
+    magazzino: resolvedMagazzino,
     luogoConsegna: luogoConsegna ?? "",
     cig,
     cup,
@@ -198,7 +201,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       ).run(
         resolvedCliente,
         resolvedClienteId,
-        magazzino,
+        resolvedMagazzino,
         luogoConsegna ?? "",
         cig,
         cup,
@@ -286,7 +289,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       ).run(
         resolvedCliente,
         resolvedClienteId,
-        magazzino,
+        resolvedMagazzino,
         luogoConsegna ?? "",
         cig,
         cup,

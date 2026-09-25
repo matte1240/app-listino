@@ -19,7 +19,7 @@ interface Props<T extends string> {
 export default function SegmentedTabs<T extends string>({ options, value, onChange, className }: Props<T>) {
   return (
     <div
-      className={cn("grid gap-1 rounded-xl bg-sunken p-1", className)}
+      className={cn("grid shrink-0 gap-1 rounded-xl bg-sunken p-1", className)}
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
       {options.map((option) => {

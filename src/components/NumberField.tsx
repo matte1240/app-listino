@@ -59,7 +59,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(function Numb
         }
       }}
       className={cn(
-        "h-9 rounded-lg border border-border bg-background px-2 text-sm font-semibold text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40",
+        "h-9 rounded-lg border border-border bg-card px-2 text-sm font-semibold text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/40",
         invalid && "border-destructive focus:border-destructive focus:ring-destructive/30",
         className
       )}

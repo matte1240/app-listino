@@ -22,6 +22,25 @@ export function calculateOrderTotalPieces(items: ReadonlyArray<Pick<OrderHistory
   return items.reduce((sum, item) => (isArticleLine(item) ? sum + item.qty : sum), 0);
 }
 
+/** Quantità con la virgola decimale: 12.5 → "12,5". */
+export function formatQuantity(value: number): string {
+  return value.toLocaleString("it-IT", { maximumFractionDigits: 3 });
+}
+
+/**
+ * Quantità delle righe articolo/manuale sommate per unità di misura (unità diverse non si sommano):
+ * [2 pz, 12,5 mq, 1 pz] → "3 pz · 12,5 mq". Stringa vuota senza righe articolo.
+ */
+export function formatOrderQuantitiesByUnit(items: ReadonlyArray<Pick<OrderHistoryItem, "tipo" | "qty" | "um">>): string {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    if (!isArticleLine(item)) continue;
+    const um = item.um?.trim().toLowerCase() || "pz";
+    totals.set(um, (totals.get(um) ?? 0) + item.qty);
+  }
+  return Array.from(totals, ([um, qty]) => `${formatQuantity(qty)} ${um}`).join(" · ");
+}
+
 export function formatOrderCurrency(value: number): string {
   return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }

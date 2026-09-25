@@ -6,8 +6,24 @@ import { Drawer as DrawerPrimitive } from "vaul"
 import { cn } from "@/lib/utils"
 
 function Drawer({
+  closeOnMedia,
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Root>) {
+}: React.ComponentProps<typeof DrawerPrimitive.Root> & {
+  /** Media query che chiude il drawer quando diventa vera (es. rotazione del tablet verso il layout con sidebar). */
+  closeOnMedia?: string
+}) {
+  const { open, onOpenChange } = props
+  React.useEffect(() => {
+    if (!closeOnMedia || !open) return
+    const media = window.matchMedia(closeOnMedia)
+    const closeIfMatches = () => {
+      if (media.matches) onOpenChange?.(false)
+    }
+    closeIfMatches()
+    media.addEventListener("change", closeIfMatches)
+    return () => media.removeEventListener("change", closeIfMatches)
+  }, [closeOnMedia, open, onOpenChange])
+
   return <DrawerPrimitive.Root data-slot="drawer" {...props} />
 }
 
@@ -48,6 +64,7 @@ function DrawerOverlay({
 function DrawerContent({
   className,
   children,
+  onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Content>) {
   return (
@@ -55,6 +72,11 @@ function DrawerContent({
       <DrawerOverlay />
       <DrawerPrimitive.Content
         data-slot="drawer-content"
+        onPointerDownOutside={(event) => {
+          onPointerDownOutside?.(event)
+          // Un tocco sui toast (es. "Annulla" dopo una rimozione) non chiude il drawer.
+          if (event.target instanceof Element && event.target.closest("[data-sonner-toaster]")) event.preventDefault()
+        }}
         className={cn(
           "group/drawer-content fixed z-50 flex h-auto flex-col bg-background",
           "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=top]:rounded-b-lg data-[vaul-drawer-direction=top]:border-b",

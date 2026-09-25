@@ -5,7 +5,7 @@ import { sendOrderEmail } from "@/lib/mail";
 import { dbOrderToOrder, getOrderDraftMap, type DbOrder } from "@/lib/orders";
 import { getDbQuotation, markQuotationConverted, type DbQuotation } from "@/lib/quotations";
 import { userOwnsCustomerByRap } from "@/lib/rap";
-import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { getOrderIncompleteReason, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
 import { normalizeCig, normalizeCup } from "@/lib/cig-cup";
 import { getAppBaseUrl } from "@/lib/app-url";
@@ -149,8 +149,11 @@ export async function POST(req: NextRequest) {
     resolvedCliente = selectedCustomer.ragione_sociale;
   }
 
-  if (!resolvedCliente || !magazzino?.trim() || countArticleLines(items) === 0) {
-    return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
+  // Le bozze si salvano anche senza magazzino (si sceglie allo step Dettagli): serve solo per l'invio.
+  const resolvedMagazzino = typeof magazzino === "string" ? magazzino.trim() : "";
+  const incompleteReason = getOrderIncompleteReason({ cliente: resolvedCliente, magazzino: resolvedMagazzino, cig, cup, items }, requestedStatus);
+  if (incompleteReason) {
+    return NextResponse.json({ error: incompleteReason }, { status: 400 });
   }
 
   let sourceQuotation: DbQuotation | undefined;
@@ -187,7 +190,7 @@ export async function POST(req: NextRequest) {
         .run(
           resolvedCliente,
           resolvedClienteId,
-          magazzino,
+          resolvedMagazzino,
           luogoConsegna ?? "",
           cig,
           cup,
@@ -224,7 +227,7 @@ export async function POST(req: NextRequest) {
     quotationId: resolvedQuotationId,
     clienteId: resolvedClienteId,
     cliente: resolvedCliente,
-    magazzino,
+    magazzino: resolvedMagazzino,
     luogoConsegna: luogoConsegna ?? "",
     cig,
     cup,

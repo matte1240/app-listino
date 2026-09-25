@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardList, Trash2, Pencil, ChevronDown, Package, AlertTriangle, Loader2, Truck, CheckCircle, XCircle, Undo2, Plus, Clock, ShieldAlert, Calendar, MapPin, MessageSquare, Send, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,17 +13,44 @@ import PageHeader from "@/components/PageHeader";
 import SearchField from "@/components/SearchField";
 import SegmentedTabs from "@/components/SegmentedTabs";
 import { cn } from "@/lib/utils";
-import { countArticleLines } from "@/lib/order-lines";
-import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
+import { countArticleLines, getOrderIncompleteReason } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, formatOrderCurrency, formatOrderQuantitiesByUnit } from "@/lib/order-totals";
 import type { Order, OrderStatus } from "@/types";
 
 type OrderTab = "attivi" | "annullati";
 
+/** Da lg il dettaglio è nel pannello laterale ed è l'elenco a scorrere, sotto è la pagina. */
+const MASTER_DETAIL_QUERY = "(min-width: 64rem)";
+
+/** Altezza utile della pagina: la shell aggiunge già barra superiore e tab bar (0 da lg). */
+const PAGE_MIN_H = "min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))]";
+
 export default function OrdersPage() {
+  // useSearchParams (apertura diretta con ?open=<id>) richiede un confine Suspense.
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <OrdersPageContent />
+    </Suspense>
+  );
+}
+
+function PageLoader() {
+  return (
+    <div className={cn(PAGE_MIN_H, "flex items-center justify-center")}>
+      <p className="text-muted-foreground">Caricamento…</p>
+    </div>
+  );
+}
+
+function OrdersPageContent() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<Order[]>([]);
+  /** Scheda a cui appartiene `orders`: finché non coincide con quella attiva l'elenco mostra il caricamento. */
+  const [ordersTab, setOrdersTab] = useState<OrderTab | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -33,6 +60,17 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<OrderTab>("attivi");
   const [orderCounts, setOrderCounts] = useState({ attivi: 0, annullati: 0 });
+  const loadSeqRef = useRef(0);
+  const stickyBarRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLElement>(null);
+  const prevTabRef = useRef(activeTab);
+  /** Ordine da portare in vista appena espanso (apertura con ?open=<id>). */
+  const pendingScrollRef = useRef<number | null>(null);
+  /** Richiesta ?open=<id> in corso: schede già controllate e se è stata gestita (il parametro sparisce in modo asincrono). */
+  const openRequestRef = useRef<{ id: number | null; triedTabs: OrderTab[]; done: boolean }>({ id: null, triedTabs: [], done: false });
+
+  const openParam = searchParams.get("open");
+  const openId = openParam && /^\d+$/.test(openParam) ? Number(openParam) : null;
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -44,17 +82,72 @@ export default function OrdersPage() {
     }
   }, [activeTab, authLoading, user]);
 
+  // Cambio scheda (anche automatico dopo annullamento o ripristino): l'elenco riparte dall'inizio.
+  useEffect(() => {
+    if (prevTabRef.current === activeTab) return;
+    prevTabRef.current = activeTab;
+    window.scrollTo({ top: 0 });
+    listRef.current?.scrollTo({ top: 0 });
+  }, [activeTab]);
+
+  // Apertura diretta da /orders?open=<id> (es. "Apri ordine" di un preventivo trasformato): espande
+  // l'ordine, cercandolo anche tra gli annullati, poi toglie il parametro dall'indirizzo.
+  useEffect(() => {
+    const request = openRequestRef.current;
+    if (request.id !== openId) Object.assign(request, { id: openId, triedTabs: [], done: false });
+    if (openId === null || request.done || loading || ordersTab !== activeTab) return;
+    if (orders.some((order) => order.id === openId)) {
+      pendingScrollRef.current = openId;
+      setSearchQuery("");
+      setExpanded(openId);
+    } else {
+      request.triedTabs.push(activeTab);
+      const otherTab: OrderTab = activeTab === "attivi" ? "annullati" : "attivi";
+      if (!request.triedTabs.includes(otherTab)) {
+        setActiveTab(otherTab);
+        return;
+      }
+      toast.error(`Ordine #${openId} non trovato`);
+      setActiveTab(request.triedTabs[0]);
+    }
+    request.done = true;
+    router.replace("/orders", { scroll: false });
+  }, [openId, loading, ordersTab, activeTab, orders, router]);
+
+  useEffect(() => {
+    if (expanded === null || pendingScrollRef.current !== expanded) return;
+    pendingScrollRef.current = null;
+    scrollOrderIntoView(expanded, listRef.current, stickyBarRef.current);
+  }, [expanded]);
+
+  // Rotazione con un ordine aperto: il dettaglio passa dal pannello laterale alla card espansa
+  // (o viceversa), quindi la card torna in vista invece di restare fuori schermo.
+  useEffect(() => {
+    if (expanded === null) return;
+    const media = window.matchMedia(MASTER_DETAIL_QUERY);
+    const onChange = () => requestAnimationFrame(() => scrollOrderIntoView(expanded, listRef.current, stickyBarRef.current));
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, [expanded]);
+
   async function loadOrders(tab: OrderTab) {
+    // Le schede restano cliccabili durante il caricamento: vale solo la risposta dell'ultima richiesta.
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
       const res = await fetch(`/api/orders?status=${tab}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        if (seq !== loadSeqRef.current) return;
         setOrders(data.orders ?? []);
         setOrderCounts(data.counts ?? { attivi: 0, annullati: 0 });
+        setOrdersTab(tab);
       }
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+        setLoadedOnce(true);
+      }
     }
   }
 
@@ -80,7 +173,7 @@ export default function OrdersPage() {
         }
         await loadOrders(nextTab);
       } else {
-        alert("Errore nella cancellazione dell'ordine");
+        toast.error("Errore nella cancellazione dell'ordine");
       }
     } finally {
       setDeleting(false);
@@ -94,7 +187,7 @@ export default function OrdersPage() {
     try {
       const res = await fetch(`/api/orders/${order.id}/restore`, { method: "POST" });
       if (!res.ok) {
-        alert("Errore durante il ripristino dell'ordine");
+        toast.error("Errore durante il ripristino dell'ordine");
         return;
       }
 
@@ -112,6 +205,16 @@ export default function OrdersPage() {
     const isStandaloneDraft = order.status === "bozza";
     const hasAttachedDraft = !!order.hasDraft;
     if (!isStandaloneDraft && !hasAttachedDraft) return;
+
+    // Bozza incompleta (es. magazzino non ancora scelto): si completa nella modifica, non si invia.
+    const incompleteReason = isStandaloneDraft ? getOrderIncompleteReason(order, "confermato") : null;
+    if (incompleteReason) {
+      toast.error(incompleteReason, {
+        description: "Completa la bozza prima di inviarla.",
+        action: { label: "Modifica", onClick: () => handleEdit(order) },
+      });
+      return;
+    }
 
     const confirmMessage = isStandaloneDraft
       ? `Vuoi inviare la bozza ordine #${order.id}?`
@@ -173,7 +276,7 @@ export default function OrdersPage() {
     try {
       const res = await fetch(`/api/orders/${order.id}/draft`, { method: "DELETE" });
       if (!res.ok) {
-        alert("Errore durante lo scarto della bozza");
+        toast.error("Errore durante lo scarto della bozza");
         return;
       }
 
@@ -226,20 +329,18 @@ export default function OrdersPage() {
       });
   }, [activeTab, orders, searchTokens]);
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-dvh flex items-center justify-center">
-        <p className="text-muted-foreground">Caricamento…</p>
-      </div>
-    );
+  // Caricamento a pagina intera solo la prima volta: poi titolo, schede e ricerca restano montati.
+  if (authLoading || (loading && !loadedOnce)) {
+    return <PageLoader />;
   }
 
   const isAdmin = user?.role === "admin";
   const selectedOrder = filteredOrders.find((order) => order.id === expanded) ?? null;
+  const listLoading = loading && ordersTab !== activeTab;
 
   /** Dettaglio ordine: in linea sotto la card su mobile, nel pannello laterale su desktop. */
   const renderOrderDetail = (order: Order, inset: string) => {
-    const totalQty = calculateOrderTotalPieces(order.items);
+    const quantities = formatOrderQuantitiesByUnit(order.items);
     const totalImponibile = calculateOrderDiscountedTotal(order.items);
     const isDraft = order.status === "bozza";
     const isPendingApproval = order.status === "in_approvazione";
@@ -262,7 +363,7 @@ export default function OrdersPage() {
     const showDeleteConfirm = deleteConfirm === order.id;
 
     const meta: { label: string; value: ReactNode; wide?: boolean; mono?: boolean }[] = [
-      { label: "Magazzino", value: order.magazzino },
+      { label: "Magazzino", value: order.magazzino || <span className="text-muted-foreground">Da scegliere</span> },
       ...(order.dataConsegna ? [{ label: "Consegna", value: formatDelivery(order.dataConsegna) }] : []),
       ...(order.luogoConsegna ? [{ label: "Luogo di consegna", value: order.luogoConsegna, wide: true }] : []),
       ...(order.cig ? [{ label: "CIG", value: order.cig, mono: true }] : []),
@@ -274,9 +375,10 @@ export default function OrdersPage() {
       ...(order.cancelledFromStatus ? [{ label: "Stato precedente", value: formatStatusLabel(order.cancelledFromStatus) }] : []),
     ];
 
+    // Container query: il layout segue la larghezza del dettaglio (card espansa o pannello laterale), non del viewport.
     return (
-      <div className="flex flex-col">
-        <dl className={cn("grid grid-cols-2 gap-x-4 gap-y-3 bg-muted/50 py-3.5 sm:grid-cols-4", inset)}>
+      <div className="@container flex flex-col">
+        <dl className={cn("grid grid-cols-2 gap-x-4 gap-y-3 bg-muted/50 py-3.5 @xl:grid-cols-4", inset)}>
           {meta.map((entry) => (
             <div key={entry.label} className={cn("min-w-0", entry.wide && "col-span-2")}>
               <dt className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">{entry.label}</dt>
@@ -288,7 +390,7 @@ export default function OrdersPage() {
         {order.note && (
           <div className={cn("flex items-start gap-2 border-t border-border/70 py-3 text-sm text-foreground/85", inset)}>
             <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span><strong className="font-bold">Note:</strong> {order.note}</span>
+            <span className="min-w-0 wrap-anywhere"><strong className="font-bold">Note:</strong> {order.note}</span>
           </div>
         )}
 
@@ -340,11 +442,13 @@ export default function OrdersPage() {
           ))}
         </div>
 
-        <div className={cn("flex items-end justify-end gap-8 py-4", inset)}>
-          <div className="flex flex-col items-end">
-            <span className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Totale pezzi</span>
-            <span className="text-base font-bold tabular-nums">{totalQty}</span>
-          </div>
+        <div className={cn("flex flex-wrap items-end justify-end gap-x-8 gap-y-2 py-4", inset)}>
+          {quantities && (
+            <div className="flex flex-col items-end">
+              <span className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Quantità</span>
+              <span className="text-base font-bold tabular-nums">{quantities}</span>
+            </div>
+          )}
           <div className="flex flex-col items-end">
             <span className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Totale imponibile</span>
             <span className="font-display text-2xl leading-tight font-bold tabular-nums">{formatOrderCurrency(totalImponibile)}</span>
@@ -357,16 +461,16 @@ export default function OrdersPage() {
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10">
                 <AlertTriangle className="h-4.5 w-4.5 text-destructive" />
               </div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-destructive">{deleteTitle}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{deleteMessage}</p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <p className="mt-1 text-xs wrap-break-word text-muted-foreground">{deleteMessage}</p>
+                <div className="mt-3 flex flex-col gap-2 @sm:flex-row @sm:flex-wrap">
                   <Button
                     size="sm"
                     variant="destructive"
                     onClick={() => handleDelete(order.id)}
                     disabled={deleting}
-                    className="w-full justify-center sm:w-auto"
+                    className="w-full justify-center @sm:w-auto"
                   >
                     {deleting ? (
                       <><Loader2 className="animate-spin" /> Operazione in corso…</>
@@ -379,7 +483,7 @@ export default function OrdersPage() {
                     variant="outline"
                     onClick={() => setDeleteConfirm(null)}
                     disabled={deleting}
-                    className="w-full justify-center sm:w-auto"
+                    className="w-full justify-center @sm:w-auto"
                   >
                     Annulla
                   </Button>
@@ -390,13 +494,13 @@ export default function OrdersPage() {
         )}
 
         {canEditOrder(order) && !showDeleteConfirm && (
-          <div className={cn("grid grid-cols-2 gap-2 border-t border-border py-3.5 sm:flex sm:flex-row sm:flex-wrap sm:justify-end", inset)}>
+          <div className={cn("grid grid-cols-2 gap-2 border-t border-border py-3.5 @xl:flex @xl:flex-row @xl:flex-wrap @xl:justify-end", inset)}>
             {isCancelled ? (
               <Button
                 variant="outline"
                 onClick={() => handleRestore(order)}
                 disabled={isRestoring}
-                className="col-span-2 w-full justify-center text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 sm:w-auto dark:text-emerald-300 dark:hover:bg-emerald-900/20"
+                className="col-span-2 w-full justify-center text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700 @xl:w-auto dark:text-emerald-300 dark:hover:bg-emerald-900/20"
               >
                 {isRestoring ? <><Loader2 className="animate-spin" /> Ripristino…</> : <><Undo2 /> Ripristina ordine</>}
               </Button>
@@ -405,7 +509,7 @@ export default function OrdersPage() {
                 variant="outline"
                 onClick={() => handleDiscardDraft(order)}
                 disabled={isSendingThisDraft || isDiscardingThisDraft || deleting}
-                className="col-span-2 w-full justify-center text-amber-800 hover:bg-amber-50 hover:text-amber-800 sm:w-auto dark:text-amber-300 dark:hover:bg-amber-900/20"
+                className="col-span-2 w-full justify-center text-amber-800 hover:bg-amber-50 hover:text-amber-800 @xl:w-auto dark:text-amber-300 dark:hover:bg-amber-900/20"
               >
                 {isDiscardingThisDraft ? <><Loader2 className="animate-spin" /> Scarto bozza…</> : <><Undo2 /> Scarta bozza</>}
               </Button>
@@ -416,7 +520,7 @@ export default function OrdersPage() {
                   variant="destructive-soft"
                   onClick={() => setDeleteConfirm(order.id)}
                   disabled={isSendingThisDraft || isDiscardingThisDraft}
-                  className="w-full justify-center sm:order-first sm:mr-auto sm:w-auto"
+                  className="w-full justify-center @xl:order-first @xl:mr-auto @xl:w-auto"
                 >
                   <Trash2 />
                   {deleteActionLabel}
@@ -425,7 +529,7 @@ export default function OrdersPage() {
                   variant="outline"
                   onClick={() => handleEdit(order)}
                   disabled={isSendingThisDraft || isDiscardingThisDraft}
-                  className="w-full justify-center text-primary sm:w-auto"
+                  className="w-full justify-center text-primary @xl:w-auto"
                 >
                   <Pencil />
                   {editActionLabel}
@@ -436,7 +540,7 @@ export default function OrdersPage() {
               <Button
                 onClick={() => handleSendDraft(order)}
                 disabled={isSendingThisDraft || isDiscardingThisDraft || deleting}
-                className="col-span-2 w-full justify-center sm:w-auto"
+                className="col-span-2 w-full justify-center @xl:w-auto"
               >
                 {isSendingThisDraft ? <><Loader2 className="animate-spin" /> Invio bozza…</> : <><Send /> Invia bozza</>}
               </Button>
@@ -471,10 +575,10 @@ export default function OrdersPage() {
   );
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className={cn(PAGE_MIN_H, "bg-background")}>
       <main className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-24 lg:h-dvh lg:max-w-[1200px] lg:gap-6 lg:px-10 lg:pb-0">
         {/* Titolo, schede e ricerca restano visibili: sticky su mobile, fissi su desktop (scorrono elenco e dettaglio) */}
-        <div className="sticky top-[var(--app-header-h)] z-20 -mx-4 border-b border-border/70 bg-background px-4 pt-5 pb-3 lg:static lg:mx-0 lg:border-0 lg:px-0 lg:pt-8 lg:pb-0">
+        <div ref={stickyBarRef} className="sticky top-[var(--app-header-h)] z-20 -mx-4 border-b border-border/70 bg-background px-4 pt-5 pb-3 lg:static lg:mx-0 lg:border-0 lg:px-0 lg:pt-8 lg:pb-0">
           <PageHeader
             className="gap-3"
             eyebrow="Cronologia"
@@ -490,8 +594,9 @@ export default function OrdersPage() {
                     { value: "annullati", label: "Annullati", count: orderCounts.annullati },
                   ]}
                 />
+                {/* Da lg larga fino a 360px ma restringibile: accanto al titolo anche a 1024px */}
                 <SearchField
-                  className="order-1 sm:flex-1 lg:order-2 lg:w-[360px] lg:flex-none"
+                  className="order-1 sm:flex-1 lg:order-2 lg:w-0 lg:max-w-[360px] lg:min-w-48"
                   value={searchQuery}
                   onChange={setSearchQuery}
                   placeholder="Numero, cliente, cantiere, agente"
@@ -502,8 +607,14 @@ export default function OrdersPage() {
           />
         </div>
 
-        {orders.length === 0 ? (
-          emptyState("Nessun ordine salvato", "Gli ordini salvati appariranno qui")
+        {listLoading ? (
+          <div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Caricamento…
+          </div>
+        ) : orders.length === 0 ? (
+          activeTab === "annullati"
+            ? emptyState("Nessun ordine annullato", "Gli ordini annullati appariranno qui")
+            : emptyState("Nessun ordine salvato", "Gli ordini salvati appariranno qui")
         ) : filteredOrders.length === 0 ? (
           emptyState(
             "Nessun ordine trovato",
@@ -514,17 +625,24 @@ export default function OrdersPage() {
                 : "Gli ordini attivi appariranno qui"
           )
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-            <section aria-label="Elenco ordini" className="flex min-w-0 flex-col gap-2.5 lg:-mx-1.5 lg:overflow-y-auto lg:px-1.5 lg:pt-1.5 lg:pb-8">
+          <div
+            aria-busy={loading}
+            className={cn(
+              "grid grid-cols-1 gap-6 transition-opacity lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]",
+              loading && "pointer-events-none opacity-60"
+            )}
+          >
+            <section ref={listRef} aria-label="Elenco ordini" className="flex min-w-0 flex-col gap-2.5 lg:-mx-1.5 lg:overflow-y-auto lg:px-1.5 lg:pt-1.5 lg:pb-8">
               {filteredOrders.map((order) => {
                 const isOpen = expanded === order.id;
                 const isCancelled = order.status === "annullato";
-                const totalQty = calculateOrderTotalPieces(order.items);
+                const quantities = formatOrderQuantitiesByUnit(order.items);
                 const articleCount = countArticleLines(order.items);
                 const totalImponibile = calculateOrderDiscountedTotal(order.items);
                 return (
                   <article
                     key={order.id}
+                    data-order-id={order.id}
                     className={cn(
                       "shrink-0 overflow-hidden rounded-xl border bg-card shadow-card transition-[border-color,box-shadow]",
                       isOpen ? "border-primary ring-4 ring-primary/10" : isCancelled ? "border-red-200 dark:border-red-900/60" : "border-border/80",
@@ -540,9 +658,9 @@ export default function OrdersPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-mono text-xs text-muted-foreground">
-                            #{order.id} · {isCancelled && order.cancelledAt ? `annullato ${formatDate(order.cancelledAt)}` : formatDate(order.createdAt)}
+                            #{order.id} · {isCancelled && order.cancelledAt ? <>annullato <span className="whitespace-nowrap">{formatDate(order.cancelledAt)}</span></> : <span className="whitespace-nowrap">{formatDate(order.createdAt)}</span>}
                           </p>
-                          <p className="mt-0.5 text-base leading-snug font-bold text-foreground">{order.cliente}</p>
+                          <p className="mt-0.5 text-base leading-snug font-bold wrap-anywhere text-foreground">{order.cliente}</p>
                           {order.luogoConsegna && (
                             <p className="mt-0.5 flex items-center gap-1 text-[13px] text-muted-foreground">
                               <MapPin className="h-3.5 w-3.5 shrink-0" />
@@ -557,7 +675,7 @@ export default function OrdersPage() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         {getStatusChip(order.status)}
                         {renderDraftChip(order)}
-                        <Chip><Warehouse /> {order.magazzino}</Chip>
+                        {order.magazzino && <Chip><Warehouse /> {order.magazzino}</Chip>}
                         {isAdmin && <span className="text-xs text-muted-foreground">{order.agenteFullName || order.agente}</span>}
                       </div>
                       <div className="flex items-center gap-x-4 gap-y-1 border-t border-border/70 pt-2.5 text-[13px] text-muted-foreground">
@@ -570,7 +688,7 @@ export default function OrdersPage() {
                           )}
                           <span className="inline-flex items-center gap-1.5">
                             <Package className="h-3.5 w-3.5" />
-                            {articleCount} art. · {totalQty} pz
+                            {articleCount} art.{quantities && ` · ${quantities}`}
                           </span>
                         </div>
                         <ChevronDown className={cn("ml-auto h-4 w-4 shrink-0 transition-transform lg:hidden", isOpen && "rotate-180")} />
@@ -589,13 +707,13 @@ export default function OrdersPage() {
 
             <section
               aria-label="Dettaglio ordine"
-              className="hidden max-h-[calc(100%-2rem)] self-start overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-panel lg:mt-1.5 lg:block"
+              className="@container hidden max-h-[calc(100%-2rem)] self-start overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-panel lg:mt-1.5 lg:block"
             >
               {selectedOrder ? (
                 <>
                   <div className="px-6 pt-6 pb-4">
                     <p className="font-mono text-[13px] text-muted-foreground">Ordine #{selectedOrder.id}</p>
-                    <h2 className="mt-1 font-display text-[28px] leading-tight font-bold tracking-tight text-foreground">{selectedOrder.cliente}</h2>
+                    <h2 className="mt-1 font-display text-[22px] leading-tight font-bold tracking-tight wrap-anywhere text-foreground @md:text-[28px]">{selectedOrder.cliente}</h2>
                     <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                       {getStatusChip(selectedOrder.status)}
                       {renderDraftChip(selectedOrder)}
@@ -617,13 +735,16 @@ export default function OrdersPage() {
         )}
       </main>
 
-      <Link
-        href="/orders/new"
-        className="no-print fixed right-4 bottom-[calc(var(--app-tabbar-h)+0.75rem)] z-30 inline-flex h-14 items-center gap-2 rounded-2xl bg-primary pr-5 pl-4 text-[15px] font-semibold text-primary-foreground shadow-primary transition-colors hover:bg-primary-hover lg:hidden"
-      >
-        <Plus className="h-5 w-5" />
-        Nuovo ordine
-      </Link>
+      {/* Nascosto con un ordine espanso: coprirebbe totali e azioni della card in basso a destra */}
+      {!selectedOrder && (
+        <Link
+          href="/orders/new"
+          className="no-print fixed right-4 bottom-[calc(var(--app-tabbar-h)+0.75rem)] z-30 inline-flex h-14 items-center gap-2 rounded-2xl bg-primary pr-5 pl-4 text-[15px] font-semibold text-primary-foreground shadow-primary transition-colors hover:bg-primary-hover lg:hidden"
+        >
+          <Plus className="h-5 w-5" />
+          Nuovo ordine
+        </Link>
+      )}
     </div>
   );
 }
@@ -648,6 +769,24 @@ function getStatusChip(status: OrderStatus) {
   }
 }
 
+/**
+ * Porta in vista la card di un ordine: da lg scorre l'elenco laterale (solo se la card non è già visibile),
+ * sotto scorre la pagina fino a mettere la card subito sotto la barra sticky di titolo, schede e ricerca.
+ */
+function scrollOrderIntoView(id: number, list: HTMLElement | null, stickyBar: HTMLElement | null) {
+  const card = list?.querySelector<HTMLElement>(`[data-order-id="${id}"]`);
+  if (!list || !card) return;
+  const cardRect = card.getBoundingClientRect();
+  if (window.matchMedia(MASTER_DETAIL_QUERY).matches) {
+    const listRect = list.getBoundingClientRect();
+    if (cardRect.top >= listRect.top && cardRect.bottom <= listRect.bottom) return;
+    list.scrollTo({ top: list.scrollTop + cardRect.top - listRect.top - 8 });
+    return;
+  }
+  const barBottom = stickyBar?.getBoundingClientRect().bottom ?? 0;
+  window.scrollTo({ top: window.scrollY + cardRect.top - barBottom - 12 });
+}
+
 function formatDeliveryShort(date: string) {
   return new Date(date).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
 }
@@ -659,7 +798,7 @@ function formatStatusLabel(status: OrderStatus) {
     case "in_approvazione":
       return "In approvazione";
     case "confermato":
-      return "Confermato";
+      return "Inviato";
     case "in_lavorazione":
       return "In lavorazione";
     case "spedito":

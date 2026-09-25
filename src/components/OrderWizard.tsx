@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   User, Warehouse, MapPin, Calendar, MessageSquare,
   ChevronRight, ChevronLeft, CheckCircle2, Loader2,
@@ -23,19 +24,26 @@ import AddressAutocompleteInput, {
 } from "@/components/AddressAutocompleteInput";
 import { countArticleLines, itemsRequireApproval, linesCoveredByQuotation } from "@/lib/order-lines";
 import { CIG_LENGTH, CUP_LENGTH, isValidCig, isValidCup, normalizeCig, normalizeCup } from "@/lib/cig-cup";
-import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
+import { calculateOrderDiscountedTotal, formatOrderCurrency, formatOrderQuantitiesByUnit } from "@/lib/order-totals";
 import { useAuth } from "@/lib/auth-context";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { MAGAZZINI, type AnagraficaSearchItem, type OrderHistoryItem } from "@/types";
 import type { Order, OrderLine } from "@/types";
 import ExitOrderDialog from "@/components/ExitOrderDialog";
-import WizardStepper from "@/components/WizardStepper";
+import WizardStepper, { WIZARD_BACK_HREF, useWizardBackGuard } from "@/components/WizardStepper";
 import WizardHeader from "@/components/WizardHeader";
-import { useNavigationGuard } from "@/lib/navigation-guard";
+import { LOGOUT_HREF, useNavigationGuard } from "@/lib/navigation-guard";
+import { cn } from "@/lib/utils";
 
 const STEP_LABELS = ["Cliente", "Materiali", "Dettagli", "Riepilogo"] as const;
 const WIZARD_EYEBROW = "Ordini";
 const EXIT_HREF = "/orders";
+/** Un solo toast d'errore di salvataggio alla volta, tolto quando un tentativo va a buon fine. */
+const SAVE_ERROR_TOAST_ID = "order-save-error";
+/** Layout con la sidebar del carrello al posto del drawer (breakpoint lg). */
+const SIDEBAR_MEDIA = "(min-width: 64rem)";
+/** Chiave localStorage: il carrello persistito appartiene a un nuovo ordine (riprendibile) o a una modifica. */
+export const ORDER_WIZARD_ORIGIN_KEY = "listino-order-wizard-origin";
 
 interface PublicCodeFieldProps {
   id: string;
@@ -65,7 +73,7 @@ function PublicCodeField({ id, label, hint, value, length, showError, onChange }
         autoComplete="off"
         autoCapitalize="characters"
         spellCheck={false}
-        className="h-12 rounded-lg text-base bg-card font-mono tracking-wide"
+        className="h-12 rounded-lg text-base bg-card font-mono tracking-wide placeholder:font-sans placeholder:tracking-normal"
         style={{ fontSize: "16px" }}
       />
       {invalid ? (
@@ -115,8 +123,11 @@ export default function OrderWizard({ editingOrder }: Props) {
   const addressInputRef = useRef<AddressAutocompleteInputHandle>(null);
   const addressDataRef = useRef<AddressData | null>(null);
   const [isAddressValid, setIsAddressValid] = useState(true);
-  // CIG/CUP incompleti: l'avviso compare solo dopo il tentativo di passare al riepilogo.
+  // Magazzino mancante e CIG/CUP incompleti: l'avviso compare solo dopo il tentativo di passare al riepilogo.
+  const [showMagazzinoError, setShowMagazzinoError] = useState(false);
   const [showPublicCodeErrors, setShowPublicCodeErrors] = useState(false);
+  /** Incrementato quando la validazione dello step Dettagli fallisce: porta a schermo il primo campo in errore. */
+  const [detailsErrorTick, setDetailsErrorTick] = useState(0);
 
   // Customer search
   const [customerResults, setCustomerResults] = useState<AnagraficaSearchItem[]>([]);
@@ -134,8 +145,9 @@ export default function OrderWizard({ editingOrder }: Props) {
   // Altezza dell'header sticky (ricerca + casella): la sidebar desktop si aggancia subito sotto.
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
   const step2RootRef = useRef<HTMLDivElement>(null);
+  const cartAsideRef = useRef<HTMLElement>(null);
 
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const isEditing = !!editingOrder;
   const editingSource = editingOrder?.draft ?? editingOrder;
   /** Ordine mai inviato al magazzino (bozza o in attesa di approvazione): si salva/invia come nuovo, non come modifica. */
@@ -143,6 +155,15 @@ export default function OrderWizard({ editingOrder }: Props) {
     (editingOrder?.status === "bozza" || editingOrder?.status === "in_approvazione") && editingOrder.parentOrderId === null;
   const isModificationEditing = !!editingOrder && !isStandaloneDraft;
   const hasOpenModificationDraft = !!editingOrder?.draft;
+
+  // Il carrello persistito di un nuovo ordine si può riprendere dopo una ricarica (vedi /orders/new), quello di una modifica no.
+  useEffect(() => {
+    try {
+      localStorage.setItem(ORDER_WIZARD_ORIGIN_KEY, isEditing ? "edit" : "new");
+    } catch {
+      // storage non disponibile: /orders/new riparte semplicemente da zero
+    }
+  }, [isEditing]);
 
   // On mount: if editing, populate store with order data
   useEffect(() => {
@@ -257,7 +278,8 @@ export default function OrderWizard({ editingOrder }: Props) {
 
   // Items derived from store
   const flaggedCount = countArticleLines(lines);
-  const totalPz = calculateOrderTotalPieces(lines);
+  /** Quantità per unità di misura ("4 pz · 13,5 mq"): unità diverse non si sommano. */
+  const quantitiesLabel = formatOrderQuantitiesByUnit(lines);
   /** Sconti liberi presenti: l'invio passerà da un amministratore (gli admin approvano implicitamente,
    *  e un ordine che ricalca un preventivo già approvato non richiede una seconda approvazione). */
   const coveredByQuotation = !!sourceQuotationItems && linesCoveredByQuotation(lines, sourceQuotationItems);
@@ -276,6 +298,19 @@ export default function OrderWizard({ editingOrder }: Props) {
       setMobileCartOpen(false);
     }
   }, [currentStep, mobileCartOpen, setMobileCartOpen]);
+
+  // Ogni step si apre dall'alto; fanno eccezione le richieste che scorrono da sole (articolo da modificare, casella righe).
+  useEffect(() => {
+    if (pendingLineRequestRef.current || openArticleRequest) return;
+    window.scrollTo({ top: 0 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  // Validazione dello step Dettagli fallita: il primo campo in errore viene portato a schermo.
+  useEffect(() => {
+    if (detailsErrorTick === 0) return;
+    document.querySelector("[data-details-step] [aria-invalid='true']")?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [detailsErrorTick]);
 
   const handleEditItemInCatalog = useCallback((codice: string) => {
     setMobileCartOpen(false);
@@ -333,6 +368,34 @@ export default function OrderWizard({ editingOrder }: Props) {
     return () => observer.disconnect();
   }, [currentStep]);
 
+  // Sidebar del carrello (da lg): alta quanto lo spazio visibile sotto il suo bordo superiore, così "Indietro/Avanti"
+  // restano a schermo anche prima che si agganci sotto l'header sticky (tablet in orizzontale, pagina non ancora scorsa).
+  useEffect(() => {
+    const aside = cartAsideRef.current;
+    const header = stickyHeaderRef.current;
+    if (!aside || !header) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const top = Math.max(aside.getBoundingClientRect().top, 0);
+      aside.style.maxHeight = `${Math.max(window.innerHeight - top - 20, 200)}px`;
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    const observer = new ResizeObserver(schedule);
+    observer.observe(header);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      observer.disconnect();
+    };
+  }, [currentStep]);
+
   const handleEditLine = useCallback((line: OrderLine) => {
     openLineComposer({ kind: line.tipo === "commento" ? "nota" : "manuale", line });
   }, [openLineComposer]);
@@ -380,13 +443,14 @@ export default function OrderWizard({ editingOrder }: Props) {
     return "Modifica inviata!";
   }, [isEditing, isModificationEditing, isStandaloneDraft]);
 
-  const renderCartSummary = (itemsHeightClass: string) => (
+  /** `fill`: nella sidebar l'elenco righe occupa lo spazio rimasto e scorre da solo (totale e pulsanti restano visibili). */
+  const renderCartSummary = (itemsHeightClass: string, fill = false) => (
     <>
-      <div className="flex items-center justify-between gap-3 px-1">
+      <div className="flex shrink-0 items-center justify-between gap-3 px-1">
         <div className="min-w-0">
           <p className="font-display text-xl leading-tight font-bold text-foreground">Carrello</p>
-          <p className="truncate text-[13px] text-muted-foreground">
-            {flaggedCount > 0 ? `${flaggedCount} ${flaggedCount === 1 ? "articolo" : "articoli"} · ${totalPz} pz` : "Nessun articolo selezionato"}
+          <p className="text-[13px] text-muted-foreground">
+            {flaggedCount > 0 ? `${flaggedCount} ${flaggedCount === 1 ? "articolo" : "articoli"} · ${quantitiesLabel}` : "Nessun articolo selezionato"}
           </p>
         </div>
         <span className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
@@ -398,7 +462,8 @@ export default function OrderWizard({ editingOrder }: Props) {
         )}
         </span>
       </div>
-      <div className="flex flex-col gap-2">
+      {/* Almeno una riga sempre visibile: se lo spazio non basta scorre l'intera sidebar (pulsanti fissati in fondo). */}
+      <div className={cn("flex flex-col gap-2", fill && "min-h-28 flex-auto")}>
         <p className="px-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Righe ordine</p>
         <OrderLinesEditor
           store="order"
@@ -407,9 +472,10 @@ export default function OrderWizard({ editingOrder }: Props) {
           onEditLine={handleEditLine}
           onAddNoteAbove={handleAddNoteAbove}
           listHeightClass={itemsHeightClass}
+          className={fill ? "min-h-0 flex-auto" : undefined}
         />
       </div>
-      <div className="flex items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
+      <div className="flex shrink-0 items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
         <span className="text-sm font-semibold text-foreground/80">Totale imponibile</span>
         <span className="font-display text-2xl font-bold tabular-nums text-foreground">{formatOrderCurrency(totalImponibile)}</span>
       </div>
@@ -440,34 +506,71 @@ export default function OrderWizard({ editingOrder }: Props) {
     return () => setNavigationGuard(null);
   }, [hasProgress, setExitDialogOpen, setNavigationGuard]);
 
+  /** Gesto/pulsante indietro del browser: chiude conferma o carrello, poi torna allo step precedente; dallo step 1 chiede conferma. */
+  const handleBrowserBack = (): boolean => {
+    if (saving || savingDraft) return true;
+    if (exitDialogOpen) {
+      setExitDialogOpen(false);
+      return true;
+    }
+    if (mobileCartOpen) {
+      setMobileCartOpen(false);
+      return true;
+    }
+    if (currentStep > 1) {
+      setStep((currentStep - 1) as 1 | 2 | 3);
+      return true;
+    }
+    if (!hasProgress) return false;
+    setExitTarget(WIZARD_BACK_HREF);
+    setExitDialogOpen(true);
+    return true;
+  };
+  const leaveToPreviousPage = useWizardBackGuard({ enabled: !saved, onBack: handleBrowserBack, fallbackHref: EXIT_HREF });
+
+  /** Uscita confermata: il logout chiude davvero la sessione, "indietro" torna alla pagina precedente al wizard. */
+  const leaveWizard = useCallback((target: string) => {
+    if (target === LOGOUT_HREF) void logout();
+    else if (target === WIZARD_BACK_HREF) leaveToPreviousPage();
+    else router.push(target);
+  }, [leaveToPreviousPage, logout, router]);
+
   const wizardTitle = editingOrder ? `Modifica ordine #${editingOrder.id}` : "Nuovo ordine";
   const wizardCustomer = orderInfo.cliente.trim();
 
+  /** Una bozza richiede cliente e almeno un articolo (il magazzino si sceglie anche dopo). */
+  const canSaveDraft = orderInfo.cliente.trim() !== "" && flaggedCount > 0;
+
   const handleSaveDraftAndExit = useCallback(async () => {
-    // If no meaningful data, just exit
-    if (!orderInfo.cliente.trim() || flaggedCount === 0) {
-      resetOrder();
-      setExitDialogOpen(false);
-      router.push(exitTarget);
-      return;
-    }
+    if (savingDraft) return;
     setSavingDraft(true);
+    let error: string | null = null;
     try {
       const request = getRequestConfig("bozza");
-      await fetch(request.url, {
+      const res = await fetch(request.url, {
         method: request.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request.body),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        error = data?.error || "Errore nel salvataggio della bozza.";
+      }
     } catch {
-      // Ignore errors on auto-save draft, just exit
-    } finally {
-      setSavingDraft(false);
-      resetOrder();
-      setExitDialogOpen(false);
-      router.push(exitTarget);
+      error = "Connessione non disponibile. Riprova.";
     }
-  }, [orderInfo, flaggedCount, getRequestConfig, resetOrder, router, setExitDialogOpen, exitTarget]);
+    setSavingDraft(false);
+    // Bozza non salvata: si resta nel wizard (dialog aperto) con i dati intatti.
+    if (error) {
+      toast.error("Bozza non salvata", { id: SAVE_ERROR_TOAST_ID, description: error });
+      return;
+    }
+    toast.dismiss(SAVE_ERROR_TOAST_ID);
+    toast.success("Bozza salvata");
+    resetOrder();
+    setExitDialogOpen(false);
+    leaveWizard(exitTarget);
+  }, [exitTarget, getRequestConfig, leaveWizard, resetOrder, savingDraft, setExitDialogOpen]);
 
   const handleSave = useCallback(async (status: "bozza" | "confermato") => {
     if (saving) return;
@@ -483,17 +586,18 @@ export default function OrderWizard({ editingOrder }: Props) {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Errore salvataggio");
 
+      toast.dismiss(SAVE_ERROR_TOAST_ID);
       const resultStatus = data?.status ?? data?.order?.status;
       const pendingApproval = data?.pendingApproval === true || resultStatus === "in_approvazione";
       setSavedMessage(getSuccessMessage(status, pendingApproval));
       setSaved(true);
       resetOrder();
-      setTimeout(() => {
-        setSaved(false);
-        router.push("/orders");
-      }, pendingApproval ? 1800 : 1200);
+      // `saved` resta vero fino al cambio pagina: altrimenti ricomparirebbe per un attimo lo step 1 vuoto.
+      setTimeout(() => router.push("/orders"), pendingApproval ? 1800 : 1200);
     } catch (err) {
-      alert(err instanceof Error && err.message ? err.message : "Errore nel salvataggio dell'ordine");
+      const message =
+        err instanceof TypeError ? "Connessione non disponibile. Riprova." : err instanceof Error && err.message ? err.message : "Errore nel salvataggio dell'ordine.";
+      toast.error(status === "bozza" ? "Bozza non salvata" : "Ordine non inviato", { id: SAVE_ERROR_TOAST_ID, description: message });
     } finally {
       setSaving(false);
     }
@@ -506,11 +610,18 @@ export default function OrderWizard({ editingOrder }: Props) {
       <ExitOrderDialog
         open={exitDialogOpen}
         saving={savingDraft}
-        onSaveDraft={handleSaveDraftAndExit}
-        onExitWithoutSaving={() => { resetOrder(); setExitDialogOpen(false); router.push(exitTarget); }}
+        onSaveDraft={canSaveDraft ? handleSaveDraftAndExit : undefined}
+        description={
+          canSaveDraft
+            ? undefined
+            : "Per salvare una bozza servono il cliente e almeno un articolo: uscendo ora i dati inseriti andranno persi."
+        }
+        onExitWithoutSaving={() => { resetOrder(); setExitDialogOpen(false); leaveWizard(exitTarget); }}
         onContinue={() => setExitDialogOpen(false)}
       />
     );
+
+  const magazzinoInvalid = showMagazzinoError && !orderInfo.magazzino;
 
   /** Uno step è raggiungibile dallo stepper se tutti i precedenti sono completi (in modifica lo sono tutti). */
   const canReachStep = (step: 1 | 2 | 3 | 4): boolean => {
@@ -519,22 +630,34 @@ export default function OrderWizard({ editingOrder }: Props) {
     return canGoNextStep1 && canGoNextStep2;
   };
 
-  /** Validazione dello step Dettagli prima del riepilogo: CIG/CUP completi (se inseriti) e indirizzo digitato valido. */
+  /**
+   * Validazione dello step Dettagli prima del riepilogo: magazzino scelto, CIG/CUP completi (se inseriti)
+   * e indirizzo digitato valido (verificato solo con lo step aperto; altrimenti vale l'ultimo esito).
+   */
   const validateDetailsStep = async (): Promise<boolean> => {
-    if (!isValidCig(orderInfo.cig) || !isValidCup(orderInfo.cup)) {
-      setShowPublicCodeErrors(true);
+    const missingMagazzino = !orderInfo.magazzino;
+    const invalidCodes = !isValidCig(orderInfo.cig) || !isValidCup(orderInfo.cup);
+    if (missingMagazzino || invalidCodes) {
+      setShowMagazzinoError(missingMagazzino);
+      if (invalidCodes) setShowPublicCodeErrors(true);
+      setDetailsErrorTick((tick) => tick + 1);
       return false;
     }
-    if (orderInfo.luogoConsegna.trim()) {
-      return isAddressValid || (await addressInputRef.current?.validateAddress()) === true;
-    }
-    return true;
+    if (!orderInfo.luogoConsegna.trim() || isAddressValid) return true;
+    return currentStep === 3 && (await addressInputRef.current?.validateAddress()) === true;
   };
 
   const goToStep = async (step: 1 | 2 | 3 | 4) => {
     if (step === currentStep || !canReachStep(step)) return;
-    // Lasciando lo step Dettagli verso il riepilogo, stessa validazione del pulsante "Avanti — Riepilogo".
-    if (currentStep === 3 && step > 3 && !(await validateDetailsStep())) return;
+    // Verso il riepilogo (anche saltando lo step Dettagli dallo stepper) vale la validazione di "Avanti — Riepilogo":
+    // se non passa si apre lo step Dettagli con gli errori in evidenza.
+    if (step === 4 && !(await validateDetailsStep())) {
+      if (currentStep !== 3) {
+        setMobileCartOpen(false);
+        setStep(3);
+      }
+      return;
+    }
     setMobileCartOpen(false);
     setStep(step);
   };
@@ -550,6 +673,19 @@ export default function OrderWizard({ editingOrder }: Props) {
       />
     </>
   );
+
+  // Conferma dopo il salvataggio: va prima degli step perché resetOrder() riporta subito lo store allo step 1.
+  if (saved) {
+    return (
+      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8 flex flex-col items-center gap-4 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <CheckCircle2 className="h-8 w-8 text-primary" />
+        </div>
+        <h2 role="status" className="font-display text-2xl font-bold tracking-tight">{savedMessage}</h2>
+        <p className="text-sm text-muted-foreground">Reindirizzamento agli ordini…</p>
+      </div>
+    );
+  }
 
   // ────────────────────────────────────────────
   // Step 1 — Cliente
@@ -616,7 +752,7 @@ export default function OrderWizard({ editingOrder }: Props) {
                             customer.id === orderInfo.clienteId ? "bg-primary/10" : ""
                           }`}
                         >
-                          <p className="text-sm font-medium truncate">{customer.ragioneSociale}</p>
+                          <p className="text-sm font-medium line-clamp-2 wrap-break-word">{customer.ragioneSociale}</p>
                           <p className="text-xs text-muted-foreground truncate">
                             {customer.codice}{customer.partitaIva ? ` · P.IVA ${customer.partitaIva}` : ""}
                           </p>
@@ -659,7 +795,7 @@ export default function OrderWizard({ editingOrder }: Props) {
           <Stepper />
         </div>
         <div ref={stickyHeaderRef} className="sticky top-[var(--app-header-h)] z-30 bg-background border-b border-border">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2.5 lg:pr-[22rem]">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2.5 lg:pr-[22rem] lg:has-[[data-composer-open]]:pr-4">
             <SearchBar autoFocus />
             <div>
               <QuickLineComposer ref={composerRef} store="order" onAdded={handleArticleConfirmed} />
@@ -681,11 +817,12 @@ export default function OrderWizard({ editingOrder }: Props) {
 
           {/* Sticky sidebar */}
           <aside
+            ref={cartAsideRef}
             className="hidden lg:flex w-80 shrink-0 flex-col gap-4 my-5 mr-4 rounded-2xl border border-border/80 bg-card p-5 shadow-panel sticky self-start overflow-y-auto"
             style={{ top: "calc(var(--app-header-h) + var(--step2-header-h) + 1.25rem)", maxHeight: "calc(100dvh - var(--app-header-h) - var(--step2-header-h) - 2.5rem)" }}
           >
-            {renderCartSummary("max-h-[46dvh]")}
-            <div className="flex gap-2">
+            {renderCartSummary("min-h-0 flex-auto", true)}
+            <div className="sticky bottom-0 -mb-5 flex shrink-0 gap-2 bg-card pb-5">
               <Button variant="outline" size="lg" className="px-4" onClick={() => setStep(1)}>
                 <ChevronLeft className="h-4 w-4" />
                 Indietro
@@ -699,7 +836,7 @@ export default function OrderWizard({ editingOrder }: Props) {
         </div>
 
         {/* Mobile cart drawer */}
-        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
+        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen} closeOnMedia={SIDEBAR_MEDIA}>
           <DrawerContent className="lg:hidden p-0 rounded-t-3xl">
             <DrawerHeader className="px-4 py-3 border-b border-border">
               <div className="flex items-center justify-between gap-2">
@@ -781,7 +918,7 @@ export default function OrderWizard({ editingOrder }: Props) {
       <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8">
           {exitDialog}
         <Stepper />
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4" data-details-step>
           <div>
             <h2 className="font-display text-2xl font-bold tracking-tight text-foreground mb-1">Dettagli ordine</h2>
             <p className="text-sm text-muted-foreground">
@@ -799,7 +936,9 @@ export default function OrderWizard({ editingOrder }: Props) {
               id="magazzino"
               value={orderInfo.magazzino}
               onChange={(e) => setOrderInfo({ magazzino: e.target.value as typeof orderInfo.magazzino })}
-              className="h-12 w-full rounded-lg border border-input bg-card px-3 text-base text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              aria-invalid={magazzinoInvalid || undefined}
+              aria-describedby={magazzinoInvalid ? "magazzino-error" : undefined}
+              className="h-12 w-full rounded-lg border border-input bg-card px-3 text-base text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20"
               style={{ fontSize: "16px" }}
             >
               <option value="">Seleziona magazzino…</option>
@@ -807,6 +946,11 @@ export default function OrderWizard({ editingOrder }: Props) {
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
+            {magazzinoInvalid && (
+              <p id="magazzino-error" role="alert" className="text-[11px] font-medium text-destructive">
+                Seleziona il magazzino a cui inviare l&apos;ordine.
+              </p>
+            )}
           </div>
 
           {/* Luogo consegna */}
@@ -925,9 +1069,7 @@ export default function OrderWizard({ editingOrder }: Props) {
             </Button>
             <Button
               className="w-full h-11 gap-2 font-semibold sm:flex-1"
-              onClick={async () => {
-                if (await validateDetailsStep()) setStep(4);
-              }}
+              onClick={() => void goToStep(4)}
             >
               Avanti — Riepilogo
               <ChevronRight className="h-4 w-4" />
@@ -941,19 +1083,6 @@ export default function OrderWizard({ editingOrder }: Props) {
   // ────────────────────────────────────────────
   // Step 4 — Riepilogo
   // ────────────────────────────────────────────
-  if (saved) {
-    return (
-      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8 flex flex-col items-center gap-4 text-center">
-          {exitDialog}
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-          <CheckCircle2 className="h-8 w-8 text-primary" />
-        </div>
-        <h2 className="font-display text-2xl font-bold tracking-tight">{savedMessage}</h2>
-        <p className="text-sm text-muted-foreground">Reindirizzamento agli ordini…</p>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8">
         {exitDialog}
@@ -1055,9 +1184,9 @@ export default function OrderWizard({ editingOrder }: Props) {
             />
           </div>
           <div className="px-4 py-2.5 border-t border-border bg-muted/30 flex flex-col gap-1.5 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Totale pezzi</span>
-              <span className="font-bold">{totalPz} pz</span>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Quantità</span>
+              <span className="text-right font-bold">{quantitiesLabel}</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="font-semibold">Totale imponibile</span>

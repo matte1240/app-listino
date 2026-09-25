@@ -16,7 +16,7 @@ import {
   type OrderWriteData,
 } from "@/lib/orders";
 import { userOwnsCustomerByRap } from "@/lib/rap";
-import { countArticleLines, itemsRequireApproval, normalizeOrderItems } from "@/lib/order-lines";
+import { getOrderIncompleteReason, itemsRequireApproval, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
 import { normalizeCig, normalizeCup } from "@/lib/cig-cup";
 import { getAppBaseUrl } from "@/lib/app-url";
@@ -99,17 +99,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     resolvedCliente = selectedCustomer.ragione_sociale;
   }
 
-  if (!resolvedCliente || !magazzino?.trim() || countArticleLines(items) === 0) {
-    return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
+  // Bozza di modifica: basta cliente + articoli; magazzino e CIG/CUP si verificano quando la si applica (POST).
+  const resolvedMagazzino = typeof magazzino === "string" ? magazzino.trim() : "";
+  const normalizedCig = normalizeCig(cig);
+  const normalizedCup = normalizeCup(cup);
+  const incompleteReason = getOrderIncompleteReason(
+    { cliente: resolvedCliente, magazzino: resolvedMagazzino, cig: normalizedCig, cup: normalizedCup, items },
+    "bozza"
+  );
+  if (incompleteReason) {
+    return NextResponse.json({ error: incompleteReason }, { status: 400 });
   }
 
   const orderWriteData: OrderWriteData = {
     cliente: resolvedCliente,
     clienteId: resolvedClienteId,
-    magazzino,
+    magazzino: resolvedMagazzino,
     luogoConsegna: luogoConsegna ?? "",
-    cig: normalizeCig(cig),
-    cup: normalizeCup(cup),
+    cig: normalizedCig,
+    cup: normalizedCup,
     dataConsegna: dataConsegna ?? "",
     note: note ?? "",
     items,
@@ -144,6 +152,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const draftItems = parseOrderItems(draftRow.items);
+  const incompleteReason = getOrderIncompleteReason({ ...draftRow, items: draftItems }, "confermato");
+  if (incompleteReason) {
+    return NextResponse.json({ error: incompleteReason }, { status: 400 });
+  }
   if (itemsRequireApproval(draftItems) && payload.role !== "admin") {
     db.prepare(
       `UPDATE order_drafts SET approval_status = 'in_approvazione', approval_requested_at = ?, approval_note = NULL, updated_at = datetime('now')

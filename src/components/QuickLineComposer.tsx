@@ -191,6 +191,7 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
   return (
     <div
       data-testid="quick-line-composer"
+      data-composer-open={mode === "closed" ? undefined : ""}
       className={cn(
         "flex flex-col gap-3 rounded-2xl transition-all",
         mode === "closed" ? "" : "border border-primary bg-card p-3 ring-4 ring-primary/10"
@@ -210,89 +211,96 @@ const QuickLineComposer = forwardRef<QuickLineComposerHandle, Props>(function Qu
       {mode === "manuale" && (
         <form
           noValidate
-          className="flex flex-col gap-2"
+          className="@container flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             addManual();
           }}
         >
-          <div className="flex flex-col gap-1">
-            <input
-              ref={descrizioneRef}
-              type="text"
-              value={descrizione}
-              placeholder="Descrizione articolo"
-              aria-label="Descrizione articolo manuale"
-              aria-invalid={manualErrors.descrizione || undefined}
-              autoFocus
-              autoComplete="off"
-              onChange={(event) => {
-                setDescrizione(event.target.value);
-                if (event.target.value.trim()) setManualErrors((current) => (current.descrizione ? { ...current, descrizione: false } : current));
-              }}
-              className={cn(fieldClass, "h-10 font-medium", manualErrors.descrizione && invalidFieldClass)}
-              style={IOS_FONT}
-            />
-            {manualErrors.descrizione && <FieldWarning>Inserisci la descrizione dell&apos;articolo.</FieldWarning>}
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <label className="flex flex-col gap-0.5">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">U.M.</span>
-              <select
-                value={um}
-                aria-label="Unità di misura"
-                onChange={(event) => setUm(event.target.value)}
-                className={fieldClass}
-                style={IOS_FONT}
-              >
-                {MANUAL_LINE_UNITS.map((unit) => (
-                  <option key={unit} value={unit}>{unit}</option>
-                ))}
-                {!MANUAL_LINE_UNITS.includes(um) && <option value={um}>{um}</option>}
-              </select>
-            </label>
-            <label className="flex flex-col gap-0.5">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Qtà</span>
-              <NumberField
-                ref={qtyRef}
-                value={qty}
-                onCommit={(value) => {
-                  setQty(value);
-                  if (value > 0) setManualErrors((current) => (current.qty ? { ...current, qty: false } : current));
+          {/* Con spazio (tablet, desktop) descrizione e campi numerici su una riga, sconto e pulsanti sulla successiva:
+              la casella sticky resta bassa e lascia visibili listino e carrello. */}
+          <div className="flex flex-col gap-2 @2xl:flex-row @2xl:items-start">
+            <div className="flex min-w-0 flex-col gap-1 @2xl:flex-[2] @2xl:gap-0.5">
+              <span className="hidden text-[10px] uppercase tracking-wide text-muted-foreground @2xl:block">Descrizione</span>
+              <input
+                ref={descrizioneRef}
+                type="text"
+                value={descrizione}
+                placeholder="Descrizione articolo"
+                aria-label="Descrizione articolo manuale"
+                aria-invalid={manualErrors.descrizione || undefined}
+                autoFocus
+                autoComplete="off"
+                onChange={(event) => {
+                  setDescrizione(event.target.value);
+                  if (event.target.value.trim()) setManualErrors((current) => (current.descrizione ? { ...current, descrizione: false } : current));
                 }}
-                placeholder="0"
-                ariaLabel="Quantità"
-                className="w-full"
-                onEnter={addManual}
-                invalid={!!manualErrors.qty}
+                className={cn(fieldClass, "h-10 font-medium", manualErrors.descrizione && invalidFieldClass)}
+                style={IOS_FONT}
               />
-            </label>
-            <label className="flex flex-col gap-0.5">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Prezzo €</span>
-              <NumberField value={prezzo} onCommit={setPrezzo} placeholder="0,00" ariaLabel="Prezzo unitario" className="w-full" onEnter={addManual} />
-            </label>
+              {manualErrors.descrizione && <FieldWarning>Inserisci la descrizione dell&apos;articolo.</FieldWarning>}
+            </div>
+            <div className="grid min-w-0 grid-cols-3 gap-2 @2xl:flex-[3]">
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">U.M.</span>
+                <select
+                  value={um}
+                  aria-label="Unità di misura"
+                  onChange={(event) => setUm(event.target.value)}
+                  className={fieldClass}
+                  style={IOS_FONT}
+                >
+                  {MANUAL_LINE_UNITS.map((unit) => (
+                    <option key={unit} value={unit}>{unit}</option>
+                  ))}
+                  {!MANUAL_LINE_UNITS.includes(um) && <option value={um}>{um}</option>}
+                </select>
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Qtà</span>
+                <NumberField
+                  ref={qtyRef}
+                  value={qty}
+                  onCommit={(value) => {
+                    setQty(value);
+                    if (value > 0) setManualErrors((current) => (current.qty ? { ...current, qty: false } : current));
+                  }}
+                  placeholder="0"
+                  ariaLabel="Quantità"
+                  className="h-10 w-full"
+                  onEnter={addManual}
+                  invalid={!!manualErrors.qty}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Prezzo €</span>
+                <NumberField value={prezzo} onCommit={setPrezzo} placeholder="0,00" ariaLabel="Prezzo unitario" className="h-10 w-full" onEnter={addManual} />
+              </label>
+            </div>
           </div>
           {manualErrors.qty && <FieldWarning>Inserisci la quantità.</FieldWarning>}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Sconto</span>
-            <DiscountSelector size="sm" value={sconto} onChange={setSconto} onInteract={dismissKeyboard} />
-          </div>
-          <div className="flex items-center gap-2 pt-0.5">
-            <button
-              type="submit"
-              className="flex-1 sm:flex-none h-11 px-4 rounded-lg text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground shadow-primary hover:bg-primary-hover transition-colors"
-            >
-              {isEditing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {isEditing ? "Salva modifica" : "Aggiungi"}
-            </button>
-            <button
-              type="button"
-              onClick={close}
-              className="h-11 px-4 rounded-lg text-sm font-semibold border border-input bg-card text-foreground/75 hover:text-foreground hover:border-primary/40 transition-colors inline-flex items-center gap-1.5"
-            >
-              <X className="h-4 w-4" />
-              Annulla
-            </button>
+          <div className="flex flex-col gap-2 @2xl:flex-row @2xl:items-start @2xl:justify-between">
+            <div className="flex items-start gap-2">
+              <span className="flex h-10 shrink-0 items-center text-[10px] uppercase tracking-wide text-muted-foreground">Sconto</span>
+              <DiscountSelector size="md" value={sconto} onChange={setSconto} onInteract={dismissKeyboard} />
+            </div>
+            <div className="flex shrink-0 items-center gap-2 pt-0.5 @2xl:pt-0">
+              <button
+                type="submit"
+                className="flex-1 sm:flex-none h-11 px-4 rounded-lg text-sm font-semibold inline-flex items-center justify-center gap-1.5 bg-primary text-primary-foreground shadow-primary hover:bg-primary-hover transition-colors"
+              >
+                {isEditing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {isEditing ? "Salva modifica" : "Aggiungi"}
+              </button>
+              <button
+                type="button"
+                onClick={close}
+                className="h-11 px-4 rounded-lg text-sm font-semibold border border-input bg-card text-foreground/75 hover:text-foreground hover:border-primary/40 transition-colors inline-flex items-center gap-1.5"
+              >
+                <X className="h-4 w-4" />
+                Annulla
+              </button>
+            </div>
           </div>
         </form>
       )}

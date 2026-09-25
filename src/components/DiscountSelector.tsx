@@ -8,7 +8,7 @@ import { cn, parseLocalizedNumber } from "@/lib/utils";
 interface Props {
   value: number;
   onChange: (value: number) => void;
-  /** "sm" compatta per le righe dell'editor, "lg" a griglia con pulsanti da 44 px per il touch. */
+  /** "sm" compatta (più alta con puntatore touch), "md" da 40 px in linea, "lg" a griglia con pulsanti da 44 px. */
   size?: "sm" | "md" | "lg";
   onInteract?: () => void;
 }
@@ -30,8 +30,10 @@ export default function DiscountSelector({ value, onChange, size = "md", onInter
   const [focused, setFocused] = useState(false);
   const showFree = freeMode || !isPresetDiscount(value);
   const isLarge = size === "lg";
-  const buttonClass = size === "sm" ? "h-6 px-2 text-[11px]" : isLarge ? "h-11 px-2 text-sm" : "h-7 px-2.5 text-xs";
+  const buttonClass =
+    size === "sm" ? "h-6 px-2 text-[11px] pointer-coarse:h-9 pointer-coarse:px-2.5" : isLarge ? "h-11 px-2 text-sm" : "h-10 px-3 text-sm";
   const displayValue = focused ? text : value > 0 ? formatSconto(value) : "";
+  const approvalHint = <span className="text-xs text-amber-800 dark:text-amber-300">Richiede l&apos;approvazione di un amministratore</span>;
 
   return (
     <div className={cn(isLarge ? "grid grid-cols-4 gap-1.5" : "flex flex-wrap items-center gap-1.5")} role="group" aria-label="Sconto">
@@ -94,15 +96,17 @@ export default function DiscountSelector({ value, onChange, size = "md", onInter
               onChange(clampPercent(event.target.value));
             }}
             className={cn(
-              "w-16 rounded-lg border border-amber-400 bg-background px-2 text-center font-bold text-foreground focus:outline-none focus:ring-[3px] focus:ring-amber-400/40",
-              size === "sm" ? "h-7 text-xs" : isLarge ? "h-11 w-24 text-sm" : "h-8 text-sm"
+              "w-16 rounded-lg border border-amber-400 bg-card px-2 text-center font-bold text-foreground focus:outline-none focus:ring-[3px] focus:ring-amber-400/40",
+              size === "sm" ? "h-7 text-xs pointer-coarse:h-9" : isLarge ? "h-11 w-24 text-sm" : "h-10 w-20 text-sm"
             )}
             style={{ fontSize: "16px" }}
           />
           <span className="text-xs font-semibold text-muted-foreground">%</span>
-          {isLarge && <span className="text-xs text-amber-800 dark:text-amber-300">Richiede l&apos;approvazione di un amministratore</span>}
+          {isLarge && approvalHint}
         </span>
       )}
+      {/* Il title del pulsante "Libero" non si vede al tocco: l'avviso resta sempre visibile sotto i pulsanti. */}
+      {showFree && !isLarge && <span className="basis-full">{approvalHint}</span>}
     </div>
   );
 }

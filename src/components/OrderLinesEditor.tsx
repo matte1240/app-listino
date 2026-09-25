@@ -15,13 +15,14 @@ import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifi
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowDown, ArrowUp, GripVertical, MessageSquare, MessageSquarePlus, Truck, X } from "lucide-react";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import NumberField from "@/components/NumberField";
 import { useOrderStore } from "@/lib/useOrderStore";
 import { useQuotationStore } from "@/lib/useQuotationStore";
 import { getTrasportoLine, isTrasportoLine } from "@/lib/order-lines";
 import type { LineActions } from "@/lib/order-lines-store";
-import { formatOrderCurrency, formatSconto, formatUnitPrice, getDiscountedUnitPrice, getLineTotal } from "@/lib/order-totals";
+import { formatOrderCurrency, formatQuantity, formatSconto, formatUnitPrice, getDiscountedUnitPrice, getLineTotal } from "@/lib/order-totals";
 import { cn } from "@/lib/utils";
 import type { OrderLine } from "@/types";
 
@@ -41,19 +42,30 @@ interface Props {
   showTrasportoControl?: boolean;
   /** Altezza massima dell'elenco (classe Tailwind), con scroll interno. */
   listHeightClass?: string;
+  /** Classi del contenitore (es. `min-h-0 flex-auto` per far restringere l'elenco in una colonna flex). */
+  className?: string;
 }
 
+/**
+ * I toast con "Annulla" devono restare toccabili anche col drawer del carrello aperto
+ * (il dialog modale mette `pointer-events: none` sul body).
+ */
+const UNDO_TOAST_STYLE = { pointerEvents: "auto" } as const;
+
+/** Azione di riga: 28 px col mouse, 40 px con puntatore touch (tablet). */
 function IconButton({
   label,
   onClick,
   disabled,
   destructive,
+  className,
   children,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
   destructive?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   return (
@@ -64,10 +76,11 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "h-7 w-7 rounded-lg border flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
+        "size-7 pointer-coarse:size-10 rounded-lg border flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
         destructive
           ? "border-destructive/40 text-destructive hover:bg-destructive/10"
-          : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+          : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40",
+        className
       )}
     >
       {children}
@@ -81,6 +94,7 @@ interface RowProps {
   count: number;
   mode: EditorMode;
   actions: LineActions;
+  onRemove: (line: OrderLine) => void;
   onEditArticle?: (codice: string) => void;
   onEditLine?: (line: OrderLine) => void;
   onAddNoteAbove?: (beforeId: string) => void;
@@ -91,7 +105,7 @@ function EditLineButton({ onClick, label = "Modifica" }: { onClick: () => void; 
     <button
       type="button"
       onClick={onClick}
-      className="h-6 px-2 rounded-md border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+      className="h-6 px-2 pointer-coarse:h-9 pointer-coarse:px-3 pointer-coarse:text-xs rounded-md border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
     >
       {label}
     </button>
@@ -105,7 +119,7 @@ function ArticleRowContent({ line, mode, onEditArticle }: Pick<RowProps, "line" 
       <p className="text-[11px] font-bold font-mono truncate">{line.codice}</p>
       <p className="text-[11px] text-muted-foreground truncate">{line.descrizione}</p>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-        <span className="font-semibold text-foreground">{line.qty} {line.um}</span>
+        <span className="font-semibold text-foreground">{formatQuantity(line.qty)} {line.um}</span>
         {sconto > 0 && <span className="font-semibold text-primary">-{formatSconto(sconto)}%</span>}
         {mode === "summary" && (
           sconto > 0 ? (
@@ -133,7 +147,7 @@ function ManualRowContent({ line, mode, onEditLine }: Pick<RowProps, "line" | "m
       </p>
       <p className="text-[11px] text-muted-foreground truncate">{line.descrizione || <span className="italic">Senza descrizione</span>}</p>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-        <span className="font-semibold text-foreground">{line.qty} {line.um}</span>
+        <span className="font-semibold text-foreground">{formatQuantity(line.qty)} {line.um}</span>
         {sconto > 0 && <span className="font-semibold text-primary">-{formatSconto(sconto)}%</span>}
         {mode === "summary" && (
           sconto > 0 ? (
@@ -170,7 +184,7 @@ function CommentRowContent({ line, onEditLine }: Pick<RowProps, "line" | "onEdit
   );
 }
 
-function SortableLineRow({ line, index, count, mode, actions, onEditArticle, onEditLine, onAddNoteAbove }: RowProps) {
+function SortableLineRow({ line, index, count, mode, actions, onRemove, onEditArticle, onEditLine, onAddNoteAbove }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: line.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const isComment = line.tipo === "commento";
@@ -193,7 +207,7 @@ function SortableLineRow({ line, index, count, mode, actions, onEditArticle, onE
           title="Trascina per riordinare"
           {...attributes}
           {...listeners}
-          className="touch-none cursor-grab active:cursor-grabbing px-1 flex items-center text-muted-foreground/50 hover:text-foreground rounded-l-xl hover:bg-muted/60 transition-colors"
+          className="touch-none cursor-grab active:cursor-grabbing w-6 pointer-coarse:w-9 shrink-0 flex items-center justify-center text-muted-foreground/50 hover:text-foreground rounded-l-xl hover:bg-muted/60 transition-colors"
         >
           <GripVertical className="h-4 w-4" />
         </button>
@@ -202,18 +216,19 @@ function SortableLineRow({ line, index, count, mode, actions, onEditArticle, onE
           {line.tipo === "manuale" && <ManualRowContent line={line} mode={mode} onEditLine={onEditLine} />}
           {isComment && <CommentRowContent line={line} onEditLine={onEditLine} />}
         </div>
-        <div className="grid grid-cols-2 gap-1 content-center py-1.5 pr-1.5 shrink-0">
-          <IconButton label={isComment ? "Rimuovi nota" : `Rimuovi ${line.descrizione || line.codice}`} onClick={() => actions.removeLine(line.id)} destructive>
-            <X className="h-3.5 w-3.5" />
-          </IconButton>
-          <IconButton label="Aggiungi nota sopra" onClick={() => onAddNoteAbove?.(line.id)} disabled={!onAddNoteAbove}>
-            <MessageSquarePlus className="h-3.5 w-3.5" />
-          </IconButton>
+        {/* 2x2 (frecce a sinistra, Rimuovi in basso a destra lontano da "nota"); in una riga sola se c'è spazio. */}
+        <div className="grid grid-cols-2 @xl:grid-cols-4 gap-1 pointer-coarse:gap-2 content-center py-1.5 pr-1.5 shrink-0">
           <IconButton label="Sposta su" onClick={() => actions.moveLine(line.id, "up")} disabled={index === 0}>
-            <ArrowUp className="h-3.5 w-3.5" />
+            <ArrowUp className="h-3.5 w-3.5 pointer-coarse:h-4 pointer-coarse:w-4" />
+          </IconButton>
+          <IconButton label="Aggiungi nota sopra" onClick={() => onAddNoteAbove?.(line.id)} disabled={!onAddNoteAbove} className="@xl:order-first">
+            <MessageSquarePlus className="h-3.5 w-3.5 pointer-coarse:h-4 pointer-coarse:w-4" />
           </IconButton>
           <IconButton label="Sposta giù" onClick={() => actions.moveLine(line.id, "down")} disabled={index === count - 1}>
-            <ArrowDown className="h-3.5 w-3.5" />
+            <ArrowDown className="h-3.5 w-3.5 pointer-coarse:h-4 pointer-coarse:w-4" />
+          </IconButton>
+          <IconButton label={isComment ? "Rimuovi nota" : `Rimuovi ${line.descrizione || line.codice}`} onClick={() => onRemove(line)} destructive>
+            <X className="h-3.5 w-3.5 pointer-coarse:h-4 pointer-coarse:w-4" />
           </IconButton>
         </div>
       </div>
@@ -268,6 +283,7 @@ export default function OrderLinesEditor({
   onAddNoteAbove,
   showTrasportoControl = false,
   listHeightClass,
+  className,
 }: Props) {
   const orderLines = useOrderStore((s) => s.lines);
   const quotationLines = useQuotationStore((s) => s.lines);
@@ -288,6 +304,40 @@ export default function OrderLinesEditor({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  const getLines = () => (store === "quotation" ? useQuotationStore.getState().lines : useOrderStore.getState().lines);
+
+  /** Rimozione immediata con "Annulla" nel toast: un tocco sbagliato sul tablet non fa perdere la riga. */
+  function handleRemove(line: OrderLine) {
+    const index = getLines().findIndex((current) => current.id === line.id);
+    actions.removeLine(line.id);
+    toast(line.tipo === "commento" ? "Nota rimossa" : "Riga rimossa", {
+      description: line.tipo === "commento" ? undefined : line.descrizione || line.codice,
+      style: UNDO_TOAST_STYLE,
+      action: {
+        label: "Annulla",
+        onClick: () => {
+          const lines = getLines();
+          // Già ripristinata, o articolo riaggiunto dal catalogo nel frattempo: niente da fare.
+          const exists = lines.some(
+            (current) => current.id === line.id || (line.tipo === "articolo" && current.tipo === "articolo" && current.codice === line.codice)
+          );
+          if (exists) return;
+          const next = [...lines];
+          next.splice(index < 0 ? next.length : Math.min(index, next.length), 0, line);
+          actions.setLines(next);
+        },
+      },
+    });
+  }
+
+  function handleRemoveTrasporto(importo: number) {
+    actions.setTrasporto(null);
+    toast("Spese di trasporto rimosse", {
+      style: UNDO_TOAST_STYLE,
+      action: { label: "Annulla", onClick: () => actions.setTrasporto(importo) },
+    });
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -295,14 +345,14 @@ export default function OrderLinesEditor({
   }
 
   return (
-    <div className="flex flex-col gap-2" data-vaul-no-drag>
+    <div className={cn("flex flex-col gap-2", className)} data-vaul-no-drag>
       {movableLines.length === 0 && !trasporto && (
         <p className="text-xs text-muted-foreground px-1 py-2">
           Nessuna riga inserita. Aggiungi articoli dal listino o una riga manuale dalla casella sotto la barra di ricerca.
         </p>
       )}
 
-      <div className={cn("flex flex-col gap-2 pr-1", listHeightClass, listHeightClass && "overflow-y-auto")}>
+      <div className={cn("@container flex flex-col gap-2 pr-1", listHeightClass, listHeightClass && "overflow-y-auto")}>
         <DndContext
           id={`lines-dnd-${store}-${mode}`}
           sensors={sensors}
@@ -319,6 +369,7 @@ export default function OrderLinesEditor({
                 count={movableLines.length}
                 mode={mode}
                 actions={actions}
+                onRemove={handleRemove}
                 onEditArticle={line.tipo === "articolo" ? onEditArticle : undefined}
                 onEditLine={onEditLine}
                 onAddNoteAbove={onAddNoteAbove}
@@ -336,8 +387,8 @@ export default function OrderLinesEditor({
             </div>
             <span className="text-[11px] font-semibold text-foreground">{formatOrderCurrency(trasporto.prezzoListino)}</span>
             {!showTrasportoControl && (
-              <IconButton label="Rimuovi spese di trasporto" onClick={() => actions.setTrasporto(null)} destructive>
-                <X className="h-3.5 w-3.5" />
+              <IconButton label="Rimuovi spese di trasporto" onClick={() => handleRemoveTrasporto(trasporto.prezzoListino)} destructive>
+                <X className="h-3.5 w-3.5 pointer-coarse:h-4 pointer-coarse:w-4" />
               </IconButton>
             )}
           </div>
