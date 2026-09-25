@@ -14,7 +14,8 @@ import { calculateOrderDiscountedTotal, formatSconto, getLineTotal } from "@/lib
 import type { Anagrafica, Quotation, QuotationItem } from "@/types";
 
 const VAT_RATE = 0.22;
-const TABLE_BODY_AVAILABLE_MM = 134;
+// Spazio del corpo tabella: la riga dei totali è alta 11mm (etichette su una riga), il riempitivo arriva a fondo pagina.
+const TABLE_BODY_AVAILABLE_MM = 137;
 const MIN_FILLER_ROW_MM = 0;
 
 function formatDate(iso: string) {
@@ -97,12 +98,14 @@ function SheetPreview({ children }: { children: ReactNode }) {
   }, []);
 
   const fitScale = size.available && size.width ? Math.min(1, size.available / size.width) : 1;
-  const canFit = fitScale < 0.99;
-  const scale = canFit && zoom === "fit" ? fitScale : 1;
+  // Si adatta appena il foglio non entra; la scelta Adatta/100% compare solo se la riduzione è percepibile.
+  const needsScale = fitScale < 1;
+  const showToggle = fitScale < 0.95;
+  const scale = needsScale && (zoom === "fit" || !showToggle) ? fitScale : 1;
 
   return (
     <>
-      {canFit && (
+      {showToggle && (
         <div className="no-print mb-3 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">Anteprima ridotta: il PDF resta in formato A4.</p>
           <SegmentedTabs
@@ -116,7 +119,7 @@ function SheetPreview({ children }: { children: ReactNode }) {
           />
         </div>
       )}
-      <div ref={frameRef} className={cn("sheet-frame", canFit && zoom === "actual" && "overflow-x-auto")}>
+      <div ref={frameRef} className={cn("sheet-frame", showToggle && zoom === "actual" && "overflow-x-auto")}>
         <div
           className="sheet-viewport"
           style={size.width ? { width: size.width * scale, height: size.height * scale } : undefined}
@@ -498,13 +501,17 @@ export default function QuotationPrintPage() {
           vertical-align: middle;
         }
 
+        /* Etichette su una riga, come quelle dell'intestazione: nelle celle da 26-32mm il corpo 8.8pt andava a capo. */
         .totals-label {
           display: block;
           margin-bottom: 2mm;
+          font-size: 7.2pt;
+          white-space: nowrap;
         }
 
-        .totals-currency {
-          margin-right: 5mm;
+        /* Importo mai spezzato (prima "39.271," / "95"); con totali enormi va a capo solo tra "EUR" e la cifra. */
+        .totals-amount {
+          white-space: nowrap;
         }
 
         @media print {
@@ -754,16 +761,15 @@ export default function QuotationPrintPage() {
                 <td colSpan={2} style={{ borderLeft: 0, borderBottom: 0 }} />
                 <td colSpan={2}>
                   <span className="totals-label">Totale imponibile</span>
-                  <span>{formatCurrency(total)}</span>
+                  <span className="totals-amount">{formatCurrency(total)}</span>
                 </td>
                 <td colSpan={2}>
                   <span className="totals-label">Totale iva</span>
-                  <span>{formatCurrency(vatTotal)}</span>
+                  <span className="totals-amount">{formatCurrency(vatTotal)}</span>
                 </td>
                 <td colSpan={2}>
                   <span className="totals-label">Totale Documento</span>
-                  <span className="totals-currency">EUR</span>
-                  <span>{formatCurrency(documentTotal)}</span>
+                  EUR <span className="totals-amount">{formatCurrency(documentTotal)}</span>
                 </td>
               </tr>
             </tbody>

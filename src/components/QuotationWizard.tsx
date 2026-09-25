@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Calendar,
   CheckCircle2,
@@ -31,22 +32,28 @@ import AddressAutocompleteInput, {
   type AddressData,
 } from "@/components/AddressAutocompleteInput";
 import MaterialList from "@/components/MaterialList";
-import WizardStepper from "@/components/WizardStepper";
+import WizardStepper, { WIZARD_BACK_HREF, useWizardBackGuard } from "@/components/WizardStepper";
 import WizardHeader from "@/components/WizardHeader";
 import ExitOrderDialog from "@/components/ExitOrderDialog";
-import { useNavigationGuard } from "@/lib/navigation-guard";
+import { LOGOUT_HREF, useNavigationGuard } from "@/lib/navigation-guard";
 import OrderLinesEditor from "@/components/OrderLinesEditor";
 import QuickLineComposer, { type LineComposerRequest, type QuickLineComposerHandle } from "@/components/QuickLineComposer";
 import SearchBar from "@/components/SearchBar";
 import { countArticleLines, itemsRequireApproval } from "@/lib/order-lines";
-import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
+import { calculateOrderDiscountedTotal, formatOrderCurrency, formatOrderQuantitiesByUnit } from "@/lib/order-totals";
 import { useAuth } from "@/lib/auth-context";
 import { useQuotationStore } from "@/lib/useQuotationStore";
+import { cn } from "@/lib/utils";
 import { VALIDITA_PREVENTIVO_GIORNI, type AnagraficaSearchItem, type OrderLine, type Quotation } from "@/types";
 
 const STEP_LABELS = ["Cliente", "Materiali", "Dati", "Riepilogo"] as const;
 const WIZARD_EYEBROW = "Preventivi";
 const EXIT_HREF = "/quotations";
+const SAVE_ERROR_TOAST_ID = "quotation-save-error";
+/** Layout con la sidebar del carrello al posto del drawer (breakpoint lg). */
+const SIDEBAR_MEDIA = "(min-width: 64rem)";
+/** Chiave localStorage: il preventivo persistito è nuovo (riprendibile da /quotations/new) o una modifica. */
+export const QUOTATION_WIZARD_ORIGIN_KEY = "listino-quotation-wizard-origin";
 
 interface Props {
   editingQuotation?: Quotation;
@@ -72,6 +79,11 @@ function addDays(iso: string, days: number) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Numero documento senza punti di a capo ai trattini (word joiner): "PREV-2026-" / "0002" non si spezza. */
+function unbreakableNumber(numero: string) {
+  return numero.replace(/-/g, "-\u2060");
 }
 
 export default function QuotationWizard({ editingQuotation }: Props) {
@@ -105,6 +117,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   // Altezza dell'header sticky (ricerca + casella): la sidebar desktop si aggancia subito sotto.
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
   const step2RootRef = useRef<HTMLDivElement>(null);
+  const cartAsideRef = useRef<HTMLElement>(null);
 
   // Destinazione cantiere (opzionale), stesso componente e validazione degli ordini
   const addressInputRef = useRef<AddressAutocompleteInputHandle>(null);
@@ -113,8 +126,20 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const [recentDestinations, setRecentDestinations] = useState<string[]>([]);
   const [recentDestinationsLoading, setRecentDestinationsLoading] = useState(false);
   const [selectedRecentDestination, setSelectedRecentDestination] = useState("");
+  /** Riepilogo richiesto dallo stepper con una destinazione da verificare: si valida appena lo step Dati è montato. */
+  const pendingSummaryRef = useRef(false);
 
+  const { user, logout } = useAuth();
   const isEditing = !!editingQuotation;
+
+  // Il preventivo persistito di un nuovo documento si può riprendere dopo una ricarica (vedi /quotations/new), quello di una modifica no.
+  useEffect(() => {
+    try {
+      localStorage.setItem(QUOTATION_WIZARD_ORIGIN_KEY, isEditing ? "edit" : "new");
+    } catch {
+      // storage non disponibile: /quotations/new riparte semplicemente da zero
+    }
+  }, [isEditing]);
 
   // Uscita dal wizard (pulsante Esci o link della navigazione): con dati inseriti passa dalla conferma.
   const [exitDialogOpen, setExitDialogOpen] = useState(false);
@@ -141,9 +166,8 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     return () => setNavigationGuard(null);
   }, [hasProgress, setNavigationGuard]);
 
-  const wizardTitle = editingQuotation ? `Modifica preventivo ${editingQuotation.numero}` : "Nuovo preventivo";
+  const wizardTitle = editingQuotation ? `Modifica preventivo ${unbreakableNumber(editingQuotation.numero)}` : "Nuovo preventivo";
   const wizardCustomer = quotationInfo.cliente.trim();
-  const { user } = useAuth();
 
   useEffect(() => {
     if (!editingQuotation) return;
@@ -202,6 +226,13 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     if (currentStep !== 2 && mobileCartOpen) setMobileCartOpen(false);
   }, [currentStep, mobileCartOpen, setMobileCartOpen]);
 
+  // Ogni step si apre dall'alto; fanno eccezione le richieste che scorrono da sole (articolo da modificare, casella righe).
+  useEffect(() => {
+    if (pendingLineRequestRef.current || openArticleRequest) return;
+    window.scrollTo({ top: 0 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
   // Destinazioni recenti del cliente selezionato da anagrafica (come negli ordini)
   useEffect(() => {
     if (!quotationInfo.clienteId) {
@@ -247,14 +278,18 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     if (data.address) setQuotationInfo({ luogoConsegna: data.address });
   }, [setQuotationInfo]);
 
-  /** Lasciando lo step Dati con una destinazione digitata la si valida (geocoding) come negli ordini. */
+  /**
+   * Verso il riepilogo una destinazione digitata si valida (geocoding) come negli ordini: il campo esiste solo
+   * con lo step Dati aperto, altrimenti vale l'ultimo esito.
+   */
   const validateDestination = useCallback(async () => {
-    if (!quotationInfo.luogoConsegna.trim()) return true;
-    return isAddressValid || (await addressInputRef.current?.validateAddress()) === true;
-  }, [isAddressValid, quotationInfo.luogoConsegna]);
+    if (!quotationInfo.luogoConsegna.trim() || isAddressValid) return true;
+    return currentStep === 3 && (await addressInputRef.current?.validateAddress()) === true;
+  }, [currentStep, isAddressValid, quotationInfo.luogoConsegna]);
 
   const flaggedCount = countArticleLines(lines);
-  const totalQty = calculateOrderTotalPieces(lines);
+  /** Quantità per unità di misura ("4 pz · 13,5 mq"): unità diverse non si sommano. */
+  const quantitiesLabel = formatOrderQuantitiesByUnit(lines);
   const quotationRows = lines;
   const total = calculateOrderDiscountedTotal(lines);
   /** Sconti liberi presenti: il preventivo resterà in attesa di un amministratore (gli admin approvano implicitamente). */
@@ -334,6 +369,50 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     return () => observer.disconnect();
   }, [currentStep]);
 
+  // Sidebar del carrello (da lg): alta quanto lo spazio visibile sotto il suo bordo superiore, così "Indietro/Avanti"
+  // restano a schermo anche prima che si agganci sotto l'header sticky (tablet in orizzontale, pagina non ancora scorsa).
+  useEffect(() => {
+    const aside = cartAsideRef.current;
+    const header = stickyHeaderRef.current;
+    if (!aside || !header) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const top = Math.max(aside.getBoundingClientRect().top, 0);
+      aside.style.maxHeight = `${Math.max(window.innerHeight - top - 20, 200)}px`;
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    const observer = new ResizeObserver(schedule);
+    observer.observe(header);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      observer.disconnect();
+    };
+  }, [currentStep]);
+
+  // Riepilogo chiesto dallo stepper con la destinazione ancora da verificare: la si valida nello step Dati appena
+  // montato e, se va bene, si prosegue; altrimenti resta aperto con l'errore sul campo.
+  useEffect(() => {
+    if (currentStep !== 3 || !pendingSummaryRef.current) return;
+    pendingSummaryRef.current = false;
+    // Un giro dopo il montaggio: il campo ha già collegato Google Maps (se caricato) e può fare il geocoding.
+    const timer = window.setTimeout(async () => {
+      if ((await addressInputRef.current?.validateAddress()) === true) {
+        setStep(4);
+        return;
+      }
+      document.getElementById("luogo")?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [currentStep, setStep]);
+
   const handleEditLine = useCallback((line: OrderLine) => {
     openLineComposer({ kind: line.tipo === "commento" ? "nota" : "manuale", line });
   }, [openLineComposer]);
@@ -356,6 +435,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Errore salvataggio");
 
+      toast.dismiss(SAVE_ERROR_TOAST_ID);
       const id = data?.quotation?.id ?? data?.id ?? editingQuotation?.id;
       const pending = data?.quotation?.status === "in_approvazione";
       setSavedPendingApproval(pending);
@@ -363,7 +443,9 @@ export default function QuotationWizard({ editingQuotation }: Props) {
       resetQuotation();
       setTimeout(() => router.push(id ? `/quotations/${id}` : "/quotations"), pending ? 1600 : 900);
     } catch (err) {
-      alert(err instanceof Error && err.message ? err.message : "Errore nel salvataggio del preventivo");
+      const message =
+        err instanceof TypeError ? "Connessione non disponibile. Riprova." : err instanceof Error && err.message ? err.message : "Errore nel salvataggio del preventivo.";
+      toast.error("Preventivo non salvato", { id: SAVE_ERROR_TOAST_ID, description: message });
     } finally {
       setSaving(false);
     }
@@ -379,10 +461,50 @@ export default function QuotationWizard({ editingQuotation }: Props) {
 
   const goToStep = async (step: 1 | 2 | 3 | 4) => {
     if (step === currentStep || !canReachStep(step)) return;
-    if (currentStep === 3 && step > 3 && !(await validateDestination())) return;
+    // Verso il riepilogo (anche saltando lo step Dati dallo stepper) vale la validazione del pulsante "Riepilogo":
+    // se non passa si apre lo step Dati, che verifica la destinazione e mostra l'errore.
+    if (step === 4 && !(await validateDestination())) {
+      if (currentStep !== 3) {
+        pendingSummaryRef.current = true;
+        setMobileCartOpen(false);
+        setStep(3);
+      } else {
+        document.getElementById("luogo")?.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      return;
+    }
     setMobileCartOpen(false);
     setStep(step);
   };
+
+  /** Gesto/pulsante indietro del browser: chiude conferma o carrello, poi torna allo step precedente; dallo step 1 chiede conferma. */
+  const handleBrowserBack = (): boolean => {
+    if (saving) return true;
+    if (exitDialogOpen) {
+      setExitDialogOpen(false);
+      return true;
+    }
+    if (mobileCartOpen) {
+      setMobileCartOpen(false);
+      return true;
+    }
+    if (currentStep > 1) {
+      setStep((currentStep - 1) as 1 | 2 | 3);
+      return true;
+    }
+    if (!hasProgress) return false;
+    setExitTarget(WIZARD_BACK_HREF);
+    setExitDialogOpen(true);
+    return true;
+  };
+  const leaveToPreviousPage = useWizardBackGuard({ enabled: !saved, onBack: handleBrowserBack, fallbackHref: EXIT_HREF });
+
+  /** Uscita confermata: il logout chiude davvero la sessione, "indietro" torna alla pagina precedente al wizard. */
+  const leaveWizard = useCallback((target: string) => {
+    if (target === LOGOUT_HREF) void logout();
+    else if (target === WIZARD_BACK_HREF) leaveToPreviousPage();
+    else router.push(target);
+  }, [leaveToPreviousPage, logout, router]);
 
   const Stepper = () => (
     <>
@@ -393,7 +515,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
         onExitWithoutSaving={() => {
           resetQuotation();
           setExitDialogOpen(false);
-          router.push(exitTarget);
+          leaveWizard(exitTarget);
         }}
         onContinue={() => setExitDialogOpen(false)}
       />
@@ -407,13 +529,14 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     </>
   );
 
-  const renderCartSummary = (itemsHeightClass: string) => (
+  /** `fill`: nella sidebar l'elenco righe occupa lo spazio rimasto e scorre da solo (totale e pulsanti restano visibili). */
+  const renderCartSummary = (itemsHeightClass: string, fill = false) => (
     <>
-      <div className="flex items-center justify-between gap-3 px-1">
+      <div className="flex shrink-0 items-center justify-between gap-3 px-1">
         <div className="min-w-0">
           <p className="font-display text-xl leading-tight font-bold text-foreground">Carrello</p>
-          <p className="truncate text-[13px] text-muted-foreground">
-            {flaggedCount > 0 ? `${flaggedCount} ${flaggedCount === 1 ? "articolo" : "articoli"} · ${totalQty} pz` : "Nessun articolo selezionato"}
+          <p className="text-[13px] text-muted-foreground">
+            {flaggedCount > 0 ? `${flaggedCount} ${flaggedCount === 1 ? "articolo" : "articoli"} · ${quantitiesLabel}` : "Nessun articolo selezionato"}
           </p>
         </div>
         <span className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
@@ -425,7 +548,8 @@ export default function QuotationWizard({ editingQuotation }: Props) {
         )}
         </span>
       </div>
-      <div className="flex flex-col gap-2">
+      {/* Almeno una riga sempre visibile: se lo spazio non basta scorre l'intera sidebar (pulsanti fissati in fondo). */}
+      <div className={cn("flex flex-col gap-2", fill && "min-h-28 flex-auto")}>
         <p className="px-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Righe preventivo</p>
         <OrderLinesEditor
           store="quotation"
@@ -434,9 +558,10 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           onEditLine={handleEditLine}
           onAddNoteAbove={handleAddNoteAbove}
           listHeightClass={itemsHeightClass}
+          className={fill ? "min-h-0 flex-auto" : undefined}
         />
       </div>
-      <div className="flex items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
+      <div className="flex shrink-0 items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
         <span className="text-sm font-semibold text-foreground/80">Totale imponibile</span>
         <span className="font-display text-2xl font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
       </div>
@@ -477,8 +602,11 @@ export default function QuotationWizard({ editingQuotation }: Props) {
                 id="cliente"
                 placeholder="Nome azienda o cliente"
                 value={quotationInfo.cliente}
-                autoFocus
-                onFocus={() => setCustomerDropdownOpen(true)}
+                // In modifica il cliente c'è già: niente tastiera né suggerimenti all'apertura (si aprono scrivendo).
+                autoFocus={!isEditing}
+                onFocus={() => {
+                  if (!quotationInfo.clienteId) setCustomerDropdownOpen(true);
+                }}
                 onBlur={() => { setTimeout(() => setCustomerDropdownOpen(false), 120); }}
                 onChange={(event) => {
                   setQuotationInfo({ cliente: event.target.value, clienteId: null });
@@ -541,7 +669,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           <Stepper />
         </div>
         <div ref={stickyHeaderRef} className="sticky top-[var(--app-header-h)] z-30 bg-background border-b border-border">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2.5 lg:pr-[22rem]">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2.5 lg:pr-[22rem] lg:has-[[data-composer-open]]:pr-4">
             <SearchBar ref={searchInputRef} autoFocus store="quotation" />
             <div>
               <QuickLineComposer ref={composerRef} store="quotation" onAdded={handleArticleConfirmed} />
@@ -562,11 +690,12 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </main>
 
           <aside
+            ref={cartAsideRef}
             className="hidden lg:flex w-80 shrink-0 flex-col gap-4 my-5 mr-4 rounded-2xl border border-border/80 bg-card p-5 shadow-panel sticky self-start overflow-y-auto"
             style={{ top: "calc(var(--app-header-h) + var(--step2-header-h) + 1.25rem)", maxHeight: "calc(100dvh - var(--app-header-h) - var(--step2-header-h) - 2.5rem)" }}
           >
-            {renderCartSummary("max-h-[46dvh]")}
-            <div className="flex gap-2">
+            {renderCartSummary("min-h-0 flex-auto", true)}
+            <div className="sticky bottom-0 -mb-5 flex shrink-0 gap-2 bg-card pb-5">
               <Button variant="outline" size="lg" className="px-4" onClick={() => setStep(1)}>
                 <ChevronLeft className="h-4 w-4" />
                 Indietro
@@ -579,7 +708,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </aside>
         </div>
 
-        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
+        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen} closeOnMedia={SIDEBAR_MEDIA}>
           <DrawerContent className="lg:hidden p-0 rounded-t-3xl">
             <DrawerHeader className="px-4 py-3 border-b border-border">
               <div className="flex items-center justify-between gap-2">
@@ -776,9 +905,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
             <Button
               className="w-full h-11 gap-2 font-semibold sm:flex-1"
               disabled={!canGoNextStep3}
-              onClick={async () => {
-                if (await validateDestination()) setStep(4);
-              }}
+              onClick={() => void goToStep(4)}
             >
               Riepilogo
               <ChevronRight className="h-4 w-4" />

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, ChevronDown, Clock, FileText, Hourglass, Loader2, MapPin, MessageSquare, Package, Pencil, Plus, Printer, ShieldAlert, ShoppingCart, Trash2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -13,7 +14,7 @@ import SearchField from "@/components/SearchField";
 import SegmentedTabs from "@/components/SegmentedTabs";
 import { cn } from "@/lib/utils";
 import { countArticleLines } from "@/lib/order-lines";
-import { calculateOrderDiscountedTotal, calculateOrderTotalPieces, formatOrderCurrency } from "@/lib/order-totals";
+import { calculateOrderDiscountedTotal, formatOrderCurrency, formatOrderQuantitiesByUnit } from "@/lib/order-totals";
 import type { Quotation } from "@/types";
 
 function formatDate(iso: string) {
@@ -32,6 +33,9 @@ function quotationTotal(quotation: Quotation) {
 }
 
 type QuotationTab = "attivi" | "convertiti";
+
+/** Altezza utile della pagina: la shell aggiunge già barra superiore e tab bar (0 da lg). */
+const PAGE_MIN_H = "min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))]";
 
 export default function QuotationsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -74,7 +78,7 @@ export default function QuotationsPage() {
         setDeleteConfirm(null);
         setExpanded(null);
       } else {
-        alert("Errore nella cancellazione del preventivo");
+        toast.error("Errore nella cancellazione del preventivo");
       }
     } finally {
       setDeleting(false);
@@ -101,7 +105,7 @@ export default function QuotationsPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className={cn(PAGE_MIN_H, "flex items-center justify-center")}>
         <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
@@ -125,7 +129,7 @@ export default function QuotationsPage() {
 
   /** Dettaglio preventivo: in linea sotto la card su mobile, nel pannello laterale su desktop. */
   const renderQuotationDetail = (quotation: Quotation, inset: string) => {
-    const totalQty = calculateOrderTotalPieces(quotation.items);
+    const quantities = formatOrderQuantitiesByUnit(quotation.items);
     const showDeleteConfirm = deleteConfirm === quotation.id;
     const meta: { label: string; value: string; wide?: boolean }[] = [
       { label: "Data", value: formatDate(quotation.dataPreventivo) },
@@ -135,9 +139,10 @@ export default function QuotationsPage() {
       { label: "Destinazione cantiere", value: quotation.luogoConsegna || "Stessa del cliente", wide: true },
     ];
 
+    // Container query: il layout segue la larghezza del dettaglio (card espansa o pannello laterale), non del viewport.
     return (
-      <div className="flex flex-col">
-        <dl className={cn("grid grid-cols-2 gap-x-4 gap-y-3 bg-muted/50 py-3.5 sm:grid-cols-4", inset)}>
+      <div className="@container flex flex-col">
+        <dl className={cn("grid grid-cols-2 gap-x-4 gap-y-3 bg-muted/50 py-3.5 @xl:grid-cols-4", inset)}>
           {meta.map((entry) => (
             <div key={entry.label} className={cn("min-w-0", entry.wide && "col-span-2")}>
               <dt className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">{entry.label}</dt>
@@ -149,7 +154,7 @@ export default function QuotationsPage() {
         {quotation.note && (
           <div className={cn("flex items-start gap-2 border-t border-border/70 py-3 text-sm text-foreground/85", inset)}>
             <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="whitespace-pre-wrap"><strong className="font-bold">Note:</strong> {quotation.note}</span>
+            <span className="min-w-0 wrap-anywhere whitespace-pre-wrap"><strong className="font-bold">Note:</strong> {quotation.note}</span>
           </div>
         )}
 
@@ -179,11 +184,13 @@ export default function QuotationsPage() {
           ))}
         </div>
 
-        <div className={cn("flex items-end justify-end gap-8 py-4", inset)}>
-          <div className="flex flex-col items-end">
-            <span className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Totale pezzi</span>
-            <span className="text-base font-bold tabular-nums">{totalQty}</span>
-          </div>
+        <div className={cn("flex flex-wrap items-end justify-end gap-x-8 gap-y-2 py-4", inset)}>
+          {quantities && (
+            <div className="flex flex-col items-end">
+              <span className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Quantità</span>
+              <span className="text-base font-bold tabular-nums">{quantities}</span>
+            </div>
+          )}
           <div className="flex flex-col items-end">
             <span className="text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Totale imponibile</span>
             <span className="font-display text-2xl leading-tight font-bold tabular-nums">{formatCurrency(quotationTotal(quotation))}</span>
@@ -196,14 +203,14 @@ export default function QuotationsPage() {
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10">
                 <AlertTriangle className="h-4.5 w-4.5 text-destructive" />
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-destructive">Eliminare il preventivo {quotation.numero}?</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-destructive">Eliminare il preventivo <span className="whitespace-nowrap">{quotation.numero}?</span></p>
                 <p className="mt-1 text-xs text-muted-foreground">Questa azione non è reversibile.</p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <Button size="sm" variant="destructive" onClick={() => handleDelete(quotation.id)} disabled={deleting} className="w-full justify-center sm:w-auto">
+                <div className="mt-3 flex flex-col gap-2 @sm:flex-row @sm:flex-wrap">
+                  <Button size="sm" variant="destructive" onClick={() => handleDelete(quotation.id)} disabled={deleting} className="w-full justify-center @sm:w-auto">
                     {deleting ? <><Loader2 className="animate-spin" /> Eliminazione...</> : <><Trash2 /> Sì, elimina</>}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setDeleteConfirm(null)} disabled={deleting} className="w-full justify-center sm:w-auto">
+                  <Button size="sm" variant="outline" onClick={() => setDeleteConfirm(null)} disabled={deleting} className="w-full justify-center @sm:w-auto">
                     Annulla
                   </Button>
                 </div>
@@ -211,29 +218,29 @@ export default function QuotationsPage() {
             </div>
           </div>
         ) : (
-          <div className={cn("grid grid-cols-2 gap-2 border-t border-border py-3.5 sm:flex sm:flex-row sm:flex-wrap sm:justify-end", inset)}>
-            <Button variant="destructive-soft" onClick={() => setDeleteConfirm(quotation.id)} className="w-full justify-center sm:order-first sm:mr-auto sm:w-auto">
+          <div className={cn("grid grid-cols-2 gap-2 border-t border-border py-3.5 @xl:flex @xl:flex-row @xl:flex-wrap @xl:justify-end", inset)}>
+            <Button variant="destructive-soft" onClick={() => setDeleteConfirm(quotation.id)} className="w-full justify-center @xl:order-first @xl:mr-auto @xl:w-auto">
               <Trash2 /> Elimina
             </Button>
-            <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}`)} className="w-full justify-center sm:w-auto">
+            <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}`)} className="w-full justify-center @xl:w-auto">
               <FileText /> Dettaglio
             </Button>
             {(quotation.status === "attivo" || quotation.status === "convertito" || isAdmin) && (
-              <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}/print`)} className="w-full justify-center text-primary sm:w-auto">
+              <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}/print`)} className="w-full justify-center text-primary @xl:w-auto">
                 <Printer /> PDF
               </Button>
             )}
             {quotation.status !== "convertito" && (
-              <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}/edit`)} className="w-full justify-center text-primary sm:w-auto">
+              <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}/edit`)} className="w-full justify-center text-primary @xl:w-auto">
                 <Pencil /> Modifica
               </Button>
             )}
             {quotation.status === "convertito" && quotation.convertedOrderId ? (
-              <Button variant="outline" onClick={() => router.push(`/orders`)} className="col-span-2 w-full justify-center text-primary sm:w-auto">
+              <Button variant="outline" onClick={() => router.push(`/orders?open=${quotation.convertedOrderId}`)} className="col-span-2 w-full justify-center text-primary @xl:w-auto">
                 <ShoppingCart /> Apri ordine
               </Button>
             ) : quotation.status === "attivo" ? (
-              <Button onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)} className="col-span-2 w-full justify-center sm:w-auto">
+              <Button onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)} className="col-span-2 w-full justify-center @xl:w-auto">
                 <ShoppingCart /> Trasforma in ordine
               </Button>
             ) : null}
@@ -244,7 +251,7 @@ export default function QuotationsPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className={cn(PAGE_MIN_H, "bg-background")}>
       <main className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-24 lg:h-dvh lg:max-w-[1200px] lg:gap-6 lg:px-10 lg:pb-0">
         {/* Titolo, schede e ricerca restano visibili: sticky su mobile, fissi su desktop (scorrono elenco e dettaglio) */}
         <div className="sticky top-[var(--app-header-h)] z-20 -mx-4 border-b border-border/70 bg-background px-4 pt-5 pb-3 lg:static lg:mx-0 lg:border-0 lg:px-0 lg:pt-8 lg:pb-0">
@@ -263,8 +270,9 @@ export default function QuotationsPage() {
                     { value: "convertiti", label: "Trasformati", count: quotationCounts.convertiti },
                   ]}
                 />
+                {/* Da lg larga fino a 360px ma restringibile: accanto al titolo anche a 1024px */}
                 <SearchField
-                  className="order-1 sm:flex-1 lg:order-2 lg:w-[360px] lg:flex-none"
+                  className="order-1 sm:flex-1 lg:order-2 lg:w-0 lg:max-w-[360px] lg:min-w-48"
                   value={searchQuery}
                   onChange={setSearchQuery}
                   placeholder="Numero, cliente, agente"
@@ -292,11 +300,11 @@ export default function QuotationsPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]">
             <section aria-label="Elenco preventivi" className="flex min-w-0 flex-col gap-2.5 lg:-mx-1.5 lg:overflow-y-auto lg:px-1.5 lg:pt-1.5 lg:pb-8">
               {filteredQuotations.map((quotation) => {
                 const isOpen = expanded === quotation.id;
-                const totalQty = calculateOrderTotalPieces(quotation.items);
+                const quantities = formatOrderQuantitiesByUnit(quotation.items);
                 const articleCount = countArticleLines(quotation.items);
                 return (
                   <article
@@ -318,7 +326,7 @@ export default function QuotationsPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-mono text-xs text-muted-foreground">{quotation.numero} · {formatDate(quotation.dataPreventivo)}</p>
-                          <p className="mt-0.5 text-base leading-snug font-bold text-foreground">{quotation.cliente}</p>
+                          <p className="mt-0.5 text-base leading-snug font-bold wrap-anywhere text-foreground">{quotation.cliente}</p>
                           {quotation.luogoConsegna && (
                             <p className="mt-0.5 flex items-center gap-1 text-[13px] text-muted-foreground">
                               <MapPin className="h-3.5 w-3.5 shrink-0" />
@@ -336,7 +344,7 @@ export default function QuotationsPage() {
                         <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
                           <span className="inline-flex items-center gap-1.5">
                             <Package className="h-3.5 w-3.5" />
-                            {articleCount} art. · {totalQty} pz
+                            {articleCount} art.{quantities && ` · ${quantities}`}
                           </span>
                           <span className="inline-flex items-center gap-1.5">
                             <Clock className="h-3.5 w-3.5" />
@@ -363,15 +371,17 @@ export default function QuotationsPage() {
               })}
             </section>
 
+            {/* key: cambiando preventivo il pannello riparte dall'inizio invece di restare scorso a metà */}
             <section
+              key={selectedQuotation?.id ?? "empty"}
               aria-label="Dettaglio preventivo"
-              className="hidden max-h-[calc(100%-2rem)] self-start overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-panel lg:mt-1.5 lg:block"
+              className="@container hidden max-h-[calc(100%-2rem)] self-start overflow-y-auto rounded-2xl border border-border/80 bg-card shadow-panel lg:mt-1.5 lg:block"
             >
               {selectedQuotation ? (
                 <>
                   <div className="px-6 pt-6 pb-4">
                     <p className="font-mono text-[13px] text-muted-foreground">Preventivo {selectedQuotation.numero}</p>
-                    <h2 className="mt-1 font-display text-[28px] leading-tight font-bold tracking-tight text-foreground">{selectedQuotation.cliente}</h2>
+                    <h2 className="mt-1 font-display text-[22px] leading-tight font-bold tracking-tight wrap-anywhere text-foreground @md:text-[28px]">{selectedQuotation.cliente}</h2>
                     <div className="mt-2.5 flex flex-wrap items-center gap-1.5">{renderStatusChip(selectedQuotation)}</div>
                   </div>
                   {renderQuotationDetail(selectedQuotation, "px-6")}
@@ -390,13 +400,16 @@ export default function QuotationsPage() {
         )}
       </main>
 
-      <Link
-        href="/quotations/new"
-        className="no-print fixed right-4 bottom-[calc(var(--app-tabbar-h)+0.75rem)] z-30 inline-flex h-14 items-center gap-2 rounded-2xl bg-primary pr-5 pl-4 text-[15px] font-semibold text-primary-foreground shadow-primary transition-colors hover:bg-primary-hover lg:hidden"
-      >
-        <Plus className="h-5 w-5" />
-        Nuovo preventivo
-      </Link>
+      {/* Nascosto con un preventivo espanso: coprirebbe totali e azioni della card in basso a destra */}
+      {!selectedQuotation && (
+        <Link
+          href="/quotations/new"
+          className="no-print fixed right-4 bottom-[calc(var(--app-tabbar-h)+0.75rem)] z-30 inline-flex h-14 items-center gap-2 rounded-2xl bg-primary pr-5 pl-4 text-[15px] font-semibold text-primary-foreground shadow-primary transition-colors hover:bg-primary-hover lg:hidden"
+        >
+          <Plus className="h-5 w-5" />
+          Nuovo preventivo
+        </Link>
+      )}
     </div>
   );
 }
