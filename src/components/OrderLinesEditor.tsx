@@ -52,6 +52,11 @@ interface Props {
  */
 const UNDO_TOAST_STYLE = { pointerEvents: "auto" } as const;
 
+/** Col carrello aperto a tutto schermo (drawer) il toast va in alto, sulla parte oscurata, per non coprire le righe. */
+function undoToastPosition(): "top-center" | undefined {
+  return document.querySelector('[data-slot="drawer-content"][data-state="open"]') ? "top-center" : undefined;
+}
+
 /** Azione di riga: 28 px col mouse, 40 px con puntatore touch (tablet). */
 function IconButton({
   label,
@@ -313,6 +318,7 @@ export default function OrderLinesEditor({
     toast(line.tipo === "commento" ? "Nota rimossa" : "Riga rimossa", {
       description: line.tipo === "commento" ? undefined : line.descrizione || line.codice,
       style: UNDO_TOAST_STYLE,
+      position: undoToastPosition(),
       action: {
         label: "Annulla",
         onClick: () => {
@@ -334,6 +340,7 @@ export default function OrderLinesEditor({
     actions.setTrasporto(null);
     toast("Spese di trasporto rimosse", {
       style: UNDO_TOAST_STYLE,
+      position: undoToastPosition(),
       action: { label: "Annulla", onClick: () => actions.setTrasporto(importo) },
     });
   }
