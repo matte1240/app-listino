@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { verifyToken, COOKIE_NAME, signToken, setSessionCookie } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { hashSync } from "bcryptjs";
 import type { DbUser } from "@/lib/db";
@@ -68,7 +68,7 @@ export async function PUT(
   }
 
   const newUsername = username || existing.username;
-  const newRole = role || existing.role;
+  const newRole = (role || existing.role) as DbUser["role"]; // già validato sopra
   // Un admin non può togliersi il ruolo da solo e l'app non deve mai restare senza amministratori.
   if (newRole !== existing.role) {
     if (userId === admin.id) {
@@ -79,20 +79,29 @@ export async function PUT(
     }
   }
   const newPassword = password ? hashSync(password, 10) : existing.password;
+  // Nuova password: le sessioni già aperte con la vecchia (altri dispositivi compresi) vengono chiuse.
+  const newSessionVersion = password ? (existing.session_version ?? 0) + 1 : existing.session_version ?? 0;
   const submittedFullName = fullName ?? full_name;
   const newFullName = submittedFullName !== undefined ? submittedFullName.trim() : existing.full_name;
   const newEmail = email ?? existing.email;
 
-  db.prepare("UPDATE users SET username = ?, password = ?, role = ?, full_name = ?, email = ? WHERE id = ?").run(
+  db.prepare("UPDATE users SET username = ?, password = ?, role = ?, full_name = ?, email = ?, session_version = ? WHERE id = ?").run(
     newUsername,
     newPassword,
     newRole,
     newFullName,
     newEmail,
+    newSessionVersion,
     userId
   );
 
-  return NextResponse.json({ user: { id: userId, username: newUsername, fullName: newFullName || newUsername, role: newRole, email: newEmail } });
+  const updatedUser = { id: userId, username: newUsername, fullName: newFullName || newUsername, role: newRole, email: newEmail };
+  const response = NextResponse.json({ user: updatedUser });
+  // L'admin che cambia la propria password resta collegato su questo dispositivo con un token aggiornato.
+  if (userId === admin.id && newSessionVersion !== existing.session_version) {
+    setSessionCookie(response, await signToken(updatedUser, newSessionVersion));
+  }
+  return response;
 }
 
 export async function DELETE(

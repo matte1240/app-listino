@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { signToken, COOKIE_NAME } from "@/lib/auth";
+import { signToken, setSessionCookie } from "@/lib/auth";
 import { compareSync } from "bcryptjs";
 import type { DbUser } from "@/lib/db";
 
@@ -27,19 +27,16 @@ export async function POST(request: Request) {
   }
 
   const fullName = user.full_name || user.username;
-  const token = await signToken({ id: user.id, username: user.username, role: user.role, fullName, email: user.email });
+  const token = await signToken(
+    { id: user.id, username: user.username, role: user.role, fullName, email: user.email },
+    user.session_version ?? 0
+  );
 
   const response = NextResponse.json({
     user: { id: user.id, username: user.username, fullName, role: user.role, email: user.email },
   });
 
-  response.cookies.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.COOKIE_SECURE === "true",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 8, // 8 hours
-  });
+  setSessionCookie(response, token);
 
   return response;
 }

@@ -17,31 +17,49 @@ export interface JwtPayload {
   email: string;
 }
 
-export async function signToken(payload: JwtPayload): Promise<string> {
-  return new SignJWT(payload as unknown as Record<string, unknown>)
+const SESSION_MAX_AGE = 60 * 60 * 8; // 8 ore
+
+/** `sessionVersion` (claim `sv`) è la versione delle sessioni dell'utente al momento del login. */
+export async function signToken(payload: JwtPayload, sessionVersion: number): Promise<string> {
+  return new SignJWT({ ...payload, sv: sessionVersion } as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("8h")
+    .setExpirationTime(`${SESSION_MAX_AGE}s`) // durata relativa: un numero sarebbe una data assoluta
     .sign(secret);
+}
+
+/** Scrive il cookie di sessione (login e rinnovo dopo il cambio della propria password). */
+export function setSessionCookie(response: NextResponse, token: string) {
+  response.cookies.set(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.COOKIE_SECURE === "true",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  });
 }
 
 /**
  * Verifica firma e scadenza del token, poi ricarica l'utente dal DB: un utente eliminato perde
  * subito l'accesso e ruolo/nome sono quelli attuali, non quelli scritti nel token al login.
+ * Dopo un cambio password la versione delle sessioni cresce e i token precedenti non valgono più
+ * (i token senza `sv`, emessi prima di questo controllo, valgono come versione 0).
  */
 export async function verifyToken(token: string): Promise<JwtPayload | null> {
-  let payload: Partial<JwtPayload>;
+  let payload: Partial<JwtPayload> & { sv?: unknown };
   try {
-    payload = (await jwtVerify(token, secret)).payload as Partial<JwtPayload>;
+    payload = (await jwtVerify(token, secret)).payload as Partial<JwtPayload> & { sv?: unknown };
   } catch {
     return null;
   }
   if (typeof payload.id !== "number") return null;
 
   const user = getDb()
-    .prepare("SELECT id, username, role, full_name, email FROM users WHERE id = ?")
+    .prepare("SELECT id, username, role, full_name, email, session_version FROM users WHERE id = ?")
     .get(payload.id) as Omit<DbUser, "password" | "created_at"> | undefined;
   if (!user) return null;
+  const tokenVersion = typeof payload.sv === "number" ? payload.sv : 0;
+  if (tokenVersion !== user.session_version) return null;
 
   return {
     id: user.id,

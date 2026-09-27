@@ -32,6 +32,10 @@ function createDb() {
   if (!userCols.some((c) => c.name === "full_name")) {
     db.exec("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''");
   }
+  // Versione delle sessioni: cambiando la password si incrementa e i token emessi prima smettono di valere.
+  if (!userCols.some((c) => c.name === "session_version")) {
+    db.exec("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS enriched_materials (
@@ -459,5 +463,6 @@ export interface DbUser {
   role: "admin" | "agente";
   full_name: string;
   email: string;
+  session_version: number;
   created_at: string;
 }
