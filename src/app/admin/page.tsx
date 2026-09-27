@@ -3,13 +3,19 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2, ShieldCheck, FileSpreadsheet } from "lucide-react";
+import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2, ShieldCheck, FileSpreadsheet, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import UploadExcel from "@/components/UploadExcel";
 import PageHeader from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 
 const adminSections = [
+  {
+    href: "/admin/dashboard",
+    title: "Dashboard",
+    description: "Andamento del mese, ordini e preventivi per stato, ultimi ordini inseriti.",
+    icon: LayoutDashboard,
+  },
   {
     href: "/admin/approvazioni",
     title: "Approvazioni",
