@@ -576,7 +576,8 @@ function OrdersPageContent() {
 
   return (
     <div className={cn(PAGE_MIN_H, "bg-background")}>
-      <main className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-24 lg:h-dvh lg:max-w-[1200px] lg:gap-6 lg:px-10 lg:pb-0">
+      {/* Su desktop il contenuto parte dalla barra laterale e si allarga col pannello di dettaglio (niente vuoto a sinistra). */}
+      <main className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-24 lg:mx-0 lg:h-dvh lg:max-w-[1600px] lg:gap-6 lg:px-10 lg:pb-0">
         {/* Titolo, schede e ricerca restano visibili: sticky su mobile, fissi su desktop (scorrono elenco e dettaglio) */}
         <div ref={stickyBarRef} className="sticky top-[var(--app-header-h)] z-20 -mx-4 border-b border-border/70 bg-background px-4 pt-5 pb-3 lg:static lg:mx-0 lg:border-0 lg:px-0 lg:pt-8 lg:pb-0">
           <PageHeader
@@ -628,7 +629,7 @@ function OrdersPageContent() {
           <div
             aria-busy={loading}
             className={cn(
-              "grid grid-cols-1 gap-6 transition-opacity lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]",
+              "grid grid-cols-1 gap-6 transition-opacity lg:min-h-0 lg:flex-1 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)] 2xl:grid-cols-[440px_minmax(0,1fr)]",
               loading && "pointer-events-none opacity-60"
             )}
           >
