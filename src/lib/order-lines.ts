@@ -1,5 +1,6 @@
 import type { Material, OrderHistoryItem, OrderLine, OrderLineType } from "@/types";
 import { parseLocalizedNumber } from "@/lib/utils";
+import { CIG_LENGTH, CUP_LENGTH, isValidCig, isValidCup } from "@/lib/cig-cup";
 
 /**
  * Logica pura e condivisa (client + server) sulle righe di ordini e preventivi.
@@ -59,6 +60,23 @@ export function isTrasportoLine(item: Pick<OrderHistoryItem, "tipo">): boolean {
 
 export function countArticleLines(items: ReadonlyArray<Pick<OrderHistoryItem, "tipo">>): number {
   return items.filter(isArticleLine).length;
+}
+
+/**
+ * Motivo per cui l'ordine non si può salvare (null = completo), con il campo da sistemare nel messaggio.
+ * Una bozza richiede solo cliente e almeno un articolo; l'invio anche magazzino e CIG/CUP completi (se inseriti).
+ */
+export function getOrderIncompleteReason(
+  order: { cliente: string; magazzino?: unknown; cig: string; cup: string; items: ReadonlyArray<Pick<OrderHistoryItem, "tipo">> },
+  status: "bozza" | "confermato"
+): string | null {
+  if (!order.cliente.trim()) return "Indica il cliente dell'ordine.";
+  if (countArticleLines(order.items) === 0) return "Aggiungi almeno un articolo all'ordine.";
+  if (status === "bozza") return null;
+  if (typeof order.magazzino !== "string" || !order.magazzino.trim()) return "Seleziona il magazzino dell'ordine.";
+  if (!isValidCig(order.cig)) return `Il CIG deve avere ${CIG_LENGTH} caratteri.`;
+  if (!isValidCup(order.cup)) return `Il CUP deve avere ${CUP_LENGTH} caratteri.`;
+  return null;
 }
 
 export function sumArticleQty(items: ReadonlyArray<Pick<OrderHistoryItem, "tipo" | "qty">>): number {

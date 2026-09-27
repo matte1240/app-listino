@@ -36,9 +36,10 @@ export function setSetting(key: string, value: string): void {
 }
 
 export function getAppSettings(): AppSettings {
+  // Maiuscolo anche in lettura: valori salvati prima della normalizzazione (es. "manuale-x") erano già mostrati maiuscoli.
   return {
-    metodoCodiceTrasporto: getSetting(SETTING_KEYS.metodoCodiceTrasporto, DEFAULT_APP_SETTINGS.metodoCodiceTrasporto),
-    metodoCodiceManuale: getSetting(SETTING_KEYS.metodoCodiceManuale, DEFAULT_APP_SETTINGS.metodoCodiceManuale),
+    metodoCodiceTrasporto: getSetting(SETTING_KEYS.metodoCodiceTrasporto, DEFAULT_APP_SETTINGS.metodoCodiceTrasporto).toUpperCase(),
+    metodoCodiceManuale: getSetting(SETTING_KEYS.metodoCodiceManuale, DEFAULT_APP_SETTINGS.metodoCodiceManuale).toUpperCase(),
   };
 }
 

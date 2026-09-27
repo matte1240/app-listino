@@ -76,8 +76,17 @@ export const useOrderStore = create<OrderStore>()(
 
       ...createLineActions<OrderStore>(set),
 
+      // Anche ricerca e filtro obsoleti (condivisi con il Listino): un ordine nuovo parte dal catalogo completo.
       resetOrder: () =>
-        set({ lines: [], sourceQuotationItems: null, orderInfo: { ...defaultOrderInfo }, currentStep: 1, mobileCartOpen: false }),
+        set({
+          lines: [],
+          sourceQuotationItems: null,
+          orderInfo: { ...defaultOrderInfo },
+          currentStep: 1,
+          mobileCartOpen: false,
+          searchQuery: "",
+          showObsolete: true,
+        }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
 

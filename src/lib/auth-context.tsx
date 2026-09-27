@@ -36,16 +36,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (username: string, password: string): Promise<string | null> => {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+    } catch {
+      return "Connessione non disponibile, riprova";
+    }
 
-    const data = await res.json();
+    // Un proxy o un gateway in errore può rispondere con HTML invece che con JSON.
+    const data = await res.json().catch(() => null);
 
-    if (!res.ok) {
-      return data.error || "Errore di login";
+    if (!res.ok || !data?.user) {
+      return data?.error || (res.status >= 500 ? "Servizio non disponibile, riprova" : "Errore di login");
     }
 
     setUser(data.user);

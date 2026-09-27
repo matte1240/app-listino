@@ -1,7 +1,81 @@
 "use client";
 
+import { useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** Destinazione di uscita "pagina precedente": la conferma di uscita aperta dal gesto indietro torna lì. */
+export const WIZARD_BACK_HREF = "#wizard-back";
+
+const GUARD_STATE_KEY = "__wizardBackGuard";
+
+function pushBackGuard() {
+  window.history.pushState({ ...window.history.state, [GUARD_STATE_KEY]: true }, "");
+}
+
+/**
+ * Gesto o pulsante "indietro" del browser dentro un wizard: una voce di cronologia sentinella intercetta
+ * il back, così si torna allo step precedente (o si apre la conferma di uscita) invece di lasciare la pagina.
+ * `onBack` restituisce `true` se ha gestito l'indietro, `false` per uscire davvero dal wizard.
+ * Restituisce la funzione che esce tornando alla pagina precedente al wizard (`WIZARD_BACK_HREF`),
+ * con `fallbackHref` se il wizard è la prima pagina della scheda.
+ */
+export function useWizardBackGuard({ enabled, onBack, fallbackHref }: { enabled: boolean; onBack: () => boolean; fallbackHref: string }) {
+  const router = useRouter();
+  const onBackRef = useRef(onBack);
+  const leavingRef = useRef(false);
+  useEffect(() => {
+    onBackRef.current = onBack;
+  });
+
+  useEffect(() => {
+    if (!enabled) return;
+    leavingRef.current = false;
+    const wizardUrl = window.location.pathname + window.location.search;
+    // Voci del wizard (e sentinelle, che ne ereditano la modalità) senza ripristino dello scroll: tornando sulla voce
+    // del wizard il browser riporterebbe la pagina alla posizione di quando è stata aggiunta la sentinella.
+    window.history.scrollRestoration = "manual";
+    // Rientrando su una sentinella già presente (es. avanti/indietro tra le pagine) non se ne aggiunge un'altra.
+    if (!window.history.state?.[GUARD_STATE_KEY]) pushBackGuard();
+
+    const onPopState = (event: PopStateEvent) => {
+      // Uscita in corso, "avanti" verso una sentinella o voce di un'altra pagina: ci pensa il router.
+      if (leavingRef.current || event.state?.[GUARD_STATE_KEY]) return;
+      if (window.location.pathname + window.location.search !== wizardUrl) return;
+      if (onBackRef.current()) {
+        pushBackGuard();
+      } else {
+        leavingRef.current = true;
+        window.history.back();
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      // Eseguito a navigazione avvenuta: la voce della nuova pagina torna al ripristino automatico.
+      window.history.scrollRestoration = "auto";
+    };
+  }, [enabled]);
+
+  return useCallback(() => {
+    leavingRef.current = true;
+    const fallback = window.setTimeout(() => router.replace(fallbackHref), 600);
+    window.addEventListener("popstate", () => window.clearTimeout(fallback), { once: true });
+    // Sentinella → voce del wizard → pagina precedente.
+    window.history.go(-2);
+  }, [fallbackHref, router]);
+}
+
+/**
+ * Schermata "riprendi" mostrata dopo un ricaricamento a wizard aperto: la sentinella rimasta nella cronologia
+ * assorbirebbe il primo "indietro". Si torna sulla voce del wizard (stesso URL), così il prossimo indietro esce.
+ */
+export function useDropStaleBackGuard(active: boolean) {
+  useEffect(() => {
+    if (active && window.history.state?.[GUARD_STATE_KEY]) window.history.back();
+  }, [active]);
+}
 
 type Step = 1 | 2 | 3 | 4;
 

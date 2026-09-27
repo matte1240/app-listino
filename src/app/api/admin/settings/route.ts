@@ -4,9 +4,10 @@ import { getAppSettings, saveAppSettings, type AppSettings } from "@/lib/setting
 
 const MAX_CODE_LENGTH = 40;
 
+/** Codici Metodo sempre maiuscoli: la pagina li mostra così ed è così che finiscono su righe ed export. */
 function normalizeCode(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  return value.trim().slice(0, MAX_CODE_LENGTH);
+  return value.trim().toUpperCase().slice(0, MAX_CODE_LENGTH);
 }
 
 /** GET /api/admin/settings — impostazioni applicative (solo admin) */

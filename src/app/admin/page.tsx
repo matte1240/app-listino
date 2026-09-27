@@ -3,13 +3,19 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2, ShieldCheck, FileSpreadsheet } from "lucide-react";
+import { Users, Sparkles, Mail, Building2, ArrowRight, Database, FileCode2, Settings2, ShieldCheck, FileSpreadsheet, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import UploadExcel from "@/components/UploadExcel";
 import PageHeader from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 
 const adminSections = [
+  {
+    href: "/admin/dashboard",
+    title: "Dashboard",
+    description: "Andamento del mese, ordini e preventivi per stato, ultimi ordini inseriti.",
+    icon: LayoutDashboard,
+  },
   {
     href: "/admin/approvazioni",
     title: "Approvazioni",
@@ -83,15 +89,15 @@ export default function AdminHomePage() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-background">
-      <main className="mx-auto flex max-w-2xl flex-col gap-6 px-4 pt-6 pb-8 lg:max-w-[1200px] lg:px-10 lg:pt-8">
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] bg-background">
+      <main className="@container mx-auto flex max-w-2xl flex-col gap-6 px-4 pt-6 pb-8 lg:max-w-[1200px] lg:px-10 lg:pt-8">
         <PageHeader
           eyebrow="Amministrazione"
           title="Pannello Admin"
@@ -110,7 +116,8 @@ export default function AdminHomePage() {
           <UploadExcel />
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+        {/* Colonne in base allo spazio reale (accanto alla sidebar a 1024px ne stanno 3): schede abbastanza larghe per il badge */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:gap-4 @2xl:grid-cols-3 @3xl:grid-cols-4">
           {adminSections.map(({ href, title, description, icon: Icon }) => {
             const highlight = href === "/admin/approvazioni" && pendingApprovals !== null && pendingApprovals > 0;
             return (
@@ -134,7 +141,7 @@ export default function AdminHomePage() {
                     <Icon className="h-5 w-5" />
                   </span>
                   {highlight ? (
-                    <span className="inline-flex h-6 items-center rounded-full bg-brand-yellow px-2.5 text-xs font-extrabold text-primary">
+                    <span className="inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full bg-brand-yellow px-2.5 text-xs font-extrabold text-primary">
                       {pendingApprovals} in attesa
                     </span>
                   ) : (

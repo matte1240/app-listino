@@ -144,12 +144,15 @@
 :root {
   --app-header-h: 3.5rem;
   --app-tabbar-h: calc(4.5rem + env(safe-area-inset-bottom));
+  /* Toast in basso al centro, sopra tab bar e barra carrello dei wizard: non coprono header e comandi in alto. */
+  --app-toast-bottom: calc(var(--app-tabbar-h) + 5.5rem);
 }
 
 @media (width >= 64rem) {
   :root {
     --app-header-h: 0px;
     --app-tabbar-h: 0px;
+    --app-toast-bottom: 1.5rem;
   }
 }
 
