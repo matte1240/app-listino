@@ -1,18 +1,21 @@
 "use client";
 
 import Image from "next/image";
-import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SegmentedTabs from "@/components/SegmentedTabs";
 import { useAuth } from "@/lib/auth-context";
+import { cn } from "@/lib/utils";
 import { getLineType } from "@/lib/order-lines";
-import { calculateOrderDiscountedTotal, formatSconto, getLineTotal } from "@/lib/order-totals";
+import { calculateOrderDiscountedTotal, formatSconto, getLineTotal, roundToCents } from "@/lib/order-totals";
 import type { Anagrafica, Quotation, QuotationItem } from "@/types";
 
 const VAT_RATE = 0.22;
-const TABLE_BODY_AVAILABLE_MM = 134;
+// Spazio del corpo tabella: la riga dei totali è alta 11mm (etichette su una riga), il riempitivo arriva a fondo pagina.
+const TABLE_BODY_AVAILABLE_MM = 137;
 const MIN_FILLER_ROW_MM = 0;
 
 function formatDate(iso: string) {
@@ -70,6 +73,70 @@ function quotationFillerHeightMm(quotation: Quotation) {
   return Math.max(MIN_FILLER_ROW_MM, TABLE_BODY_AVAILABLE_MM - rowsHeight - estimateNotesRowHeightMm(quotation.note));
 }
 
+/**
+ * Anteprima del foglio A4: sugli schermi stretti viene rimpicciolito per stare tutto in larghezza,
+ * con la possibilità di tornare al 100% scorrendo di lato. In stampa resta sempre 1:1.
+ */
+function SheetPreview({ children }: { children: ReactNode }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
+  const [size, setSize] = useState({ available: 0, width: 0, height: 0 });
+  const [zoom, setZoom] = useState<"fit" | "actual">("fit");
+
+  // Misura prima del paint, così il foglio non compare per un attimo a grandezza naturale.
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const sheet = sheetRef.current;
+    if (!frame || !sheet) return;
+    const update = () =>
+      setSize({ available: frame.clientWidth, width: sheet.offsetWidth, height: sheet.offsetHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(frame);
+    observer.observe(sheet);
+    return () => observer.disconnect();
+  }, []);
+
+  const fitScale = size.available && size.width ? Math.min(1, size.available / size.width) : 1;
+  // Si adatta appena il foglio non entra; la scelta Adatta/100% compare solo se la riduzione è percepibile.
+  const needsScale = fitScale < 1;
+  const showToggle = fitScale < 0.95;
+  const scale = needsScale && (zoom === "fit" || !showToggle) ? fitScale : 1;
+
+  return (
+    <>
+      {showToggle && (
+        <div className="no-print mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">Anteprima ridotta: il PDF resta in formato A4.</p>
+          <SegmentedTabs
+            className="w-40 shrink-0"
+            options={[
+              { value: "fit", label: "Adatta" },
+              { value: "actual", label: "100%" },
+            ]}
+            value={zoom}
+            onChange={setZoom}
+          />
+        </div>
+      )}
+      <div ref={frameRef} className={cn("sheet-frame", showToggle && zoom === "actual" && "overflow-x-auto")}>
+        <div
+          className="sheet-viewport"
+          style={size.width ? { width: size.width * scale, height: size.height * scale } : undefined}
+        >
+          <section
+            ref={sheetRef}
+            className="metodo-sheet shadow-sm"
+            style={scale < 1 ? { transform: `scale(${scale})` } : undefined}
+          >
+            {children}
+          </section>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function QuotationPrintPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -119,8 +186,8 @@ export default function QuotationPrintPage() {
   }, [params?.id, authLoading, user]);
 
   const total = useMemo(() => (quotation ? quotationTotal(quotation) : 0), [quotation]);
-  const vatTotal = useMemo(() => total * VAT_RATE, [total]);
-  const documentTotal = useMemo(() => total + vatTotal, [total, vatTotal]);
+  const vatTotal = useMemo(() => roundToCents(total * VAT_RATE), [total]);
+  const documentTotal = useMemo(() => roundToCents(total + vatTotal), [total, vatTotal]);
   const fillerHeightMm = useMemo(() => (quotation ? quotationFillerHeightMm(quotation) : 0), [quotation]);
 
   if (authLoading || loading) {
@@ -179,6 +246,15 @@ export default function QuotationPrintPage() {
           line-height: 1.12;
           padding: 9mm 6.8mm 6mm;
           overflow: hidden;
+        }
+
+        .sheet-viewport {
+          margin: 0 auto;
+        }
+
+        .sheet-viewport .metodo-sheet {
+          margin: 0;
+          transform-origin: top left;
         }
 
         .company-header {
@@ -425,13 +501,17 @@ export default function QuotationPrintPage() {
           vertical-align: middle;
         }
 
+        /* Etichette su una riga, come quelle dell'intestazione: nelle celle da 26-32mm il corpo 8.8pt andava a capo. */
         .totals-label {
           display: block;
           margin-bottom: 2mm;
+          font-size: 7.2pt;
+          white-space: nowrap;
         }
 
-        .totals-currency {
-          margin-right: 5mm;
+        /* Importo mai spezzato (prima "39.271," / "95"); con totali enormi va a capo solo tra "EUR" e la cifra. */
+        .totals-amount {
+          white-space: nowrap;
         }
 
         @media print {
@@ -451,6 +531,19 @@ export default function QuotationPrintPage() {
 
           .quotation-print-main {
             padding: 0 !important;
+          }
+
+          .sheet-frame {
+            overflow: visible !important;
+          }
+
+          .sheet-viewport {
+            width: auto !important;
+            height: auto !important;
+          }
+
+          .metodo-sheet {
+            transform: none !important;
           }
 
           .metodo-sheet {
@@ -483,7 +576,7 @@ export default function QuotationPrintPage() {
           </div>
         </div>
 
-        <section className="metodo-sheet shadow-sm">
+        <SheetPreview>
           <header className="company-header">
             <div>
               <Image
@@ -668,21 +761,20 @@ export default function QuotationPrintPage() {
                 <td colSpan={2} style={{ borderLeft: 0, borderBottom: 0 }} />
                 <td colSpan={2}>
                   <span className="totals-label">Totale imponibile</span>
-                  <span>{formatCurrency(total)}</span>
+                  <span className="totals-amount">{formatCurrency(total)}</span>
                 </td>
                 <td colSpan={2}>
                   <span className="totals-label">Totale iva</span>
-                  <span>{formatCurrency(vatTotal)}</span>
+                  <span className="totals-amount">{formatCurrency(vatTotal)}</span>
                 </td>
                 <td colSpan={2}>
                   <span className="totals-label">Totale Documento</span>
-                  <span className="totals-currency">EUR</span>
-                  <span>{formatCurrency(documentTotal)}</span>
+                  EUR <span className="totals-amount">{formatCurrency(documentTotal)}</span>
                 </td>
               </tr>
             </tbody>
           </table>
-        </section>
+        </SheetPreview>
       </main>
     </div>
   );

@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { Sparkles, Loader2, CheckCircle2, AlertCircle, RotateCw, Package, ChevronRight } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, AlertCircle, RotateCw, Package } from "lucide-react";
+import AdminBreadcrumb from "../AdminBreadcrumb";
 
 interface LogEntry {
   time: string;
@@ -81,10 +81,12 @@ export default function EnrichPage() {
 
   // Initial load + start polling if already running
   useEffect(() => {
-    // Start polling immediately — it will self-stop if not running
+    // Conteggi subito, senza aspettare il primo giro dell'intervallo (che si ferma da solo se non è in corso)
+    const firstPoll = setTimeout(pollStatus, 0);
     pollRef.current = setInterval(pollStatus, 2000);
 
     return () => {
+      clearTimeout(firstPoll);
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
@@ -141,7 +143,7 @@ export default function EnrichPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
         <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
@@ -150,13 +152,9 @@ export default function EnrichPage() {
   const isRunning = progress.status === "running";
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] bg-background">
       <main className="max-w-4xl mx-auto px-4 sm:px-5 lg:px-10 pt-6 lg:pt-8 pb-6 flex flex-col gap-6">
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link href="/admin" className="hover:text-foreground transition-colors">Admin</Link>
-          <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground font-medium">AI</span>
-        </div>
+        <AdminBreadcrumb current="AI" />
         <h1 className="text-[28px] leading-tight font-bold">Arricchimento AI</h1>
         {/* Info card */}
         <div className="rounded-2xl border bg-card p-5">
@@ -186,7 +184,15 @@ export default function EnrichPage() {
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" className="h-9 w-9 self-start sm:self-auto" onClick={() => pollStatus()} disabled={isRunning}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="self-start sm:self-auto"
+            onClick={() => pollStatus()}
+            disabled={isRunning}
+            aria-label="Aggiorna conteggio"
+            title="Aggiorna conteggio"
+          >
             <RotateCw className="h-4 w-4" />
           </Button>
         </div>

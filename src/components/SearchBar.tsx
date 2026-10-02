@@ -43,16 +43,18 @@ const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar({ autoF
           }
         }}
       />
-      <div className="flex shrink-0 items-center gap-2 select-none">
+      {/* Tutta la riga (interruttore + etichetta, alta 44px) è l'area da toccare. */}
+      <label
+        htmlFor={switchId}
+        className="flex h-11 shrink-0 cursor-pointer items-center gap-2 text-[13px] font-semibold text-muted-foreground select-none"
+      >
         <Switch
           id={switchId}
           checked={showObsolete}
           onCheckedChange={(checked) => setShowObsolete(checked === true)}
         />
-        <label htmlFor={switchId} className="cursor-pointer text-[13px] font-semibold text-muted-foreground">
-          Obsoleti
-        </label>
-      </div>
+        Obsoleti
+      </label>
     </div>
   );
 });

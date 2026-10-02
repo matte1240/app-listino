@@ -16,6 +16,12 @@ export const useNavigationGuard = create<NavigationGuardState>((set) => ({
   setGuard: (guard) => set({ guard }),
 }));
 
+/**
+ * Destinazione usata dal logout: la guardia la riceve come un link qualsiasi, ma dopo la conferma
+ * il wizard deve chiamare `logout()` invece di navigare (andare su /login non chiude la sessione).
+ */
+export const LOGOUT_HREF = "/login";
+
 /** Da chiamare nel click dei link di navigazione: `false` = navigazione bloccata dal wizard. */
 export function canNavigateTo(href: string): boolean {
   const { guard } = useNavigationGuard.getState();

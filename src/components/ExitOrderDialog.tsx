@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Save, LogOut, X } from "lucide-react";
+import { AlertTriangle, Loader2, Save, LogOut, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -49,7 +49,7 @@ export default function ExitOrderDialog({
               onClick={onSaveDraft}
               disabled={saving}
             >
-              <Save className="h-4 w-4" />
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salva bozza e esci
             </Button>
           )}
