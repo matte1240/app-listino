@@ -83,9 +83,36 @@ export interface Quotation extends ApprovalInfo {
   items: QuotationItem[];
   createdAt: string;
   updatedAt: string;
+  /** Data del prossimo promemoria di ricontatto (solo preventivi attivi; null se non previsto). */
+  followUpDueAt: string | null;
+  /** Quando è stato inviato l'ultimo promemoria ancora senza esito registrato. */
+  followUpRemindedAt: string | null;
+  /** True se il preventivo attende un esito dal rappresentante (promemoria scaduto). */
+  followUpDue: boolean;
 }
 
-export type QuotationStatus = 'attivo' | 'in_approvazione' | 'rifiutato' | 'convertito';
+/** `perso`: chiuso senza ordine dopo il ricontatto del cliente (riapribile). */
+export type QuotationStatus = 'attivo' | 'in_approvazione' | 'rifiutato' | 'convertito' | 'perso';
+
+/**
+ * Voce dello storico di ricontatto di un preventivo.
+ * - `promemoria`: email/push di promemoria inviata al rappresentante
+ * - `trattativa`: cliente ricontattato, trattativa ancora aperta (promemoria posticipato)
+ * - `perso`: preventivo chiuso senza ordine
+ * - `riaperto`: preventivo perso tornato attivo
+ */
+export type QuotationFollowUpKind = 'promemoria' | 'trattativa' | 'perso' | 'riaperto';
+
+export interface QuotationFollowUp {
+  id: number;
+  quotationId: number;
+  kind: QuotationFollowUpKind;
+  note: string;
+  nextReminderAt: string | null;
+  createdBy: string;
+  createdByFullName: string;
+  createdAt: string;
+}
 
 export type OrderStatus = 'bozza' | 'in_approvazione' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
 

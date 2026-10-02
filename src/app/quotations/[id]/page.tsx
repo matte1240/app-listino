@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, CheckCircle2, Clock, FileText, Hourglass, MapPin, Package, Pencil, Printer, ShieldAlert, ShoppingCart, Trash2, Truck, User } from "lucide-react";
+import { ArrowLeft, BellRing, Calendar, CheckCircle2, Clock, FileText, Hourglass, MapPin, Package, Pencil, Printer, ShieldAlert, ShoppingCart, Trash2, Truck, User, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import OrderLineRow from "@/components/OrderLineRow";
+import QuotationFollowUpPanel from "@/components/QuotationFollowUpPanel";
 import { countArticleLines } from "@/lib/order-lines";
 import { calculateOrderDiscountedTotal, formatOrderCurrency } from "@/lib/order-totals";
 import type { Quotation } from "@/types";
@@ -104,6 +105,12 @@ export default function QuotationDetailPage() {
                 {quotation.status === "rifiutato" && (
                   <Badge variant="outline" className="gap-1 text-red-700 border-red-300 bg-red-50"><ShieldAlert className="h-3.5 w-3.5" /> Rifiutato</Badge>
                 )}
+                {quotation.status === "perso" && (
+                  <Badge variant="outline" className="gap-1 text-muted-foreground"><XCircle className="h-3.5 w-3.5" /> Perso</Badge>
+                )}
+                {quotation.followUpDue && (
+                  <Badge variant="outline" className="gap-1 text-amber-800 border-amber-300 bg-amber-50"><BellRing className="h-3.5 w-3.5" /> Da ricontattare</Badge>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">{quotation.cliente}</p>
             </div>
@@ -120,13 +127,13 @@ export default function QuotationDetailPage() {
                 Trasforma in ordine
               </Button>
             ) : null}
-            {(quotation.status === "attivo" || quotation.status === "convertito" || user?.role === "admin") && (
+            {(quotation.status === "attivo" || quotation.status === "convertito" || quotation.status === "perso" || user?.role === "admin") && (
               <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/print`)}>
                 <Printer className="h-4 w-4" />
                 PDF
               </Button>
             )}
-            {quotation.status !== "convertito" && (
+            {quotation.status !== "convertito" && quotation.status !== "perso" && (
               <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/edit`)}>
                 <Pencil className="h-4 w-4" />
                 Modifica
@@ -201,6 +208,12 @@ export default function QuotationDetailPage() {
             </span>
           </section>
         )}
+
+        <QuotationFollowUpPanel
+          quotation={quotation}
+          onQuotationChange={setQuotation}
+          className="rounded-2xl border border-border bg-card px-4"
+        />
 
         {quotation.note && (
           <section className="rounded-2xl border border-border bg-card p-4">

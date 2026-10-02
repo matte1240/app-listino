@@ -65,6 +65,7 @@ export function quotationUnavailableReason(status: string | null | undefined): s
   if (status === "convertito") return "Preventivo già trasformato in ordine";
   if (status === "in_approvazione") return "Preventivo in attesa di approvazione: non può ancora essere trasformato in ordine";
   if (status === "rifiutato") return "Preventivo rifiutato dall'amministratore: correggilo e reinvialo prima di trasformarlo in ordine";
+  if (status === "perso") return "Preventivo chiuso come perso: riaprilo prima di trasformarlo in ordine";
   return "Preventivo non disponibile";
 }
 
@@ -124,7 +125,7 @@ export function listPendingApprovals(db: Database.Database): PendingApprovals {
 
   const orders = orderRows.map((row) => dbOrderToOrder(row));
   const drafts = draftOrderRows.map((row) => dbOrderToOrder(row, { draftRow: draftMap.get(row.id) ?? null, includeDraft: true }));
-  const quotations = quotationRows.map(dbQuotationToQuotation);
+  const quotations = quotationRows.map((row) => dbQuotationToQuotation(row));
 
   return { orders, drafts, quotations, count: orders.length + drafts.length + quotations.length };
 }

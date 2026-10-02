@@ -1,24 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotation } from "@/lib/quotations";
-import { userOwnsCustomerByRap } from "@/lib/rap";
+import { canManageQuotation, dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotation } from "@/lib/quotations";
 import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
 import { getLineCodes } from "@/lib/settings";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { resolveQuotationSubmitState } from "@/lib/approvals";
 import { notifyAdminsApprovalRequested, quotationApprovalDoc } from "@/lib/notifications";
 import type { ValiditaPreventivoGiorni } from "@/types";
-
-function canManageQuotation(
-  db: ReturnType<typeof getDb>,
-  payload: { id: number; username: string; role: "admin" | "agente" },
-  quotation: { agente: string; cliente_id: number | null }
-): boolean {
-  if (payload.role === "admin") return true;
-  if (quotation.agente === payload.username) return true;
-  return userOwnsCustomerByRap(db, payload.id, quotation.cliente_id);
-}
 
 async function getAuthPayload(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -106,6 +95,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (existing.status === "convertito") {
     return NextResponse.json({ error: "Preventivo già trasformato in ordine: non è più modificabile" }, { status: 409 });
+  }
+  if (existing.status === "perso") {
+    return NextResponse.json({ error: "Preventivo chiuso come perso: riaprilo prima di modificarlo" }, { status: 409 });
   }
 
   // Ogni salvataggio viene rivalutato: sconti liberi → in approvazione (salvo admin), altrimenti attivo.

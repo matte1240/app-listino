@@ -3,18 +3,29 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, ChevronRight, FileCode2, Loader2, Save } from "lucide-react";
+import { toast } from "sonner";
+import { BellRing, CheckCircle2, ChevronRight, FileCode2, Loader2, Save, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth-context";
 
 interface SettingsForm {
   metodoCodiceTrasporto: string;
   metodoCodiceManuale: string;
+  followUpEnabled: boolean;
+  followUpDays: number;
 }
 
-const EMPTY_FORM: SettingsForm = { metodoCodiceTrasporto: "", metodoCodiceManuale: "" };
+const EMPTY_FORM: SettingsForm = { metodoCodiceTrasporto: "", metodoCodiceManuale: "", followUpEnabled: true, followUpDays: 30 };
+
+interface FollowUpCycleResult {
+  skipped?: "disabled" | "outside_hours" | "running";
+  agents: number;
+  quotations: number;
+  failedAgents: number;
+}
 
 export default function AdminSettingsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -24,6 +35,7 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sendingFollowUps, setSendingFollowUps] = useState(false);
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== "admin")) router.replace("/");
@@ -61,6 +73,30 @@ export default function AdminSettingsPage() {
     }
   }
 
+  async function handleSendFollowUps() {
+    setSendingFollowUps(true);
+    try {
+      const res = await fetch("/api/admin/quotation-followups", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.result) throw new Error(data?.error ?? "Errore durante l'invio dei promemoria");
+      const result = data.result as FollowUpCycleResult;
+      if (result.skipped === "disabled") {
+        toast.info("Promemoria disattivati: attivali e salva prima di inviarli");
+      } else if (result.skipped === "running") {
+        toast.info("Invio dei promemoria già in corso");
+      } else if (result.quotations === 0 && result.failedAgents === 0) {
+        toast.success("Nessun preventivo da ricordare in questo momento");
+      } else {
+        toast.success(`Promemoria inviati: ${result.quotations} preventivi a ${result.agents} rappresentanti`);
+        if (result.failedAgents > 0) toast.error(`Invio fallito per ${result.failedAgents} rappresentanti: verifica la configurazione email`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Errore durante l'invio dei promemoria");
+    } finally {
+      setSendingFollowUps(false);
+    }
+  }
+
   if (authLoading || loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
@@ -93,6 +129,59 @@ export default function AdminSettingsPage() {
         {error && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
         )}
+
+        <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <BellRing className="h-4 w-4 text-primary" />
+                Promemoria preventivi da ricontattare
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                Se un preventivo attivo non viene trasformato in ordine, il rappresentante che l&apos;ha inserito riceve
+                un&apos;email (e una notifica push) che gli ricorda di ricontattare il cliente e di registrare l&apos;esito:
+                ancora in trattativa con le sue osservazioni, perso con il motivo, trasformato in ordine o eliminato.
+                Senza esito il promemoria si ripete con la stessa cadenza. Gli invii partono nei giorni feriali dalle 8 alle 18,
+                con un unico riepilogo per rappresentante.
+              </p>
+            </div>
+            <Switch
+              checked={form.followUpEnabled}
+              onCheckedChange={(checked) => setForm((prev) => ({ ...prev, followUpEnabled: checked }))}
+              aria-label="Attiva i promemoria dei preventivi"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="followup-days" className="text-xs font-medium text-muted-foreground">
+              Giorni dopo l&apos;emissione (o l&apos;approvazione) del preventivo
+            </Label>
+            <Input
+              id="followup-days"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={365}
+              value={form.followUpDays}
+              disabled={!form.followUpEnabled}
+              onChange={(e) => setForm((prev) => ({ ...prev, followUpDays: Number(e.target.value) }))}
+              className="text-sm bg-background w-32"
+            />
+          </div>
+
+          <div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSendFollowUps}
+              disabled={sendingFollowUps || !form.followUpEnabled}
+              className="w-full justify-center sm:w-auto"
+            >
+              {sendingFollowUps ? <Loader2 className="animate-spin" /> : <Send />}
+              Invia ora i promemoria scaduti
+            </Button>
+          </div>
+        </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-4">
           <div>

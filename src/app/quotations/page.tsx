@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, ChevronDown, Clock, FileText, Hourglass, Loader2, MapPin, MessageSquare, Package, Pencil, Plus, Printer, ShieldAlert, ShoppingCart, Trash2, Truck } from "lucide-react";
+import { AlertTriangle, BellRing, CheckCircle2, ChevronDown, Clock, FileText, Hourglass, Loader2, MapPin, MessageSquare, Package, Pencil, Plus, Printer, ShieldAlert, ShoppingCart, Trash2, Truck, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { useAuth } from "@/lib/auth-context";
 import OrderLineRow from "@/components/OrderLineRow";
+import QuotationFollowUpPanel from "@/components/QuotationFollowUpPanel";
 import PageHeader from "@/components/PageHeader";
 import SearchField from "@/components/SearchField";
 import SegmentedTabs from "@/components/SegmentedTabs";
@@ -31,7 +32,13 @@ function quotationTotal(quotation: Quotation) {
   return calculateOrderDiscountedTotal(quotation.items);
 }
 
-type QuotationTab = "attivi" | "convertiti";
+type QuotationTab = "attivi" | "convertiti" | "persi";
+
+function quotationTab(quotation: Quotation): QuotationTab {
+  if (quotation.status === "convertito") return "convertiti";
+  if (quotation.status === "perso") return "persi";
+  return "attivi";
+}
 
 export default function QuotationsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -81,16 +88,23 @@ export default function QuotationsPage() {
     }
   }
 
+  function handleQuotationChange(updated: Quotation) {
+    setQuotations((prev) => prev.map((quotation) => (quotation.id === updated.id ? updated : quotation)));
+  }
+
   const quotationCounts = useMemo(() => ({
-    attivi: quotations.filter((quotation) => quotation.status !== "convertito").length,
-    convertiti: quotations.filter((quotation) => quotation.status === "convertito").length,
+    attivi: quotations.filter((quotation) => quotationTab(quotation) === "attivi").length,
+    convertiti: quotations.filter((quotation) => quotationTab(quotation) === "convertiti").length,
+    persi: quotations.filter((quotation) => quotationTab(quotation) === "persi").length,
+    daRicontattare: quotations.filter((quotation) => quotation.followUpDue).length,
   }), [quotations]);
 
   const filteredQuotations = useMemo(() => {
     const tokens = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
-    const statusFiltered = quotations.filter((quotation) =>
-      activeTab === "convertiti" ? quotation.status === "convertito" : quotation.status !== "convertito"
-    );
+    // I preventivi da ricontattare in cima agli attivi, poi l'ordine cronologico del server.
+    const statusFiltered = quotations
+      .filter((quotation) => quotationTab(quotation) === activeTab)
+      .sort((a, b) => Number(b.followUpDue) - Number(a.followUpDue));
     if (tokens.length === 0) return statusFiltered;
 
     return statusFiltered.filter((quotation) => {
@@ -120,8 +134,13 @@ export default function QuotationsPage() {
         return <Chip tone="orange"><Hourglass /> In approvazione</Chip>;
       case "rifiutato":
         return <Chip tone="danger"><ShieldAlert /> Rifiutato</Chip>;
+      case "perso":
+        return <Chip tone="neutral"><XCircle /> Perso</Chip>;
     }
   };
+
+  const renderFollowUpChip = (quotation: Quotation) =>
+    quotation.followUpDue ? <Chip tone="warning"><BellRing /> Da ricontattare</Chip> : null;
 
   /** Dettaglio preventivo: in linea sotto la card su mobile, nel pannello laterale su desktop. */
   const renderQuotationDetail = (quotation: Quotation, inset: string) => {
@@ -172,6 +191,8 @@ export default function QuotationsPage() {
           </div>
         )}
 
+        <QuotationFollowUpPanel quotation={quotation} onQuotationChange={handleQuotationChange} className={cn("mt-3", inset)} />
+
         {/* Righe */}
         <div className="mt-3 divide-y divide-border/70 border-y border-border/70">
           {quotation.items.map((item, index) => (
@@ -218,12 +239,12 @@ export default function QuotationsPage() {
             <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}`)} className="w-full justify-center sm:w-auto">
               <FileText /> Dettaglio
             </Button>
-            {(quotation.status === "attivo" || quotation.status === "convertito" || isAdmin) && (
+            {(quotation.status === "attivo" || quotation.status === "convertito" || quotation.status === "perso" || isAdmin) && (
               <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}/print`)} className="w-full justify-center text-primary sm:w-auto">
                 <Printer /> PDF
               </Button>
             )}
-            {quotation.status !== "convertito" && (
+            {quotation.status !== "convertito" && quotation.status !== "perso" && (
               <Button variant="outline" onClick={() => router.push(`/quotations/${quotation.id}/edit`)} className="w-full justify-center text-primary sm:w-auto">
                 <Pencil /> Modifica
               </Button>
@@ -255,12 +276,13 @@ export default function QuotationsPage() {
             actions={
               <>
                 <SegmentedTabs
-                  className="order-2 sm:w-72 lg:order-1"
+                  className="order-2 sm:w-96 lg:order-1"
                   value={activeTab}
                   onChange={setActiveTab}
                   options={[
                     { value: "attivi", label: "Attivi", count: quotationCounts.attivi },
                     { value: "convertiti", label: "Trasformati", count: quotationCounts.convertiti },
+                    { value: "persi", label: "Persi", count: quotationCounts.persi },
                   ]}
                 />
                 <SearchField
@@ -275,6 +297,18 @@ export default function QuotationsPage() {
           />
         </div>
 
+        {activeTab === "attivi" && quotationCounts.daRicontattare > 0 && (
+          <div className="flex shrink-0 items-start gap-2 rounded-xl bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+            <BellRing className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              <strong>
+                {quotationCounts.daRicontattare === 1 ? "1 preventivo da ricontattare" : `${quotationCounts.daRicontattare} preventivi da ricontattare`}
+              </strong>{" "}
+              (in cima all&apos;elenco): senti il cliente e registra l&apos;esito dalla scheda del preventivo.
+            </span>
+          </div>
+        )}
+
         {filteredQuotations.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border py-16 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent">
@@ -287,7 +321,9 @@ export default function QuotationsPage() {
                   ? "Prova a modificare i criteri di ricerca"
                   : activeTab === "convertiti"
                     ? "I preventivi trasformati in ordine appariranno qui"
-                    : "I preventivi attivi appariranno qui"}
+                    : activeTab === "persi"
+                      ? "I preventivi chiusi senza ordine appariranno qui"
+                      : "I preventivi attivi appariranno qui"}
               </p>
             </div>
           </div>
@@ -330,6 +366,7 @@ export default function QuotationsPage() {
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {renderStatusChip(quotation)}
+                        {renderFollowUpChip(quotation)}
                         {isAdmin && <span className="text-xs text-muted-foreground">{quotation.agenteFullName || quotation.agente}</span>}
                       </div>
                       <div className="flex items-center gap-x-4 border-t border-border/70 pt-2.5 text-[13px] text-muted-foreground">
@@ -372,7 +409,10 @@ export default function QuotationsPage() {
                   <div className="px-6 pt-6 pb-4">
                     <p className="font-mono text-[13px] text-muted-foreground">Preventivo {selectedQuotation.numero}</p>
                     <h2 className="mt-1 font-display text-[28px] leading-tight font-bold tracking-tight text-foreground">{selectedQuotation.cliente}</h2>
-                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">{renderStatusChip(selectedQuotation)}</div>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                      {renderStatusChip(selectedQuotation)}
+                      {renderFollowUpChip(selectedQuotation)}
+                    </div>
                   </div>
                   {renderQuotationDetail(selectedQuotation, "px-6")}
                 </>

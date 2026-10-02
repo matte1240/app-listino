@@ -1,7 +1,14 @@
 import type Database from "better-sqlite3";
 import { getAdminRecipients } from "@/lib/approvals";
 import { getUserEmailByUsername } from "@/lib/orders";
-import { sendApprovalDecisionEmail, sendApprovalRequestEmail, type ApprovalMailDoc } from "@/lib/mail";
+import {
+  isMailConfigured,
+  sendApprovalDecisionEmail,
+  sendApprovalRequestEmail,
+  sendQuotationFollowUpEmail,
+  type ApprovalMailDoc,
+  type FollowUpMail,
+} from "@/lib/mail";
 import type { PushPayload } from "@/lib/push";
 import type { Order, OrderHistoryItem, Quotation } from "@/types";
 
@@ -56,6 +63,42 @@ export async function notifyAgentApprovalDecided(
         })
       : Promise.resolve(),
   ]);
+}
+
+/**
+ * Promemoria di ricontatto preventivi al rappresentante (email riepilogativa + push).
+ * Restituisce false solo se l'email era inviabile ma è fallita, così il ciclo successivo riprova.
+ */
+export async function notifyAgentQuotationFollowUps(db: Database.Database, agenteUsername: string, mail: FollowUpMail): Promise<boolean> {
+  if (mail.quotations.length === 0) return true;
+  const email = getUserEmailByUsername(db, agenteUsername);
+  const agentRow = db.prepare("SELECT id FROM users WHERE username = ?").get(agenteUsername) as { id: number } | undefined;
+
+  let delivered = true;
+  if (email && isMailConfigured()) {
+    try {
+      await sendQuotationFollowUpEmail(email, mail);
+    } catch (err) {
+      console.error(`[mail] Errore invio promemoria preventivi a ${agenteUsername}:`, err);
+      delivered = false;
+    }
+  } else {
+    console.warn(`[preventivi] Promemoria per ${agenteUsername} senza email (utente senza email o credenziali GMAIL mancanti)`);
+  }
+
+  if (delivered && agentRow) {
+    const single = mail.quotations.length === 1 ? mail.quotations[0] : null;
+    await sendPushToUsersSafe(db, [agentRow.id], {
+      title: single ? `Ricontatta il cliente · ${single.numero}` : `${mail.quotations.length} preventivi da ricontattare`,
+      body: single
+        ? `${single.cliente}: il preventivo non è ancora diventato un ordine. Registra l'esito.`
+        : mail.quotations.map((q) => q.cliente).slice(0, 3).join(", ") + (mail.quotations.length > 3 ? "…" : ""),
+      url: single ? `/quotations/${single.id}` : "/quotations",
+      tag: single ? `quotation-followup-${single.id}` : "quotation-followup",
+    });
+  }
+
+  return delivered;
 }
 
 function docTitle(doc: ApprovalNotificationDoc): string {
