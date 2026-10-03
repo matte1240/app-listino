@@ -78,7 +78,7 @@ Ordini Ivicolors è una **PWA**: la puoi installare sulla home del telefono e us
 Dal menu utente (su telefono le tue iniziali in alto a destra, su computer la voce sopra il tuo nome nella barra laterale) premi **Attiva notifiche** e accetta la richiesta del browser. Da quel momento su questo dispositivo ricevi:
 
 - se sei **admin**: una notifica per ogni ordine, modifica o preventivo con sconti liberi da approvare (tocca la notifica per aprire la pagina Approvazioni);
-- se sei **agente**: l'esito delle tue richieste di approvazione.
+- se sei **agente**: l'esito delle tue richieste di approvazione e i promemoria dei preventivi da ricontattare (sezione 4.3).
 
 Note pratiche:
 
@@ -198,6 +198,18 @@ Il wizard dei preventivi ha gli stessi step dell'ordine (cliente, articoli, dati
 
 Il PDF (pulsante **PDF** nel dettaglio del preventivo) è un foglio A4 in stile Metodo: le righe articolo sono separate solo dalle colonne, le note di riga in corsivo nella colonna Descrizione, le spese di trasporto per ultime.
 
+### 4.3 Promemoria: ricontattare il cliente
+
+Se un preventivo attivo non diventa un ordine, dopo **30 giorni** (numero modificabile dall'admin, sezione 11.9) dall'emissione (o dall'approvazione, se conteneva sconti liberi) ricevi un'**email di promemoria** e, se le hai attivate, una **notifica** sul telefono. Se hai più preventivi in scadenza ricevi un'unica email riepilogativa, nei giorni feriali dalle 8 alle 18. L'email elenca cliente, data, fine validità, imponibile e l'ultima osservazione che avevi scritto, con il link diretto a ogni preventivo.
+
+Nell'app quei preventivi sono segnati **Da ricontattare**, stanno in cima alla scheda *Attivi* e un avviso giallo ne indica il numero. Senti il cliente e, nella sezione **Ricontatto cliente** del preventivo, registra l'esito:
+
+- **Ancora in trattativa**: scrivi le tue osservazioni (esito della telefonata, richieste del cliente, prossimi passi) e scegli fra quanti giorni (7, 15, 30 o 60) ricevere il prossimo promemoria.
+- **Perso**: indica il motivo (prezzo, scelto un concorrente, lavoro annullato…). Il preventivo passa nella scheda **Persi**: resta consultabile e stampabile, ma non si può modificare né trasformare in ordine finché non premi **Riapri**.
+- **Trasforma in ordine** oppure **Elimina**: come sempre, dai pulsanti del preventivo.
+
+Se non registri nessun esito, il promemoria si ripete con la stessa cadenza. Lo **Storico** in fondo alla sezione mostra i promemoria inviati e tutti gli esiti, con data e autore: è visibile anche all'amministratore.
+
 ---
 
 ## 5. Bozze: salvare e riprendere un ordine
@@ -300,6 +312,7 @@ Ogni volta che invii o modifichi un ordine, parte una mail. Vediamo a chi arriva
 | Cancellazione | `Ordine Cancellato #N // ...` | Notifica di cancellazione | — |
 | Sconto libero (agli admin) | `Richiesta di approvazione: Ordine #N // Cliente` | Righe con le scontistiche libere evidenziate e link alla pagina Approvazioni | — |
 | Esito approvazione (all'agente) | `Ordine #N approvato // Cliente` oppure `... rifiutato` | Esito, motivazione dell'admin e link all'app | — |
+| Preventivi da ricontattare (all'agente) | `Promemoria preventivo PREV-… // Cliente` oppure `Promemoria: N preventivi da ricontattare` | Preventivi non ancora trasformati in ordine, con link e istruzioni per registrare l'esito (sezione 4.3) | — |
 
 Le righe **nota** compaiono nella mail come riga a tutta larghezza; le **spese di trasporto** come ultima riga.
 
@@ -424,6 +437,7 @@ Gli admin ricevono una email (all'indirizzo impostato sul loro utente) e una not
 
 **Admin → Impostazioni**.
 
+- **Promemoria preventivi da ricontattare**: attiva o disattiva i promemoria (sezione 4.3) e imposta dopo quanti giorni partono (predefinito 30; è anche la cadenza con cui si ripetono se l'agente non registra un esito). **Invia ora i promemoria scaduti** li spedisce subito, anche fuori dall'orario d'ufficio. L'agente riceve l'email solo se ha l'email compilata in **Admin → Utenti**.
 - **Codice per "Spese di trasporto"** e **Codice per gli articoli inseriti manualmente**: sono i codici articolo usati nell'XML Metodo per le righe non presenti a listino. Devono corrispondere ad articoli generici esistenti nel gestionale, altrimenti l'import del file fallisce. Le righe **nota** vengono esportate con la sola descrizione.
 
 ---

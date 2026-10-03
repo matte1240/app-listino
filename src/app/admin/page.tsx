@@ -61,7 +61,7 @@ const adminSections = [
   {
     href: "/admin/impostazioni",
     title: "Impostazioni",
-    description: "Codici Metodo per trasporto e articoli manuali.",
+    description: "Promemoria preventivi e codici Metodo per trasporto e articoli manuali.",
     icon: Settings2,
   },
 ];

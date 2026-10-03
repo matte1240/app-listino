@@ -20,7 +20,7 @@ interface PeriodTotals {
 interface DashboardStats {
   orders: { total: number; inviati: number; inApprovazione: number; bozze: number; annullati: number };
   month: { current: PeriodTotals; previous: PeriodTotals };
-  quotations: { attivi: number; inApprovazione: number; rifiutati: number; convertiti: number };
+  quotations: { attivi: number; inApprovazione: number; rifiutati: number; convertiti: number; persi: number };
   customers: number;
   recentOrders: { id: number; cliente: string; status: OrderStatus; agente: string; createdAt: string; totale: number }[];
 }
@@ -169,9 +169,9 @@ export default function AdminDashboard() {
   const { orders, month, quotations } = stats ?? {
     orders: { total: 0, inviati: 0, inApprovazione: 0, bozze: 0, annullati: 0 },
     month: { current: { orders: 0, imponibile: 0 }, previous: { orders: 0, imponibile: 0 } },
-    quotations: { attivi: 0, inApprovazione: 0, rifiutati: 0, convertiti: 0 },
+    quotations: { attivi: 0, inApprovazione: 0, rifiutati: 0, convertiti: 0, persi: 0 },
   };
-  const quotationsTotal = quotations.attivi + quotations.inApprovazione + quotations.rifiutati + quotations.convertiti;
+  const quotationsTotal = quotations.attivi + quotations.inApprovazione + quotations.rifiutati + quotations.convertiti + quotations.persi;
   const conversion = quotationsTotal ? Math.round((quotations.convertiti / quotationsTotal) * 100) : 0;
 
   return (
@@ -244,6 +244,7 @@ export default function AdminDashboard() {
                   { label: "In approvazione", value: quotations.inApprovazione, bar: "bg-orange-500" },
                   { label: "Rifiutati", value: quotations.rifiutati, bar: "bg-red-500" },
                   { label: "Trasformati in ordine", value: quotations.convertiti, bar: "bg-emerald-500" },
+                  { label: "Persi", value: quotations.persi, bar: "bg-muted-foreground" },
                 ]}
               />
             </div>

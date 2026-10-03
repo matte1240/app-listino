@@ -96,6 +96,7 @@ export async function GET() {
         inApprovazione: quotationCounts.in_approvazione ?? 0,
         rifiutati: quotationCounts.rifiutato ?? 0,
         convertiti: quotationCounts.convertito ?? 0,
+        persi: quotationCounts.perso ?? 0,
       },
       customers: customers.count,
       recentOrders: recentRows.map((row) => ({

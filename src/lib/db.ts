@@ -249,10 +249,30 @@ function createDb() {
       db.exec(`ALTER TABLE quotations ADD COLUMN ${col} TEXT`);
     }
   }
+  // Migration: promemoria di ricontatto (follow-up) dei preventivi non trasformati in ordine
+  for (const col of ["followup_due_at", "followup_reminded_at"]) {
+    if (!quotationCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE quotations ADD COLUMN ${col} TEXT`);
+    }
+  }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_numero ON quotations(numero)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_agente_created_at ON quotations(agente, created_at)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_status ON quotations(status)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_converted_order_id ON quotations(converted_order_id)");
+
+  // Storico ricontatti dei preventivi: promemoria inviati ed esiti registrati dal rappresentante
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quotation_followups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quotation_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      next_reminder_at TEXT,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_quotation_followups_quotation_id ON quotation_followups(quotation_id)");
 
   type LegacyLinkedDraftRow = {
     id: number;
@@ -427,6 +447,7 @@ function createDb() {
 
 let _db: Database.Database | null = null;
 let _backupSchedulerStarted = false;
+let _followUpSchedulerStarted = false;
 
 function ensureBackupSchedulerStarted() {
   if (_backupSchedulerStarted) return;
@@ -441,10 +462,24 @@ function ensureBackupSchedulerStarted() {
     });
 }
 
+function ensureFollowUpSchedulerStarted() {
+  if (_followUpSchedulerStarted) return;
+  _followUpSchedulerStarted = true;
+
+  void import("@/lib/quotation-followup-scheduler")
+    .then(({ ensureQuotationFollowUpSchedulerStarted }) => {
+      ensureQuotationFollowUpSchedulerStarted();
+    })
+    .catch((error) => {
+      console.error("[preventivi] Impossibile inizializzare lo scheduler dei promemoria:", error);
+    });
+}
+
 export function getDb(): Database.Database {
   if (!_db) {
     _db = createDb();
     ensureBackupSchedulerStarted();
+    ensureFollowUpSchedulerStarted();
   }
 
   return _db;

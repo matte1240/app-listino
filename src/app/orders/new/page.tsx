@@ -114,6 +114,9 @@ export default function NewOrderPage() {
         if (quotation.status === "convertito") {
           throw new Error("Il preventivo è già stato trasformato in ordine.");
         }
+        if (quotation.status === "perso") {
+          throw new Error("Il preventivo è chiuso come perso: riaprilo prima di trasformarlo in ordine.");
+        }
 
         if (cancelled) return;
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { getAppSettings, saveAppSettings, type AppSettings } from "@/lib/settings";
+import { getAppSettings, normalizeFollowUpDays, saveAppSettings, type AppSettings } from "@/lib/settings";
 
 const MAX_CODE_LENGTH = 40;
 
@@ -33,6 +33,8 @@ export async function PUT(req: NextRequest) {
   const codiceManuale = normalizeCode(body.metodoCodiceManuale);
   if (codiceTrasporto !== undefined) partial.metodoCodiceTrasporto = codiceTrasporto;
   if (codiceManuale !== undefined) partial.metodoCodiceManuale = codiceManuale;
+  if (typeof body.followUpEnabled === "boolean") partial.followUpEnabled = body.followUpEnabled;
+  if (body.followUpDays !== undefined) partial.followUpDays = normalizeFollowUpDays(body.followUpDays);
 
   const settings = saveAppSettings(partial);
   return NextResponse.json({ settings });

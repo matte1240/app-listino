@@ -14,6 +14,7 @@ Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e *
 - **Ordini** — wizard 4 step (Cliente → Articoli → Dettagli → Riepilogo), bozze salvate sul server con il pulsante **Salva bozza** (tabella `orders` con status `bozza`), modifica di un ordine confermato via bozza-di-modifica (`order_drafts`), cancellazione
 - **Righe ordine flessibili** — righe in ordine di inserimento, riordino con drag & drop (dnd-kit) o frecce, righe **nota** posizionabili, **articoli manuali** (descrizione e prezzo liberi, U.M. da menu PZ/ML/MQ/KG), **spese di trasporto** sempre come ultima riga; stesse righe in email, XML Metodo e PDF preventivo
 - **Sconto libero con approvazione** — oltre a 8% e 15% una percentuale libera; ordini, modifiche e preventivi con sconti liberi restano `in_approvazione` finché un admin li approva (pagina **Admin → Approvazioni**, badge nel menu), con email e notifiche push agli admin e all'agente
+- **Promemoria preventivi** — dopo N giorni (default 30, Admin → Impostazioni) un preventivo attivo non trasformato in ordine genera un'email riepilogativa + push al rappresentante; dall'app registra l'esito (*in trattativa* con osservazioni e nuovo promemoria, *perso* con motivo, *riapri*), con storico in `quotation_followups`
 - **Email automatiche** — invio a email magazzino + CC agente per nuovo ordine, modifica, cancellazione
 - **Allegato XML Metodo** — generato e allegato automaticamente alle mail di nuovo ordine e modifica, importabile nel gestionale Metodo
 - **Diff visivo nelle mail di modifica** — header e righe con indicatori aggiunto/rimosso/modificato (verde/rosso/giallo)
@@ -127,10 +128,11 @@ Tutte le chiavi sono documentate in [`.env.example`](.env.example). Sintesi:
 | `enriched_materials` | Descrizioni AI generate (chiave: `codice`) |
 | `orders` | Ordini (status `bozza`/`in_approvazione`/`confermato`/...) con colonne `approval_*` e righe JSON tipizzate (`articolo`/`manuale`/`commento`/`trasporto`) |
 | `order_drafts` | Bozze di modifica di ordini esistenti (uno per ordine), con `approval_status` per le modifiche in attesa |
-| `quotations` | Preventivi (status `attivo`/`in_approvazione`/`rifiutato`/`convertito`) con colonne `approval_*` |
+| `quotations` | Preventivi (status `attivo`/`in_approvazione`/`rifiutato`/`convertito`/`perso`) con colonne `approval_*` e `followup_due_at`/`followup_reminded_at` |
+| `quotation_followups` | Storico ricontatti dei preventivi (promemoria inviati, esiti `trattativa`/`perso`/`riaperto` con note) |
 | `anagrafiche` | Anagrafica clienti da Excel (chiave applicativa: `codice`) |
 | `branch_emails` | Configurazione `email_to` / `email_cc` per magazzino |
-| `app_settings` | Impostazioni chiave/valore (codici Metodo per trasporto e righe manuali) |
+| `app_settings` | Impostazioni chiave/valore (codici Metodo per trasporto e righe manuali, promemoria preventivi) |
 | `push_subscriptions` | Sottoscrizioni Web Push per utente/dispositivo |
 
 **Struttura cartelle**
@@ -152,7 +154,9 @@ src/
 │   ├── order-lines.ts   # Tipi di riga, normalizzazione, regole sconto libero, riordino
 │   ├── order-diff.ts    # Diff fra versioni di un ordine (client-safe)
 │   ├── approvals.ts     # Stato di invio deciso dal server, elenco approvazioni
-│   ├── notifications.ts # Notifiche email + push del flusso di approvazione
+│   ├── notifications.ts # Notifiche email + push (approvazioni, promemoria preventivi)
+│   ├── quotation-followups.ts          # Esiti e storico del ricontatto preventivi
+│   ├── quotation-followup-scheduler.ts # Invio periodico dei promemoria
 │   ├── push.ts          # Web Push (VAPID) e sottoscrizioni
 │   ├── settings.ts      # app_settings (codici Metodo)
 │   ├── metodo-xml.ts    # Build XML Metodo (con lookup descrizioni originali)
@@ -167,6 +171,7 @@ src/
 - **Creazione ordine** — POST `/api/orders` → righe normalizzate (`order-lines.ts`) → se ci sono sconti liberi e l'utente non è admin, status `in_approvazione` + notifica agli admin; altrimenti salva `confermato` e invia mail con XML Metodo allegato (best-effort).
 - **Approvazione** — POST `/api/orders/[id]/approval`, `/api/orders/[id]/draft/approval`, `/api/quotations/[id]/approval` (solo admin, body `{ action: "approve" | "reject", note }`); GET `/api/admin/approvals` per elenco e conteggio. Un ordine da preventivo già approvato con righe scontate identiche non richiede una seconda approvazione.
 - **Modifica ordine confermato** — PUT/POST `/api/orders/[id]/draft` → bozza in `order_drafts` → applicazione (o attesa di approvazione se ci sono sconti liberi) → diff calcolato in `order-diff.ts` → mail "Ordine Modificato" con XML aggiornato.
+- **Promemoria preventivi** — scheduler interno (`quotation-followup-scheduler.ts`, avviato con il DB) controlla ogni ora e invia lun–ven 8–18 (fuso `TZ` del container) un riepilogo per agente dei preventivi `attivo` con promemoria scaduto (attivazione + N giorni, o data fissata dall'agente), al massimo uno ogni N giorni per preventivo. Esiti: POST `/api/quotations/[id]/followup` (`{ action: "trattativa" | "perso" | "riapri", note, days }`), storico con GET sulla stessa route; invio manuale admin: POST `/api/admin/quotation-followups`.
 - **Notifiche push** — GET `/api/push/public-key`, POST/DELETE `/api/push/subscriptions`; il service worker (`public/sw.js`) mostra la notifica e apre l'URL al click.
 - **Cancellazione** — DELETE `/api/orders/[id]` → mail "Ordine Cancellato" senza allegato.
 - **Import anagrafiche** — POST `/api/anagrafiche/import` → upsert per `codice` normalizzato (case/punteggiatura insensitive).
@@ -184,6 +189,7 @@ src/
 - **Import anagrafiche fallisce con UNIQUE constraint** — risolto: la chiave applicativa è `codice` (normalizzato). Se vedi ancora l'errore, verifica che il file non abbia codici duplicati.
 - **Backup S3 fallisce** — verifica `DB_BACKUP_S3_ENDPOINT`, credenziali, `DB_BACKUP_S3_FORCE_PATH_STYLE=true` per Hetzner.
 - **Il pulsante "Attiva notifiche" non compare** — mancano `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`. Il push richiede HTTPS (o localhost) e, su iOS, l'app installata in Home.
+- **Gli agenti non ricevono i promemoria dei preventivi** — servono l'email dell'agente in Admin → Utenti e le credenziali Gmail; gli invii partono solo lun–ven 8–18 (controlla `TZ`). Log: `[preventivi] Promemoria ricontatto: ...`. Admin → Impostazioni → **Invia ora i promemoria scaduti** forza l'invio.
 - **Nessun admin riceve le email di approvazione** — gli utenti admin devono avere l'email compilata in Admin → Utenti (log: `[approvazioni] Nessun admin con email configurata`).
 - **Import Metodo rifiuta le righe manuali/trasporto** — imposta in Admin → Impostazioni i codici articolo generici esistenti nel gestionale.
 - **Dopo il deploy un'immagine precedente legge `in_approvazione` come `confermato`** — le versioni precedenti dell'app non conoscono il nuovo stato: non fare rollback a un'immagine vecchia con ordini in attesa.

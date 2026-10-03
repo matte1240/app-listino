@@ -707,3 +707,107 @@ export async function sendApprovalDecisionEmail(
     html,
   });
 }
+
+// ────────────────────────────────────────────
+// Promemoria di ricontatto preventivi
+// ────────────────────────────────────────────
+
+export interface FollowUpMailQuotation {
+  id: number;
+  numero: string;
+  cliente: string;
+  luogoConsegna: string;
+  dataPreventivo: string;
+  /** Data di fine validità (YYYY-MM-DD). */
+  validoFino: string;
+  totale: number;
+  /** Ultima annotazione registrata dal rappresentante (vuota se nessuna). */
+  ultimaNota: string;
+}
+
+export interface FollowUpMail {
+  agenteFullName: string;
+  quotations: FollowUpMailQuotation[];
+  /** URL pubblico dell'app (per i link); vuoto se non configurato. */
+  baseUrl: string;
+}
+
+/** Riepilogo per il rappresentante dei preventivi ancora aperti da ricontattare. */
+export async function sendQuotationFollowUpEmail(to: string, mail: FollowUpMail): Promise<void> {
+  if (!to || !isMailConfigured() || mail.quotations.length === 0) return;
+
+  const count = mail.quotations.length;
+  const single = count === 1 ? mail.quotations[0] : null;
+  const title = single
+    ? `Promemoria preventivo ${single.numero}`
+    : `Promemoria: ${count} preventivi da ricontattare`;
+  const subject = single ? `${title} // ${sanitizeSubjectPart(single.cliente)}` : title;
+  const linkFor = (q: FollowUpMailQuotation) => (mail.baseUrl ? `${mail.baseUrl}/quotations/${q.id}` : "");
+  const intro = single
+    ? `il preventivo <strong>${escapeHtml(single.numero)}</strong> per <strong>${escapeHtml(single.cliente)}</strong> non è ancora stato trasformato in ordine.`
+    : `questi ${count} preventivi non sono ancora stati trasformati in ordine.`;
+  const instructions =
+    "Ricontatta il cliente e registra l'esito nell'app dalla scheda del preventivo: " +
+    "<strong>ancora in trattativa</strong> (aggiungi le tue osservazioni e scegli quando ricevere il prossimo promemoria), " +
+    "<strong>perso</strong> (indica il motivo), <strong>trasforma in ordine</strong> oppure <strong>elimina</strong> il preventivo.";
+
+  const rows = mail.quotations
+    .map((q) => {
+      const url = linkFor(q);
+      const numero = url ? `<a href="${url}" style="color:#0C2B57;font-weight:bold;">${escapeHtml(q.numero)}</a>` : `<strong>${escapeHtml(q.numero)}</strong>`;
+      const cantiere = q.luogoConsegna ? `<br/><span style="color:#555555;font-size:12px;">${escapeHtml(q.luogoConsegna)}</span>` : "";
+      const nota = q.ultimaNota ? `<br/><span style="color:#555555;font-size:12px;">Ultima nota: ${escapeHtml(q.ultimaNota)}</span>` : "";
+      return `
+            <tr>
+              <td style="${CELL_BORDER}">${numero}</td>
+              <td style="${CELL_BORDER}">${escapeHtml(q.cliente)}${cantiere}${nota}</td>
+              <td style="${CELL_BORDER}text-align:center;white-space:nowrap;">${formatDate(q.dataPreventivo)}</td>
+              <td style="${CELL_BORDER}text-align:center;white-space:nowrap;">${formatDate(q.validoFino)}</td>
+              <td style="${CELL_BORDER}text-align:right;white-space:nowrap;">${formatOrderCurrency(q.totale)}</td>
+            </tr>`;
+    })
+    .join("");
+
+  const singleUrl = single ? linkFor(single) : mail.baseUrl ? `${mail.baseUrl}/quotations` : "";
+  const html = wrapMailHtml(title, `
+    <tr><td style="padding:0 0 10px 0;">Ciao ${escapeHtml(mail.agenteFullName)}, ${intro}</td></tr>
+    <tr><td style="padding:0 0 12px 0;">${instructions}</td></tr>
+    <tr><td style="padding:0 0 14px 0;">
+        <table role="table" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Preventivo</th>
+              <th style="${CELL_BORDER}text-align:left;background:#f2f2f2;">Cliente</th>
+              <th style="${CELL_BORDER}text-align:center;background:#f2f2f2;">Data</th>
+              <th style="${CELL_BORDER}text-align:center;background:#f2f2f2;">Validità fino al</th>
+              <th style="${CELL_BORDER}text-align:right;background:#f2f2f2;">Imponibile</th>
+            </tr>
+          </thead>
+          <tbody>${rows}
+          </tbody>
+        </table>
+    </td></tr>
+    ${singleUrl ? `<tr><td style="padding:0 0 14px 0;"><a href="${singleUrl}" style="display:inline-block;padding:10px 16px;background:#0C2B57;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;">${single ? "Apri il preventivo" : "Apri i preventivi"}</a></td></tr>` : ""}`);
+
+  const text = [
+    title,
+    "",
+    `Ciao ${mail.agenteFullName}, ${single ? `il preventivo ${single.numero} per ${single.cliente} non è ancora stato trasformato in ordine.` : `questi ${count} preventivi non sono ancora stati trasformati in ordine.`}`,
+    "Ricontatta il cliente e registra l'esito nell'app dalla scheda del preventivo: ancora in trattativa (con le tue osservazioni e il prossimo promemoria), perso (con il motivo), trasforma in ordine oppure elimina.",
+    "",
+    ...mail.quotations.map((q) => {
+      const url = linkFor(q);
+      return `- ${q.numero} · ${q.cliente} · del ${formatDate(q.dataPreventivo)} · valido fino al ${formatDate(q.validoFino)} · ${formatOrderCurrency(q.totale)}${q.ultimaNota ? ` · Ultima nota: ${q.ultimaNota}` : ""}${url ? `\n  ${url}` : ""}`;
+    }),
+    "",
+    `Email generata automaticamente da ${APP_NAME}.`,
+  ].join("\n");
+
+  await getTransporter().sendMail({
+    from: getMailFromValue(),
+    to,
+    subject,
+    text,
+    html,
+  });
+}

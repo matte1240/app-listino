@@ -1,5 +1,7 @@
 import type Database from "better-sqlite3";
 import { normalizeUtcTimestamp } from "@/lib/datetime";
+import { userOwnsCustomerByRap } from "@/lib/rap";
+import { getFollowUpSettings, type AppSettings } from "@/lib/settings";
 import type { Quotation, QuotationItem, QuotationStatus, ValiditaPreventivoGiorni } from "@/types";
 
 export interface DbQuotation {
@@ -23,6 +25,53 @@ export interface DbQuotation {
   approval_decided_at: string | null;
   approval_decided_by: string | null;
   approval_note: string | null;
+  followup_due_at: string | null;
+  followup_reminded_at: string | null;
+}
+
+export type FollowUpConfig = Pick<AppSettings, "followUpEnabled" | "followUpDays">;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * DAY_MS);
+}
+
+function parseTimestamp(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(normalizeUtcTimestamp(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Data del promemoria di ricontatto di un preventivo attivo:
+ * quella fissata dal rappresentante (posticipo/riapertura) oppure attivazione + N giorni.
+ * L'attivazione è l'approvazione admin, se c'è stata, altrimenti la creazione.
+ */
+export function computeFollowUpDueAt(
+  row: Pick<DbQuotation, "status" | "created_at" | "approval_decided_at" | "followup_due_at">,
+  config: FollowUpConfig
+): Date | null {
+  if (!config.followUpEnabled || normalizeQuotationStatus(row.status) !== "attivo") return null;
+  const explicit = parseTimestamp(row.followup_due_at);
+  if (explicit) return explicit;
+  const activatedAt = parseTimestamp(row.approval_decided_at) ?? parseTimestamp(row.created_at);
+  return activatedAt ? addDays(activatedAt, config.followUpDays) : null;
+}
+
+/**
+ * Il promemoria va (re)inviato se è scaduto e non ne è già partito uno negli ultimi N giorni:
+ * finché il rappresentante non registra un esito riceve al massimo un promemoria ogni N giorni.
+ */
+export function isFollowUpReminderDue(
+  row: Pick<DbQuotation, "status" | "created_at" | "approval_decided_at" | "followup_due_at" | "followup_reminded_at">,
+  config: FollowUpConfig,
+  now: Date = new Date()
+): boolean {
+  const dueAt = computeFollowUpDueAt(row, config);
+  if (!dueAt || dueAt.getTime() > now.getTime()) return false;
+  const remindedAt = parseTimestamp(row.followup_reminded_at);
+  return !remindedAt || addDays(remindedAt, config.followUpDays).getTime() <= now.getTime();
 }
 
 export interface QuotationWriteData {
@@ -58,7 +107,7 @@ function normalizeValiditaGiorni(value: number | null | undefined): ValiditaPrev
   return value === 7 || value === 15 || value === 30 ? value : 30;
 }
 
-const QUOTATION_STATUSES: ReadonlySet<QuotationStatus> = new Set(["attivo", "in_approvazione", "rifiutato", "convertito"]);
+const QUOTATION_STATUSES: ReadonlySet<QuotationStatus> = new Set(["attivo", "in_approvazione", "rifiutato", "convertito", "perso"]);
 
 export function normalizeQuotationStatus(value: string | null | undefined): QuotationStatus {
   return value && QUOTATION_STATUSES.has(value as QuotationStatus) ? (value as QuotationStatus) : "attivo";
@@ -68,7 +117,12 @@ function nullableTimestamp(value: string | null | undefined): string | null {
   return value ? normalizeUtcTimestamp(value) : null;
 }
 
-export function dbQuotationToQuotation(row: DbQuotation): Quotation {
+export function dbQuotationToQuotation(
+  row: DbQuotation,
+  followUpConfig: FollowUpConfig = getFollowUpSettings(),
+  now: Date = new Date()
+): Quotation {
+  const followUpDueAt = computeFollowUpDueAt(row, followUpConfig);
   return {
     id: row.id,
     numero: row.numero || `PREV-${row.id}`,
@@ -90,7 +144,21 @@ export function dbQuotationToQuotation(row: DbQuotation): Quotation {
     approvalDecidedAt: nullableTimestamp(row.approval_decided_at),
     approvalDecidedBy: row.approval_decided_by ?? null,
     approvalNote: row.approval_note ?? null,
+    followUpDueAt: followUpDueAt ? followUpDueAt.toISOString() : null,
+    followUpRemindedAt: followUpDueAt ? nullableTimestamp(row.followup_reminded_at) : null,
+    followUpDue: !!followUpDueAt && followUpDueAt.getTime() <= now.getTime(),
   };
+}
+
+/** Admin, autore del preventivo o rappresentante assegnatario del cliente (RAP). */
+export function canManageQuotation(
+  db: Database.Database,
+  payload: { id: number; username: string; role: "admin" | "agente" },
+  quotation: { agente: string; cliente_id: number | null }
+): boolean {
+  if (payload.role === "admin") return true;
+  if (quotation.agente === payload.username) return true;
+  return userOwnsCustomerByRap(db, payload.id, quotation.cliente_id);
 }
 
 export function nextQuotationNumber(db: Database.Database, dateValue: string): string {
@@ -129,7 +197,9 @@ export function listQuotations(
          ORDER BY datetime(quotations.created_at) DESC, quotations.id DESC`
       ).all() as DbQuotation[]);
 
-  return rows.map(dbQuotationToQuotation);
+  const followUpConfig = getFollowUpSettings();
+  const now = new Date();
+  return rows.map((row) => dbQuotationToQuotation(row, followUpConfig, now));
 }
 
 export function getQuotation(db: Database.Database, id: number): Quotation | null {
@@ -210,7 +280,10 @@ export function updateQuotation(
 }
 
 export function deleteQuotation(db: Database.Database, id: number): number {
-  return db.prepare("DELETE FROM quotations WHERE id = ?").run(id).changes;
+  return db.transaction(() => {
+    db.prepare("DELETE FROM quotation_followups WHERE quotation_id = ?").run(id);
+    return db.prepare("DELETE FROM quotations WHERE id = ?").run(id).changes;
+  })();
 }
 
 /** Segna il preventivo come trasformato: solo un preventivo attivo (approvato) può essere convertito. */

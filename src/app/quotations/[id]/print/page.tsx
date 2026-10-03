@@ -207,7 +207,7 @@ export default function QuotationPrintPage() {
   }
 
   // Un preventivo con sconti liberi non approvati non è stampabile dagli agenti.
-  const isApproved = quotation.status === "attivo" || quotation.status === "convertito";
+  const isApproved = quotation.status === "attivo" || quotation.status === "convertito" || quotation.status === "perso";
   if (!isApproved && user?.role !== "admin") {
     return (
       <div className="min-h-dvh flex items-center justify-center px-4">
