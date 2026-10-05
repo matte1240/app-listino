@@ -1,47 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotation } from "@/lib/quotations";
-import { userOwnsCustomerByRap } from "@/lib/rap";
-import { parseLocalizedNumber } from "@/lib/utils";
-import type { QuotationItem, ValiditaPreventivoGiorni } from "@/types";
-
-function canManageQuotation(
-  db: ReturnType<typeof getDb>,
-  payload: { id: number; username: string; role: "admin" | "agente" },
-  quotation: { agente: string; cliente_id: number | null }
-): boolean {
-  if (payload.role === "admin") return true;
-  if (quotation.agente === payload.username) return true;
-  return userOwnsCustomerByRap(db, payload.id, quotation.cliente_id);
-}
+import { canManageQuotation, dbQuotationToQuotation, deleteQuotation, getDbQuotation, updateQuotation } from "@/lib/quotations";
+import { countArticleLines, normalizeOrderItems } from "@/lib/order-lines";
+import { getLineCodes } from "@/lib/settings";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { resolveQuotationSubmitState } from "@/lib/approvals";
+import { notifyAdminsApprovalRequested, quotationApprovalDoc } from "@/lib/notifications";
+import type { ValiditaPreventivoGiorni } from "@/types";
 
 async function getAuthPayload(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
   return verifyToken(token);
-}
-
-function normalizeItems(items: unknown): QuotationItem[] {
-  if (!Array.isArray(items)) return [];
-
-  return items
-    .map((item) => {
-      const raw = item as Partial<QuotationItem>;
-      const qty = parseLocalizedNumber(raw.qty);
-      const prezzoListino = parseLocalizedNumber(raw.prezzoListino);
-      const sconto = raw.sconto === 8 || raw.sconto === 15 ? raw.sconto : 0;
-
-      return {
-        codice: String(raw.codice ?? "").trim(),
-        descrizione: String(raw.descrizione ?? "").trim(),
-        qty: Math.max(0, qty),
-        um: String(raw.um ?? "").trim(),
-        prezzoListino,
-        sconto,
-      } satisfies QuotationItem;
-    })
-    .filter((item) => item.codice && item.qty > 0);
 }
 
 async function resolveCustomer(db: ReturnType<typeof getDb>, clienteId: unknown, cliente: unknown) {
@@ -113,26 +84,51 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const customer = await resolveCustomer(db, body.clienteId, body.cliente);
   if (!customer) return NextResponse.json({ error: "Cliente anagrafica non trovato" }, { status: 400 });
 
-  const items = normalizeItems(body.items);
+  const items = normalizeOrderItems(body.items, getLineCodes());
   const dataPreventivo = String(existing.data_preventivo ?? new Date().toISOString().slice(0, 10)).trim();
   const dataConsegnaPrevista = String(body.dataConsegnaPrevista ?? "").trim() || String(existing.data_consegna_prevista ?? "").trim() || today();
   const validitaGiorni = normalizeValiditaGiorni(body.validitaGiorni);
 
-  if (!customer.cliente || !dataPreventivo || items.length === 0) {
+  if (!customer.cliente || !dataPreventivo || countArticleLines(items) === 0) {
     return NextResponse.json({ error: "Dati preventivo incompleti" }, { status: 400 });
   }
 
-  const quotation = updateQuotation(db, quotationId, {
-    cliente: customer.cliente,
-    clienteId: customer.clienteId,
-    dataPreventivo,
-    dataConsegnaPrevista,
-    validitaGiorni,
-    note: String(body.note ?? ""),
-    items,
-  });
+  if (existing.status === "convertito") {
+    return NextResponse.json({ error: "Preventivo già trasformato in ordine: non è più modificabile" }, { status: 409 });
+  }
+  if (existing.status === "perso") {
+    return NextResponse.json({ error: "Preventivo chiuso come perso: riaprilo prima di modificarlo" }, { status: 409 });
+  }
+
+  // Ogni salvataggio viene rivalutato: sconti liberi → in approvazione (salvo admin), altrimenti attivo.
+  const submitState = resolveQuotationSubmitState(items, payload);
+  const quotation = updateQuotation(
+    db,
+    quotationId,
+    {
+      cliente: customer.cliente,
+      clienteId: customer.clienteId,
+      dataPreventivo,
+      dataConsegnaPrevista,
+      luogoConsegna: String(body.luogoConsegna ?? "").trim(),
+      validitaGiorni,
+      note: String(body.note ?? ""),
+      items,
+    },
+    submitState
+  );
 
   if (!quotation) return NextResponse.json({ error: "Preventivo non trovato" }, { status: 404 });
+
+  if (quotation.status === "in_approvazione") {
+    const itemsChanged = existing.items !== JSON.stringify(items);
+    if (existing.status !== "in_approvazione" || itemsChanged) {
+      notifyAdminsApprovalRequested(db, quotationApprovalDoc(quotation, getAppBaseUrl(req))).catch((err) =>
+        console.error("[approvazioni] Errore notifica admin:", err)
+      );
+    }
+  }
+
   return NextResponse.json({ quotation });
 }
 

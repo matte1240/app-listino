@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Calendar,
   CheckCircle2,
@@ -10,9 +11,11 @@ import {
   Clock,
   FileText,
   Loader2,
+  MapPin,
   MessageSquare,
   Package,
   Save,
+  ShieldAlert,
   ShoppingCart,
   Truck,
   User,
@@ -24,24 +27,39 @@ import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import AddressAutocompleteInput, {
+  type AddressAutocompleteInputHandle,
+  type AddressData,
+} from "@/components/AddressAutocompleteInput";
 import MaterialList from "@/components/MaterialList";
+import WizardStepper, { WIZARD_BACK_HREF, useWizardBackGuard } from "@/components/WizardStepper";
+import WizardHeader from "@/components/WizardHeader";
+import ExitOrderDialog from "@/components/ExitOrderDialog";
+import { LOGOUT_HREF, useNavigationGuard } from "@/lib/navigation-guard";
+import OrderLinesEditor from "@/components/OrderLinesEditor";
+import QuickLineComposer, { type LineComposerRequest, type QuickLineComposerHandle } from "@/components/QuickLineComposer";
 import SearchBar from "@/components/SearchBar";
+import { countArticleLines, itemsRequireApproval } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, formatOrderCurrency, formatOrderQuantitiesByUnit } from "@/lib/order-totals";
+import { useAuth } from "@/lib/auth-context";
 import { useQuotationStore } from "@/lib/useQuotationStore";
-import { VALIDITA_PREVENTIVO_GIORNI, type AnagraficaSearchItem, type Quotation, type QuotationItem } from "@/types";
+import { cn } from "@/lib/utils";
+import { VALIDITA_PREVENTIVO_GIORNI, type AnagraficaSearchItem, type OrderLine, type Quotation } from "@/types";
 
 const STEP_LABELS = ["Cliente", "Materiali", "Dati", "Riepilogo"] as const;
+const WIZARD_EYEBROW = "Preventivi";
+const EXIT_HREF = "/quotations";
+const SAVE_ERROR_TOAST_ID = "quotation-save-error";
+/** Layout con la sidebar del carrello al posto del drawer (breakpoint lg). */
+const SIDEBAR_MEDIA = "(min-width: 64rem)";
+/** Chiave localStorage: il preventivo persistito è nuovo (riprendibile da /quotations/new) o una modifica. */
+export const QUOTATION_WIZARD_ORIGIN_KEY = "listino-quotation-wizard-origin";
 
 interface Props {
   editingQuotation?: Quotation;
 }
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
-function discountedPrice(item: QuotationItem) {
-  return item.prezzoListino * (1 - (item.sconto ?? 0) / 100);
-}
+const formatCurrency = formatOrderCurrency;
 
 function formatDate(iso: string) {
   if (!iso) return "-";
@@ -63,17 +81,20 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Numero documento senza punti di a capo ai trattini (word joiner): "PREV-2026-" / "0002" non si spezza. */
+function unbreakableNumber(numero: string) {
+  return numero.replace(/-/g, "-\u2060");
+}
+
 export default function QuotationWizard({ editingQuotation }: Props) {
   const router = useRouter();
   const materials = useQuotationStore((s) => s.materials);
-  const quotationItems = useQuotationStore((s) => s.quotationItems);
+  const lines = useQuotationStore((s) => s.lines);
   const quotationInfo = useQuotationStore((s) => s.quotationInfo);
   const currentStep = useQuotationStore((s) => s.currentStep);
   const setStep = useQuotationStore((s) => s.setStep);
   const setQuotationInfo = useQuotationStore((s) => s.setQuotationInfo);
-  const toggleFlag = useQuotationStore((s) => s.toggleFlag);
-  const setQty = useQuotationStore((s) => s.setQty);
-  const setSconto = useQuotationStore((s) => s.setSconto);
+  const setLines = useQuotationStore((s) => s.setLines);
   const resetQuotation = useQuotationStore((s) => s.resetQuotation);
   const setSearchQuery = useQuotationStore((s) => s.setSearchQuery);
   const setShowObsolete = useQuotationStore((s) => s.setShowObsolete);
@@ -85,11 +106,68 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedPendingApproval, setSavedPendingApproval] = useState(false);
   const [openArticleRequest, setOpenArticleRequest] = useState<{ codice: string; requestId: number } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openArticleRequestIdRef = useRef(0);
+  // Casella righe manuali/note (sticky sotto la ricerca): la richiesta di apertura resta in attesa finché lo step 2 non è montato.
+  const composerRef = useRef<QuickLineComposerHandle>(null);
+  const pendingLineRequestRef = useRef<{ request: LineComposerRequest; fromOtherStep: boolean } | null>(null);
+  const [lineRequestTick, setLineRequestTick] = useState(0);
+  // Altezza dell'header sticky (ricerca + casella): la sidebar desktop si aggancia subito sotto.
+  const stickyHeaderRef = useRef<HTMLDivElement>(null);
+  const step2RootRef = useRef<HTMLDivElement>(null);
+  const cartAsideRef = useRef<HTMLElement>(null);
 
+  // Destinazione cantiere (opzionale), stesso componente e validazione degli ordini
+  const addressInputRef = useRef<AddressAutocompleteInputHandle>(null);
+  const addressDataRef = useRef<AddressData | null>(null);
+  const [isAddressValid, setIsAddressValid] = useState(true);
+  const [recentDestinations, setRecentDestinations] = useState<string[]>([]);
+  const [recentDestinationsLoading, setRecentDestinationsLoading] = useState(false);
+  const [selectedRecentDestination, setSelectedRecentDestination] = useState("");
+  /** Riepilogo richiesto dallo stepper con una destinazione da verificare: si valida appena lo step Dati è montato. */
+  const pendingSummaryRef = useRef(false);
+
+  const { user, logout } = useAuth();
   const isEditing = !!editingQuotation;
+
+  // Il preventivo persistito di un nuovo documento si può riprendere dopo una ricarica (vedi /quotations/new), quello di una modifica no.
+  useEffect(() => {
+    try {
+      localStorage.setItem(QUOTATION_WIZARD_ORIGIN_KEY, isEditing ? "edit" : "new");
+    } catch {
+      // storage non disponibile: /quotations/new riparte semplicemente da zero
+    }
+  }, [isEditing]);
+
+  // Uscita dal wizard (pulsante Esci o link della navigazione): con dati inseriti passa dalla conferma.
+  const [exitDialogOpen, setExitDialogOpen] = useState(false);
+  const [exitTarget, setExitTarget] = useState(EXIT_HREF);
+  const hasProgress = quotationInfo.cliente.trim() !== "" || lines.length > 0;
+  const setNavigationGuard = useNavigationGuard((s) => s.setGuard);
+
+  const requestExit = useCallback((href: string) => {
+    if (!hasProgress) {
+      router.push(href);
+      return;
+    }
+    setExitTarget(href);
+    setExitDialogOpen(true);
+  }, [hasProgress, router]);
+
+  useEffect(() => {
+    setNavigationGuard((href) => {
+      if (!hasProgress) return true;
+      setExitTarget(href);
+      setExitDialogOpen(true);
+      return false;
+    });
+    return () => setNavigationGuard(null);
+  }, [hasProgress, setNavigationGuard]);
+
+  const wizardTitle = editingQuotation ? `Modifica preventivo ${unbreakableNumber(editingQuotation.numero)}` : "Nuovo preventivo";
+  const wizardCustomer = quotationInfo.cliente.trim();
 
   useEffect(() => {
     if (!editingQuotation) return;
@@ -99,17 +177,12 @@ export default function QuotationWizard({ editingQuotation }: Props) {
       cliente: editingQuotation.cliente,
       dataPreventivo: editingQuotation.dataPreventivo,
       dataConsegnaPrevista: editingQuotation.dataConsegnaPrevista || editingQuotation.dataPreventivo || today(),
+      luogoConsegna: editingQuotation.luogoConsegna ?? "",
       validitaGiorni: editingQuotation.validitaGiorni ?? 30,
       note: editingQuotation.note,
     });
 
-    for (const item of editingQuotation.items) {
-      const current = useQuotationStore.getState().quotationItems[item.codice];
-      if (!current?.flagged) toggleFlag(item.codice);
-      if ((current?.qty ?? 0) !== item.qty) setQty(item.codice, item.qty);
-      const normalizedSconto: 0 | 8 | 15 = item.sconto === 8 || item.sconto === 15 ? item.sconto : 0;
-      if ((current?.sconto ?? 0) !== normalizedSconto) setSconto(item.codice, normalizedSconto);
-    }
+    setLines(editingQuotation.items);
 
     setStep(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,18 +226,74 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     if (currentStep !== 2 && mobileCartOpen) setMobileCartOpen(false);
   }, [currentStep, mobileCartOpen, setMobileCartOpen]);
 
-  const flaggedItems = materials.filter((material) => quotationItems[material.codice]?.flagged);
-  const flaggedCount = flaggedItems.length;
-  const totalQty = flaggedItems.reduce((sum, material) => sum + (quotationItems[material.codice]?.qty ?? 0), 0);
-  const quotationRows = flaggedItems.map((material) => ({
-    codice: material.codice,
-    descrizione: material.descrizioneAI || material.descrizione,
-    qty: quotationItems[material.codice]?.qty ?? 0,
-    um: material.um,
-    prezzoListino: material.prezzoListino,
-    sconto: quotationItems[material.codice]?.sconto ?? 0,
-  })) satisfies QuotationItem[];
-  const total = quotationRows.reduce((sum, item) => sum + discountedPrice(item) * item.qty, 0);
+  // Ogni step si apre dall'alto; fanno eccezione le richieste che scorrono da sole (articolo da modificare, casella righe).
+  useEffect(() => {
+    if (pendingLineRequestRef.current || openArticleRequest) return;
+    window.scrollTo({ top: 0 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  // Destinazioni recenti del cliente selezionato da anagrafica (come negli ordini)
+  useEffect(() => {
+    if (!quotationInfo.clienteId) {
+      setRecentDestinations([]);
+      setRecentDestinationsLoading(false);
+      setSelectedRecentDestination("");
+      return;
+    }
+
+    let cancelled = false;
+    setRecentDestinationsLoading(true);
+
+    fetch(`/api/anagrafiche/${quotationInfo.clienteId}/recent-destinations?limit=8`, { credentials: "same-origin" })
+      .then(async (res) => {
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data?.destinations) ? data.destinations : [];
+      })
+      .then((destinations: string[]) => {
+        if (!cancelled) setRecentDestinations(destinations);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentDestinations([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRecentDestinationsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [quotationInfo.clienteId]);
+
+  const handleDeliveryAddressChange = useCallback((value: string) => {
+    setQuotationInfo({ luogoConsegna: value });
+    if (selectedRecentDestination && value !== selectedRecentDestination) {
+      setSelectedRecentDestination("");
+    }
+  }, [selectedRecentDestination, setQuotationInfo]);
+
+  const handleAddressResolved = useCallback((data: AddressData) => {
+    addressDataRef.current = data;
+    if (data.address) setQuotationInfo({ luogoConsegna: data.address });
+  }, [setQuotationInfo]);
+
+  /**
+   * Verso il riepilogo una destinazione digitata si valida (geocoding) come negli ordini: il campo esiste solo
+   * con lo step Dati aperto, altrimenti vale l'ultimo esito.
+   */
+  const validateDestination = useCallback(async () => {
+    if (!quotationInfo.luogoConsegna.trim() || isAddressValid) return true;
+    return currentStep === 3 && (await addressInputRef.current?.validateAddress()) === true;
+  }, [currentStep, isAddressValid, quotationInfo.luogoConsegna]);
+
+  const flaggedCount = countArticleLines(lines);
+  /** Quantità per unità di misura ("4 pz · 13,5 mq"): unità diverse non si sommano. */
+  const quantitiesLabel = formatOrderQuantitiesByUnit(lines);
+  const quotationRows = lines;
+  const total = calculateOrderDiscountedTotal(lines);
+  /** Sconti liberi presenti: il preventivo resterà in attesa di un amministratore (gli admin approvano implicitamente). */
+  const requiresApproval = itemsRequireApproval(lines) && user?.role !== "admin";
 
   const canGoNextStep1 = quotationInfo.cliente.trim() !== "";
   const canGoNextStep2 = flaggedCount > 0;
@@ -175,6 +304,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
 
   function handleSelectCustomer(customer: AnagraficaSearchItem) {
     setQuotationInfo({ clienteId: customer.id, cliente: customer.ragioneSociale });
+    setSelectedRecentDestination("");
     setCustomerDropdownOpen(false);
   }
 
@@ -204,15 +334,92 @@ export default function QuotationWizard({ editingQuotation }: Props) {
     });
   }, []);
 
-  const handleRemoveItemFromCart = useCallback((codice: string, articoloLabel?: string) => {
-    const message = articoloLabel
-      ? `Vuoi rimuovere "${articoloLabel}" dal preventivo?`
-      : `Vuoi rimuovere l'articolo ${codice} dal preventivo?`;
+  /** Righe manuali e note si modificano dalla casella sotto la barra di ricerca (step Materiali), come gli articoli. */
+  const openLineComposer = useCallback((request: LineComposerRequest) => {
+    pendingLineRequestRef.current = { request, fromOtherStep: currentStep !== 2 };
+    setMobileCartOpen(false);
+    setSearchQuery("");
+    setStep(2);
+    setLineRequestTick((tick) => tick + 1);
+  }, [currentStep, setMobileCartOpen, setSearchQuery, setStep]);
 
-    if (!window.confirm(message)) return;
-    setQty(codice, 0);
-    setSconto(codice, 0);
-  }, [setQty, setSconto]);
+  useEffect(() => {
+    if (currentStep !== 2) return;
+    const pending = pendingLineRequestRef.current;
+    if (!pending) return;
+    pendingLineRequestRef.current = null;
+    // Arrivando da un altro step la pagina può essere scorsa: si riparte dall'alto (la casella è comunque sticky).
+    if (pending.fromOtherStep) window.scrollTo({ top: 0 });
+    composerRef.current?.open(pending.request);
+  }, [currentStep, lineRequestTick]);
+
+  const handleCreateManualFromSearch = useCallback((descrizione: string) => {
+    composerRef.current?.open({ kind: "manuale", descrizione });
+  }, []);
+
+  // L'header sticky cambia altezza (casella aperta/chiusa): la si espone come variabile CSS per la sidebar.
+  useEffect(() => {
+    const header = stickyHeaderRef.current;
+    const root = step2RootRef.current;
+    if (!header || !root) return;
+    const observer = new ResizeObserver(() => {
+      root.style.setProperty("--step2-header-h", `${header.offsetHeight}px`);
+    });
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [currentStep]);
+
+  // Sidebar del carrello (da lg): alta quanto lo spazio visibile sotto il suo bordo superiore, così "Indietro/Avanti"
+  // restano a schermo anche prima che si agganci sotto l'header sticky (tablet in orizzontale, pagina non ancora scorsa).
+  useEffect(() => {
+    const aside = cartAsideRef.current;
+    const header = stickyHeaderRef.current;
+    if (!aside || !header) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const top = Math.max(aside.getBoundingClientRect().top, 0);
+      aside.style.maxHeight = `${Math.max(window.innerHeight - top - 20, 200)}px`;
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    const observer = new ResizeObserver(schedule);
+    observer.observe(header);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      observer.disconnect();
+    };
+  }, [currentStep]);
+
+  // Riepilogo chiesto dallo stepper con la destinazione ancora da verificare: la si valida nello step Dati appena
+  // montato e, se va bene, si prosegue; altrimenti resta aperto con l'errore sul campo.
+  useEffect(() => {
+    if (currentStep !== 3 || !pendingSummaryRef.current) return;
+    pendingSummaryRef.current = false;
+    // Un giro dopo il montaggio: il campo ha già collegato Google Maps (se caricato) e può fare il geocoding.
+    const timer = window.setTimeout(async () => {
+      if ((await addressInputRef.current?.validateAddress()) === true) {
+        setStep(4);
+        return;
+      }
+      document.getElementById("luogo")?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [currentStep, setStep]);
+
+  const handleEditLine = useCallback((line: OrderLine) => {
+    openLineComposer({ kind: line.tipo === "commento" ? "nota" : "manuale", line });
+  }, [openLineComposer]);
+
+  const handleAddNoteAbove = useCallback((beforeId: string) => {
+    openLineComposer({ kind: "nota", beforeId });
+  }, [openLineComposer]);
 
   const handleSave = useCallback(async () => {
     if (saving) return;
@@ -225,99 +432,140 @@ export default function QuotationWizard({ editingQuotation }: Props) {
         body: JSON.stringify({ ...quotationInfo, items: quotationRows }),
       });
 
-      if (!res.ok) throw new Error("Errore salvataggio");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Errore salvataggio");
 
-      const data = await res.json();
+      toast.dismiss(SAVE_ERROR_TOAST_ID);
       const id = data?.quotation?.id ?? data?.id ?? editingQuotation?.id;
+      const pending = data?.quotation?.status === "in_approvazione";
+      setSavedPendingApproval(pending);
       setSaved(true);
       resetQuotation();
-      setTimeout(() => router.push(id ? `/quotations/${id}` : "/quotations"), 900);
-    } catch {
-      alert("Errore nel salvataggio del preventivo");
+      setTimeout(() => router.push(id ? `/quotations/${id}` : "/quotations"), pending ? 1600 : 900);
+    } catch (err) {
+      const message =
+        err instanceof TypeError ? "Connessione non disponibile. Riprova." : err instanceof Error && err.message ? err.message : "Errore nel salvataggio del preventivo.";
+      toast.error("Preventivo non salvato", { id: SAVE_ERROR_TOAST_ID, description: message });
     } finally {
       setSaving(false);
     }
   }, [editingQuotation, isEditing, quotationInfo, quotationRows, resetQuotation, router, saving]);
 
+  /** Uno step è raggiungibile dallo stepper se tutti i precedenti sono completi (in modifica lo sono tutti). */
+  const canReachStep = (step: 1 | 2 | 3 | 4): boolean => {
+    if (step === 1) return true;
+    if (step === 2) return canGoNextStep1;
+    if (step === 3) return canGoNextStep1 && canGoNextStep2;
+    return canGoNextStep1 && canGoNextStep2 && canGoNextStep3;
+  };
+
+  const goToStep = async (step: 1 | 2 | 3 | 4) => {
+    if (step === currentStep || !canReachStep(step)) return;
+    // Verso il riepilogo (anche saltando lo step Dati dallo stepper) vale la validazione del pulsante "Riepilogo":
+    // se non passa si apre lo step Dati, che verifica la destinazione e mostra l'errore.
+    if (step === 4 && !(await validateDestination())) {
+      if (currentStep !== 3) {
+        pendingSummaryRef.current = true;
+        setMobileCartOpen(false);
+        setStep(3);
+      } else {
+        document.getElementById("luogo")?.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      return;
+    }
+    setMobileCartOpen(false);
+    setStep(step);
+  };
+
+  /** Gesto/pulsante indietro del browser: chiude conferma o carrello, poi torna allo step precedente; dallo step 1 chiede conferma. */
+  const handleBrowserBack = (): boolean => {
+    if (saving) return true;
+    if (exitDialogOpen) {
+      setExitDialogOpen(false);
+      return true;
+    }
+    if (mobileCartOpen) {
+      setMobileCartOpen(false);
+      return true;
+    }
+    if (currentStep > 1) {
+      setStep((currentStep - 1) as 1 | 2 | 3);
+      return true;
+    }
+    if (!hasProgress) return false;
+    setExitTarget(WIZARD_BACK_HREF);
+    setExitDialogOpen(true);
+    return true;
+  };
+  const leaveToPreviousPage = useWizardBackGuard({ enabled: !saved, onBack: handleBrowserBack, fallbackHref: EXIT_HREF });
+
+  /** Uscita confermata: il logout chiude davvero la sessione, "indietro" torna alla pagina precedente al wizard. */
+  const leaveWizard = useCallback((target: string) => {
+    if (target === LOGOUT_HREF) void logout();
+    else if (target === WIZARD_BACK_HREF) leaveToPreviousPage();
+    else router.push(target);
+  }, [leaveToPreviousPage, logout, router]);
+
   const Stepper = () => (
-    <div className="flex items-center gap-0 mb-6">
-      {STEP_LABELS.map((label, idx) => {
-        const stepNum = (idx + 1) as 1 | 2 | 3 | 4;
-        const isActive = currentStep === stepNum;
-        const isDone = currentStep > stepNum;
-        return (
-          <div key={label} className="flex items-center flex-1 last:flex-none">
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className={`flex h-7 w-7 rounded-full items-center justify-center text-xs font-bold transition-all ${
-                isDone || isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-              } ${isActive ? "ring-4 ring-primary/20" : ""}`}>
-                {isDone ? <CheckCircle2 className="h-4 w-4" /> : stepNum}
-              </div>
-              <span className={`text-[10px] font-semibold tracking-wide uppercase whitespace-nowrap ${isActive ? "text-primary" : "text-muted-foreground"}`}>
-                {label}
-              </span>
-            </div>
-            {idx < STEP_LABELS.length - 1 && <div className={`flex-1 h-px mx-2 mt-[-10px] ${isDone ? "bg-primary/40" : "bg-border"}`} />}
-          </div>
-        );
-      })}
-    </div>
+    <>
+      <ExitOrderDialog
+        open={exitDialogOpen}
+        title="Preventivo in corso"
+        description="Il preventivo non è ancora stato salvato: se esci ora, i dati inseriti andranno persi."
+        onExitWithoutSaving={() => {
+          resetQuotation();
+          setExitDialogOpen(false);
+          leaveWizard(exitTarget);
+        }}
+        onContinue={() => setExitDialogOpen(false)}
+      />
+      <WizardHeader eyebrow={WIZARD_EYEBROW} title={wizardTitle} subtitle={wizardCustomer || undefined} onExit={() => requestExit(EXIT_HREF)} />
+      <WizardStepper
+        labels={STEP_LABELS}
+        currentStep={currentStep}
+        canReachStep={canReachStep}
+        onStepClick={(step) => void goToStep(step)}
+      />
+    </>
   );
 
-  const renderCartSummary = (itemsHeightClass: string) => (
+  /** `fill`: nella sidebar l'elenco righe occupa lo spazio rimasto e scorre da solo (totale e pulsanti restano visibili). */
+  const renderCartSummary = (itemsHeightClass: string, fill = false) => (
     <>
-      <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <User className="h-4 w-4 text-muted-foreground shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Cliente</p>
-            <p className="text-sm font-semibold truncate">{quotationInfo.cliente || "Non selezionato"}</p>
-          </div>
+      <div className="flex shrink-0 items-center justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <p className="font-display text-xl leading-tight font-bold text-foreground">Carrello</p>
+          <p className="text-[13px] text-muted-foreground">
+            {flaggedCount > 0 ? `${flaggedCount} ${flaggedCount === 1 ? "articolo" : "articoli"} · ${quantitiesLabel}` : "Nessun articolo selezionato"}
+          </p>
         </div>
-        <div className="text-xs text-muted-foreground">
-          <strong className="text-foreground">{flaggedCount}</strong> articoli · <strong className="text-foreground">{totalQty}</strong> pezzi
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Totale: <strong className="text-foreground">{formatCurrency(total)}</strong>
-        </div>
+        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
+          <ShoppingCart className="h-5 w-5" />
+          {flaggedCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-card bg-brand-yellow px-1 text-[10px] font-extrabold text-primary">
+            {flaggedCount}
+          </span>
+        )}
+        </span>
       </div>
-
-      {flaggedCount > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-3 flex flex-col gap-2">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Articoli inseriti</p>
-          <div className={`flex flex-col gap-2 ${itemsHeightClass} overflow-y-auto pr-1`}>
-            {quotationRows.map((item) => (
-              <div key={item.codice} className="rounded-xl border border-border/70 bg-background px-2.5 py-2">
-                <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold font-mono truncate">{item.codice}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{item.descrizione}</p>
-                    <div className="mt-1 flex items-center gap-2 text-[11px]">
-                      <span className="font-semibold text-foreground">{item.qty} {item.um}</span>
-                      {(item.sconto ?? 0) > 0 && <span className="font-semibold text-primary">-{item.sconto}%</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleEditItemInCatalog(item.codice)}
-                      className="h-7 px-2 rounded-lg border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                    >
-                      Modifica
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Rimuovi ${item.codice} dal preventivo`}
-                      onClick={() => handleRemoveItemFromCart(item.codice, item.descrizione)}
-                      className="h-7 w-7 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors flex items-center justify-center"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Almeno una riga sempre visibile: se lo spazio non basta scorre l'intera sidebar (pulsanti fissati in fondo). */}
+      <div className={cn("flex flex-col gap-2", fill && "min-h-28 flex-auto")}>
+        <p className="px-1 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">Righe preventivo</p>
+        <OrderLinesEditor
+          store="quotation"
+          mode="cart"
+          onEditArticle={handleEditItemInCatalog}
+          onEditLine={handleEditLine}
+          onAddNoteAbove={handleAddNoteAbove}
+          listHeightClass={itemsHeightClass}
+          className={fill ? "min-h-0 flex-auto" : undefined}
+        />
+      </div>
+      {/* Nella sidebar il totale sta nel piede fissato insieme ai pulsanti. */}
+      {!fill && (
+        <div className="flex shrink-0 items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
+          <span className="text-sm font-semibold text-foreground/80">Totale imponibile</span>
+          <span className="font-display text-2xl font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
         </div>
       )}
     </>
@@ -325,23 +573,25 @@ export default function QuotationWizard({ editingQuotation }: Props) {
 
   if (saved) {
     return (
-      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 flex flex-col items-center gap-4 text-center">
+      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8 flex flex-col items-center gap-4 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <CheckCircle2 className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="text-xl font-bold">Preventivo salvato</h2>
-        <p className="text-sm text-muted-foreground">Apro il dettaglio...</p>
+        <h2 className="font-display text-2xl font-bold tracking-tight">{savedPendingApproval ? "Preventivo inviato per approvazione" : "Preventivo salvato"}</h2>
+        <p className="text-sm text-muted-foreground">
+          {savedPendingApproval ? "Un amministratore deve approvare gli sconti liberi prima che sia utilizzabile. Apro il dettaglio..." : "Apro il dettaglio..."}
+        </p>
       </div>
     );
   }
 
   if (currentStep === 1) {
     return (
-      <div className="max-w-xl mx-auto px-4 pt-6 pb-10">
+      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8">
         <Stepper />
         <div className="flex flex-col gap-4">
           <div>
-            <h2 className="text-lg font-bold text-foreground mb-0.5">Cliente preventivo</h2>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-foreground mb-1">Cliente preventivo</h2>
             <p className="text-sm text-muted-foreground">Cerca nelle anagrafiche o inserisci il nome manualmente.</p>
           </div>
 
@@ -355,14 +605,17 @@ export default function QuotationWizard({ editingQuotation }: Props) {
                 id="cliente"
                 placeholder="Nome azienda o cliente"
                 value={quotationInfo.cliente}
-                autoFocus
-                onFocus={() => setCustomerDropdownOpen(true)}
+                // In modifica il cliente c'è già: niente tastiera né suggerimenti all'apertura (si aprono scrivendo).
+                autoFocus={!isEditing}
+                onFocus={() => {
+                  if (!quotationInfo.clienteId) setCustomerDropdownOpen(true);
+                }}
                 onBlur={() => { setTimeout(() => setCustomerDropdownOpen(false), 120); }}
                 onChange={(event) => {
                   setQuotationInfo({ cliente: event.target.value, clienteId: null });
                   setCustomerDropdownOpen(true);
                 }}
-                className="h-11 rounded-xl text-base bg-background"
+                className="h-12 rounded-lg text-base bg-card"
                 style={{ fontSize: "16px" }}
                 autoComplete="organization"
               />
@@ -413,42 +666,60 @@ export default function QuotationWizard({ editingQuotation }: Props) {
 
   if (currentStep === 2) {
     return (
-      <div className="min-h-dvh flex flex-col">
-        <div className="sticky top-14 z-30 bg-background/80 backdrop-blur-md border-b border-border">
-          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 sm:gap-3">
-            <div className="flex-1">
-              <SearchBar ref={searchInputRef} autoFocus store="quotation" />
+      <div ref={step2RootRef} className="min-h-dvh flex flex-col" style={{ "--step2-header-h": "49px" } as CSSProperties}>
+        {/* Header sticky: ricerca + casella righe manuali/note, sempre visibili scorrendo la lista */}
+        <div className="max-w-6xl mx-auto w-full px-4 pt-6 lg:pt-8">
+          <Stepper />
+        </div>
+        <div ref={stickyHeaderRef} className="sticky top-[var(--app-header-h)] z-30 bg-background border-b border-border">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col gap-2.5 lg:pr-[22rem] lg:has-[[data-composer-open]]:pr-4">
+            <SearchBar ref={searchInputRef} autoFocus store="quotation" />
+            <div>
+              <QuickLineComposer ref={composerRef} store="quotation" onAdded={handleArticleConfirmed} />
             </div>
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col lg:flex-row max-w-5xl mx-auto w-full">
+        <div className="flex flex-1 flex-col lg:flex-row max-w-6xl mx-auto w-full">
           <main className="flex-1 min-w-0 px-4 py-5">
-            <Stepper />
             <MaterialList
               store="quotation"
               onArticleConfirmed={handleArticleConfirmed}
               openArticleRequest={openArticleRequest}
               onOpenArticleRequestHandled={handleOpenArticleRequestHandled}
+              onCreateManualFromSearch={handleCreateManualFromSearch}
+              stickyTop="var(--app-header-h) + var(--step2-header-h)"
             />
           </main>
 
-          <aside className="hidden lg:flex w-72 shrink-0 flex-col gap-3 px-4 py-5 border-l border-border sticky top-[calc(3.5rem+49px)] self-start max-h-[calc(100dvh-3.5rem-49px)] overflow-y-auto">
-            {renderCartSummary("max-h-64")}
-            <Button variant="outline" className="gap-2 text-sm" onClick={() => setStep(1)}>
-              <ChevronLeft className="h-4 w-4" />
-              Indietro
-            </Button>
-            <Button className="gap-2 text-sm font-semibold" disabled={!canGoNextStep2} onClick={() => setStep(3)}>
-              Avanti
-              <ChevronRight className="h-4 w-4" />
-              {flaggedCount > 0 && <Badge className="ml-1 rounded-full px-2 py-0 h-5 text-xs">{flaggedCount}</Badge>}
-            </Button>
+          <aside
+            ref={cartAsideRef}
+            className="hidden lg:flex w-80 shrink-0 flex-col gap-4 my-5 mr-4 rounded-2xl border border-border/80 bg-card p-5 shadow-panel sticky self-start overflow-y-auto"
+            style={{ top: "calc(var(--app-header-h) + var(--step2-header-h) + 1.25rem)", maxHeight: "calc(100dvh - var(--app-header-h) - var(--step2-header-h) - 2.5rem)" }}
+          >
+            {renderCartSummary("min-h-0 flex-auto", true)}
+            {/* Piede fissato sul bordo della sidebar (-bottom-5 annulla il padding del contenitore che scorre). */}
+            <div className="sticky -bottom-5 -mb-5 flex shrink-0 flex-col gap-4 bg-card pb-5">
+              <div className="flex items-baseline justify-between gap-3 border-t border-border px-1 pt-3">
+                <span className="text-sm font-semibold text-foreground/80">Totale imponibile</span>
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="lg" className="px-4" onClick={() => setStep(1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                  Indietro
+                </Button>
+                <Button size="lg" className="flex-1 px-4" disabled={!canGoNextStep2} onClick={() => setStep(3)}>
+                  Avanti
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </aside>
         </div>
 
-        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen} direction="right">
-          <DrawerContent className="lg:hidden w-[88%] p-0">
+        <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen} closeOnMedia={SIDEBAR_MEDIA}>
+          <DrawerContent className="lg:hidden p-0 rounded-t-3xl">
             <DrawerHeader className="px-4 py-3 border-b border-border">
               <div className="flex items-center justify-between gap-2">
                 <DrawerTitle className="text-sm flex items-center gap-2">
@@ -456,28 +727,55 @@ export default function QuotationWizard({ editingQuotation }: Props) {
                   Articoli preventivo
                 </DrawerTitle>
                 <DrawerClose asChild>
-                  <button type="button" className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex items-center justify-center" aria-label="Chiudi carrello">
+                  <button type="button" className="size-10 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors flex items-center justify-center" aria-label="Chiudi carrello">
                     <X className="h-4 w-4" />
                   </button>
                 </DrawerClose>
               </div>
             </DrawerHeader>
-            <div className="px-4 py-4 flex flex-col gap-3 overflow-y-auto">
-              {renderCartSummary("max-h-[52dvh]")}
+            <div className="min-h-0 flex-1 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex flex-col gap-3 overflow-y-auto">
+              {renderCartSummary("max-h-[50dvh]")}
             </div>
           </DrawerContent>
         </Drawer>
 
-        <div className="lg:hidden sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border px-4 py-3 flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setStep(1)}>
-            <ChevronLeft className="h-4 w-4" />
-            Indietro
+        <div className="lg:hidden sticky bottom-[var(--app-tabbar-h)] z-30 flex items-center gap-2.5 border-t border-border bg-card px-4 py-3 shadow-[0_-10px_30px_-18px_rgb(15_27_45/0.35)]">
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-12 shrink-0"
+            aria-label="Indietro"
+            onClick={() => setStep(1)}
+          >
+            <ChevronLeft className="h-5 w-5" />
           </Button>
-          <div className="flex-1 text-center text-sm">
-            <span className="font-semibold">{flaggedCount}</span>
-            <span className="text-muted-foreground"> articoli</span>
-          </div>
-          <Button size="sm" className="gap-1.5 font-semibold" disabled={!canGoNextStep2} onClick={() => setStep(3)}>
+          <button
+            type="button"
+            onClick={() => setMobileCartOpen(true)}
+            aria-label={`Apri carrello, ${flaggedCount} articoli`}
+            className="flex h-12 min-w-0 flex-1 items-center gap-3 rounded-lg border border-input bg-card px-3 text-left transition-colors hover:border-primary/40 active:bg-muted"
+          >
+            <span className="relative flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-primary">
+              <ShoppingCart className="h-[18px] w-[18px]" />
+              {flaggedCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-card bg-brand-yellow px-1 text-[10px] font-extrabold text-primary">
+            {flaggedCount}
+          </span>
+        )}
+            </span>
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate text-xs font-medium text-muted-foreground">Carrello · {flaggedCount} {flaggedCount === 1 ? "articolo" : "articoli"}</span>
+              <span className="truncate text-[15px] font-bold tabular-nums text-foreground">{formatCurrency(total)}</span>
+            </span>
+          </button>
+          <Button
+            className="h-12 shrink-0 px-4 text-[15px]"
+            disabled={!canGoNextStep2}
+            onClick={() => {
+              setMobileCartOpen(false);
+              setStep(3);
+            }}
+          >
             Avanti
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -488,11 +786,11 @@ export default function QuotationWizard({ editingQuotation }: Props) {
 
   if (currentStep === 3) {
     return (
-      <div className="max-w-xl mx-auto px-4 pt-6 pb-10">
+      <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8">
         <Stepper />
         <div className="flex flex-col gap-4">
           <div>
-            <h2 className="text-lg font-bold text-foreground mb-0.5">Dati preventivo</h2>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-foreground mb-1">Dati preventivo</h2>
             <p className="text-sm text-muted-foreground">Preventivo per <strong>{quotationInfo.cliente}</strong> · {flaggedCount} articoli selezionati</p>
           </div>
 
@@ -517,9 +815,56 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               min={quotationInfo.dataPreventivo}
               value={dataConsegnaPrevista}
               onChange={(event) => setQuotationInfo({ dataConsegnaPrevista: event.target.value })}
-              className="h-11 rounded-xl text-base bg-background"
+              className="h-12 rounded-lg text-base bg-card"
               style={{ fontSize: "16px" }}
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="luogo" className="text-sm font-medium flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+              Destinazione cantiere
+            </Label>
+            <select
+              value={selectedRecentDestination}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSelectedRecentDestination(value);
+                if (value) setQuotationInfo({ luogoConsegna: value });
+              }}
+              disabled={!quotationInfo.clienteId || recentDestinationsLoading || recentDestinations.length === 0}
+              className="h-12 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60"
+            >
+              <option value="">
+                {recentDestinationsLoading
+                  ? "Caricamento destinazioni recenti..."
+                  : !quotationInfo.clienteId
+                    ? "Seleziona prima un cliente da anagrafica"
+                    : recentDestinations.length === 0
+                      ? "Nessuna destinazione recente disponibile"
+                      : "Destinazioni recenti del cliente"}
+              </option>
+              {recentDestinations.map((destination) => (
+                <option key={destination} value={destination}>
+                  {destination}
+                </option>
+              ))}
+            </select>
+            <AddressAutocompleteInput
+              ref={addressInputRef}
+              id="luogo"
+              placeholder="Indirizzo del cantiere (opzionale)"
+              value={quotationInfo.luogoConsegna}
+              onChange={handleDeliveryAddressChange}
+              onAddressResolved={handleAddressResolved}
+              onValidityChange={(valid) => {
+                setIsAddressValid(valid);
+                if (!valid) addressDataRef.current = null;
+              }}
+              className="h-12 rounded-lg text-base bg-card"
+              style={{ fontSize: "16px" }}
+            />
+            <p className="text-xs text-muted-foreground">Se lasci vuoto, nel PDF la destinazione sarà &quot;STESSA&quot; (sede del cliente).</p>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -556,7 +901,7 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               placeholder="Note da mostrare nel preventivo"
               value={quotationInfo.note}
               onChange={(event) => setQuotationInfo({ note: event.target.value })}
-              className="rounded-xl text-base bg-background resize-none"
+              className="rounded-lg text-base bg-card resize-none"
               rows={4}
               style={{ fontSize: "16px" }}
             />
@@ -567,7 +912,11 @@ export default function QuotationWizard({ editingQuotation }: Props) {
               <ChevronLeft className="h-4 w-4" />
               Indietro
             </Button>
-            <Button className="w-full h-11 gap-2 font-semibold sm:flex-1" disabled={!canGoNextStep3} onClick={() => setStep(4)}>
+            <Button
+              className="w-full h-11 gap-2 font-semibold sm:flex-1"
+              disabled={!canGoNextStep3}
+              onClick={() => void goToStep(4)}
+            >
               Riepilogo
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -578,15 +927,15 @@ export default function QuotationWizard({ editingQuotation }: Props) {
   }
 
   return (
-    <div className="max-w-xl mx-auto px-4 pt-6 pb-10">
+    <div className="max-w-xl mx-auto px-4 pt-6 pb-10 lg:pt-8">
       <Stepper />
       <div className="flex flex-col gap-5">
         <div>
-          <h2 className="text-lg font-bold text-foreground mb-0.5">Riepilogo preventivo</h2>
+          <h2 className="font-display text-2xl font-bold tracking-tight text-foreground mb-1">Riepilogo preventivo</h2>
           <p className="text-sm text-muted-foreground">Controlla i dati prima di salvare.</p>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3 text-sm">
+        <div className="rounded-2xl border border-border/80 bg-card shadow-card p-4 flex flex-col gap-3 text-sm">
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 text-muted-foreground shrink-0" />
             <div>
@@ -611,6 +960,13 @@ export default function QuotationWizard({ editingQuotation }: Props) {
             </div>
           )}
           <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Destinazione cantiere</p>
+              <p className="font-semibold">{quotationInfo.luogoConsegna.trim() || "Stessa del cliente"}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Validità</p>
@@ -628,36 +984,38 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="rounded-2xl border border-border/80 bg-card shadow-card overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Package className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">Articoli</span>
+            <span className="text-[11px] text-muted-foreground hidden sm:inline">trascina per riordinare</span>
             <Badge className="ml-auto rounded-full px-2.5 text-xs">{flaggedCount}</Badge>
           </div>
-          <div className="divide-y divide-border/60">
-            {quotationRows.map((item) => {
-              const rowTotal = discountedPrice(item) * item.qty;
-              return (
-                <div key={item.codice} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold font-mono text-foreground">{item.codice}</p>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{item.descrizione}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs sm:shrink-0 sm:justify-end">
-                    <span className="font-bold text-foreground">{item.qty}</span>
-                    <span className="text-muted-foreground">{item.um}</span>
-                    {(item.sconto ?? 0) > 0 && <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{item.sconto}%</span>}
-                    <span className="font-semibold text-foreground">{formatCurrency(rowTotal)}</span>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="px-3 py-3">
+            <OrderLinesEditor
+              store="quotation"
+              mode="summary"
+              onEditArticle={handleEditItemInCatalog}
+              onEditLine={handleEditLine}
+              onAddNoteAbove={handleAddNoteAbove}
+              showTrasportoControl
+            />
           </div>
           <div className="px-4 py-3 border-t border-border bg-muted/30 flex items-center justify-between text-sm">
             <span className="font-semibold">Totale imponibile</span>
             <span className="font-bold text-base">{formatCurrency(total)}</span>
           </div>
         </div>
+
+        {requiresApproval && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 flex items-start gap-2.5">
+            <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              Questo preventivo contiene <strong>sconti liberi</strong> (diversi da 0, 8% e 15%): verrà inviato a un amministratore per
+              approvazione. PDF e trasformazione in ordine saranno disponibili dopo il suo via libera.
+            </span>
+          </div>
+        )}
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <Button variant="outline" className="w-full h-11 gap-2 sm:flex-1" onClick={() => setStep(3)} disabled={saving}>
@@ -666,11 +1024,11 @@ export default function QuotationWizard({ editingQuotation }: Props) {
           </Button>
           <Button className="w-full h-11 gap-2 font-semibold sm:flex-1" onClick={handleSave} disabled={saving || !canGoNextStep1 || !canGoNextStep2 || !canGoNextStep3}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Salvataggio..." : isEditing ? "Salva modifiche" : "Salva preventivo"}
+            {saving ? "Salvataggio..." : requiresApproval ? "Salva e invia per approvazione" : isEditing ? "Salva modifiche" : "Salva preventivo"}
           </Button>
         </div>
 
-        <Button variant="ghost" className="gap-2 text-muted-foreground" onClick={() => router.push("/quotations")} disabled={saving}>
+        <Button variant="ghost" className="gap-2 text-muted-foreground" onClick={() => requestExit(EXIT_HREF)} disabled={saving}>
           <FileText className="h-4 w-4" />
           Torna ai preventivi
         </Button>

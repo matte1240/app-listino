@@ -3,9 +3,15 @@ import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { sendOrderEmail } from "@/lib/mail";
 import { dbOrderToOrder, getOrderDraftMap, type DbOrder } from "@/lib/orders";
-import { getDbQuotation, markQuotationConverted } from "@/lib/quotations";
+import { getDbQuotation, markQuotationConverted, type DbQuotation } from "@/lib/quotations";
 import { userOwnsCustomerByRap } from "@/lib/rap";
-import type { Order, OrderHistoryItem } from "@/types";
+import { getOrderIncompleteReason, normalizeOrderItems } from "@/lib/order-lines";
+import { getLineCodes } from "@/lib/settings";
+import { normalizeCig, normalizeCup } from "@/lib/cig-cup";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { getApprovedQuotationItems, quotationUnavailableReason, resolveOrderSubmitState, type OrderSubmitState } from "@/lib/approvals";
+import { notifyAdminsApprovalRequested, orderApprovalDoc } from "@/lib/notifications";
+import type { Order, OrderStatus } from "@/types";
 
 type OrderListStatusFilter = "all" | "attivi" | "annullati";
 
@@ -92,7 +98,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ orders, counts: countsRow });
 }
 
-/** POST /api/orders — save a new order */
+/** POST /api/orders — save a new order (bozza, confermato oppure in_approvazione se ci sono sconti liberi) */
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
@@ -102,21 +108,26 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Body non valido" }, { status: 400 });
 
-  const { clienteId, cliente, magazzino, luogoConsegna, dataConsegna, note, items, status, quotationId } = body as {
+  const { clienteId, cliente, magazzino, luogoConsegna, cig: rawCig, cup: rawCup, dataConsegna, note, items: rawItems, status, quotationId } = body as {
     quotationId?: number | null;
     clienteId?: number | null;
     cliente: string;
     magazzino: string;
     luogoConsegna: string;
+    cig?: string;
+    cup?: string;
     dataConsegna: string;
     note: string;
-    items: OrderHistoryItem[];
+    items: unknown;
     status?: "bozza" | "confermato";
   };
 
-  const resolvedStatus: "bozza" | "confermato" = status === "bozza" ? "bozza" : "confermato";
+  const requestedStatus: "bozza" | "confermato" = status === "bozza" ? "bozza" : "confermato";
 
   const db = getDb();
+  const items = normalizeOrderItems(rawItems, getLineCodes());
+  const cig = normalizeCig(rawCig);
+  const cup = normalizeCup(rawCup);
   const normalizedClienteId = Number(clienteId);
   const hasSelectedCustomer = Number.isInteger(normalizedClienteId) && normalizedClienteId > 0;
   const normalizedQuotationId = Number(quotationId);
@@ -138,56 +149,74 @@ export async function POST(req: NextRequest) {
     resolvedCliente = selectedCustomer.ragione_sociale;
   }
 
-  if (!resolvedCliente || !magazzino?.trim() || !Array.isArray(items) || items.length === 0) {
-    return NextResponse.json({ error: "Dati ordine incompleti" }, { status: 400 });
+  // Le bozze si salvano anche senza magazzino (si sceglie allo step Dettagli): serve solo per l'invio.
+  const resolvedMagazzino = typeof magazzino === "string" ? magazzino.trim() : "";
+  const incompleteReason = getOrderIncompleteReason({ cliente: resolvedCliente, magazzino: resolvedMagazzino, cig, cup, items }, requestedStatus);
+  if (incompleteReason) {
+    return NextResponse.json({ error: incompleteReason }, { status: 400 });
   }
 
+  let sourceQuotation: DbQuotation | undefined;
   if (resolvedQuotationId !== null) {
-    const sourceQuotation = getDbQuotation(db, resolvedQuotationId);
+    sourceQuotation = getDbQuotation(db, resolvedQuotationId);
     if (!sourceQuotation) {
       return NextResponse.json({ error: "Preventivo non trovato" }, { status: 400 });
     }
     if (payload.role !== "admin" && sourceQuotation.agente !== payload.username && !userOwnsCustomerByRap(db, payload.id, sourceQuotation.cliente_id)) {
       return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
     }
-    if (sourceQuotation.status === "convertito") {
-      return NextResponse.json({ error: "Preventivo già trasformato in ordine" }, { status: 409 });
+    if (requestedStatus === "confermato") {
+      const reason = quotationUnavailableReason(sourceQuotation.status);
+      if (reason) return NextResponse.json({ error: reason }, { status: 409 });
     }
   }
+
+  // Lo stato finale lo decide il server: sconti liberi → approvazione admin (salvo admin o preventivo già approvato).
+  const submitState: OrderSubmitState | null =
+    requestedStatus === "confermato"
+      ? resolveOrderSubmitState({ items, user: payload, sourceQuotationItems: getApprovedQuotationItems(sourceQuotation) })
+      : null;
+  const resolvedStatus: OrderStatus = submitState ? submitState.status : "bozza";
 
   let orderId: number;
   try {
     orderId = db.transaction(() => {
       const result = db
         .prepare(
-          `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, data_consegna, note, agente, items, status, parent_order_id, quotation_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO orders (cliente, cliente_id, magazzino, luogo_consegna, cig, cup, data_consegna, note, agente, items, status, parent_order_id, quotation_id,
+                               approval_requested_at, approval_decided_at, approval_decided_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           resolvedCliente,
           resolvedClienteId,
-          magazzino,
+          resolvedMagazzino,
           luogoConsegna ?? "",
+          cig,
+          cup,
           dataConsegna ?? "",
           note ?? "",
           payload.username,
           JSON.stringify(items),
           resolvedStatus,
           null,
-          resolvedQuotationId
+          resolvedQuotationId,
+          submitState?.approvalRequestedAt ?? null,
+          submitState?.approvalDecidedAt ?? null,
+          submitState?.approvalDecidedBy ?? null
         );
 
       const savedOrderId = result.lastInsertRowid as number;
       if (resolvedStatus === "confermato" && resolvedQuotationId !== null) {
         const convertedChanges = markQuotationConverted(db, resolvedQuotationId, savedOrderId);
-        if (convertedChanges === 0) throw new Error("QUOTATION_ALREADY_CONVERTED");
+        if (convertedChanges === 0) throw new Error("QUOTATION_UNAVAILABLE");
       }
 
       return savedOrderId;
     })();
   } catch (error) {
-    if (error instanceof Error && error.message === "QUOTATION_ALREADY_CONVERTED") {
-      return NextResponse.json({ error: "Preventivo già trasformato in ordine" }, { status: 409 });
+    if (error instanceof Error && error.message === "QUOTATION_UNAVAILABLE") {
+      return NextResponse.json({ error: quotationUnavailableReason(sourceQuotation?.status) ?? "Preventivo non disponibile" }, { status: 409 });
     }
     throw error;
   }
@@ -198,8 +227,10 @@ export async function POST(req: NextRequest) {
     quotationId: resolvedQuotationId,
     clienteId: resolvedClienteId,
     cliente: resolvedCliente,
-    magazzino,
+    magazzino: resolvedMagazzino,
     luogoConsegna: luogoConsegna ?? "",
+    cig,
+    cup,
     dataConsegna: dataConsegna ?? "",
     note: note ?? "",
     agente: payload.username,
@@ -207,6 +238,10 @@ export async function POST(req: NextRequest) {
     items,
     status: resolvedStatus,
     createdAt: new Date().toISOString(),
+    approvalRequestedAt: submitState?.approvalRequestedAt ?? null,
+    approvalDecidedAt: submitState?.approvalDecidedAt ?? null,
+    approvalDecidedBy: submitState?.approvalDecidedBy ?? null,
+    approvalNote: null,
     hasDraft: false,
     draftUpdatedAt: null,
     draft: null,
@@ -214,7 +249,11 @@ export async function POST(req: NextRequest) {
 
   if (resolvedStatus === "confermato") {
     sendOrderEmail(order, payload.email).catch((err) => console.error("[mail] Errore invio email ordine:", err));
+  } else if (resolvedStatus === "in_approvazione") {
+    notifyAdminsApprovalRequested(db, orderApprovalDoc(order, getAppBaseUrl(req))).catch((err) =>
+      console.error("[approvazioni] Errore notifica admin:", err)
+    );
   }
 
-  return NextResponse.json({ id: orderId }, { status: 201 });
+  return NextResponse.json({ id: orderId, status: resolvedStatus }, { status: 201 });
 }

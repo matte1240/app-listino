@@ -32,6 +32,10 @@ function createDb() {
   if (!userCols.some((c) => c.name === "full_name")) {
     db.exec("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''");
   }
+  // Versione delle sessioni: cambiando la password si incrementa e i token emessi prima smettono di valere.
+  if (!userCols.some((c) => c.name === "session_version")) {
+    db.exec("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS enriched_materials (
@@ -91,6 +95,8 @@ function createDb() {
       cliente_id INTEGER,
       magazzino TEXT NOT NULL,
       luogo_consegna TEXT NOT NULL DEFAULT '',
+      cig TEXT NOT NULL DEFAULT '',
+      cup TEXT NOT NULL DEFAULT '',
       data_consegna TEXT NOT NULL DEFAULT '',
       note TEXT NOT NULL DEFAULT '',
       agente TEXT NOT NULL,
@@ -133,8 +139,22 @@ function createDb() {
   if (!orderCols.some((c) => c.name === "cancelled_from_status")) {
     db.exec("ALTER TABLE orders ADD COLUMN cancelled_from_status TEXT");
   }
+  // Migration: approvazione admin (sconti liberi)
+  for (const col of ["approval_requested_at", "approval_decided_at", "approval_decided_by", "approval_note"]) {
+    if (!orderCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE orders ADD COLUMN ${col} TEXT`);
+    }
+  }
+  // Migration: CIG e CUP in testata (fatturazione PA)
+  for (const col of ["cig", "cup"]) {
+    if (!orderCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE orders ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_quotation_id ON orders(quotation_id)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS order_drafts (
@@ -143,6 +163,8 @@ function createDb() {
       cliente_id INTEGER,
       magazzino TEXT NOT NULL,
       luogo_consegna TEXT NOT NULL DEFAULT '',
+      cig TEXT NOT NULL DEFAULT '',
+      cup TEXT NOT NULL DEFAULT '',
       data_consegna TEXT NOT NULL DEFAULT '',
       note TEXT NOT NULL DEFAULT '',
       items TEXT NOT NULL,
@@ -152,6 +174,20 @@ function createDb() {
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_order_drafts_updated_at ON order_drafts(updated_at)");
 
+  // Migration: approvazione admin delle bozze di modifica
+  const draftCols = db.pragma("table_info(order_drafts)") as { name: string }[];
+  for (const col of ["approval_status", "approval_requested_at", "approval_note"]) {
+    if (!draftCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE order_drafts ADD COLUMN ${col} TEXT`);
+    }
+  }
+  // Migration: CIG e CUP in testata (fatturazione PA)
+  for (const col of ["cig", "cup"]) {
+    if (!draftCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE order_drafts ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS quotations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +196,7 @@ function createDb() {
       cliente_id INTEGER,
       data_preventivo TEXT NOT NULL DEFAULT '',
       data_consegna_prevista TEXT NOT NULL DEFAULT '',
+      luogo_consegna TEXT NOT NULL DEFAULT '',
       validita_giorni INTEGER NOT NULL DEFAULT 30,
       note TEXT NOT NULL DEFAULT '',
       agente TEXT NOT NULL DEFAULT '',
@@ -184,6 +221,10 @@ function createDb() {
   if (!quotationCols.some((c) => c.name === "data_consegna_prevista")) {
     db.exec("ALTER TABLE quotations ADD COLUMN data_consegna_prevista TEXT NOT NULL DEFAULT ''");
   }
+  if (!quotationCols.some((c) => c.name === "luogo_consegna")) {
+    // Migration: destinazione cantiere (opzionale) sui preventivi
+    db.exec("ALTER TABLE quotations ADD COLUMN luogo_consegna TEXT NOT NULL DEFAULT ''");
+  }
   if (!quotationCols.some((c) => c.name === "validita_giorni")) {
     db.exec("ALTER TABLE quotations ADD COLUMN validita_giorni INTEGER NOT NULL DEFAULT 30");
   }
@@ -202,10 +243,36 @@ function createDb() {
   if (!quotationCols.some((c) => c.name === "converted_order_id")) {
     db.exec("ALTER TABLE quotations ADD COLUMN converted_order_id INTEGER");
   }
+  // Migration: approvazione admin (sconti liberi)
+  for (const col of ["approval_requested_at", "approval_decided_at", "approval_decided_by", "approval_note"]) {
+    if (!quotationCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE quotations ADD COLUMN ${col} TEXT`);
+    }
+  }
+  // Migration: promemoria di ricontatto (follow-up) dei preventivi non trasformati in ordine
+  for (const col of ["followup_due_at", "followup_reminded_at"]) {
+    if (!quotationCols.some((c) => c.name === col)) {
+      db.exec(`ALTER TABLE quotations ADD COLUMN ${col} TEXT`);
+    }
+  }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_numero ON quotations(numero)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_agente_created_at ON quotations(agente, created_at)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_status ON quotations(status)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_quotations_converted_order_id ON quotations(converted_order_id)");
+
+  // Storico ricontatti dei preventivi: promemoria inviati ed esiti registrati dal rappresentante
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quotation_followups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quotation_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      next_reminder_at TEXT,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_quotation_followups_quotation_id ON quotation_followups(quotation_id)");
 
   type LegacyLinkedDraftRow = {
     id: number;
@@ -338,6 +405,31 @@ function createDb() {
     )
   `);
 
+  // Impostazioni applicative chiave/valore (es. codici Metodo per trasporto e righe manuali)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Sottoscrizioni push PWA (una per browser/dispositivo, riassegnata all'utente loggato)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)");
+
   // Seed default admin if table is empty
   const count = db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number };
   if (count.c === 0) {
@@ -355,6 +447,7 @@ function createDb() {
 
 let _db: Database.Database | null = null;
 let _backupSchedulerStarted = false;
+let _followUpSchedulerStarted = false;
 
 function ensureBackupSchedulerStarted() {
   if (_backupSchedulerStarted) return;
@@ -369,10 +462,24 @@ function ensureBackupSchedulerStarted() {
     });
 }
 
+function ensureFollowUpSchedulerStarted() {
+  if (_followUpSchedulerStarted) return;
+  _followUpSchedulerStarted = true;
+
+  void import("@/lib/quotation-followup-scheduler")
+    .then(({ ensureQuotationFollowUpSchedulerStarted }) => {
+      ensureQuotationFollowUpSchedulerStarted();
+    })
+    .catch((error) => {
+      console.error("[preventivi] Impossibile inizializzare lo scheduler dei promemoria:", error);
+    });
+}
+
 export function getDb(): Database.Database {
   if (!_db) {
     _db = createDb();
     ensureBackupSchedulerStarted();
+    ensureFollowUpSchedulerStarted();
   }
 
   return _db;
@@ -391,5 +498,6 @@ export interface DbUser {
   role: "admin" | "agente";
   full_name: string;
   email: string;
+  session_version: number;
   created_at: string;
 }

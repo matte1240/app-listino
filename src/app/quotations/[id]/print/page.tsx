@@ -1,16 +1,21 @@
 "use client";
 
 import Image from "next/image";
-import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SegmentedTabs from "@/components/SegmentedTabs";
 import { useAuth } from "@/lib/auth-context";
+import { cn } from "@/lib/utils";
+import { getLineType } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, formatSconto, getLineTotal, roundToCents } from "@/lib/order-totals";
 import type { Anagrafica, Quotation, QuotationItem } from "@/types";
 
 const VAT_RATE = 0.22;
-const TABLE_BODY_AVAILABLE_MM = 134;
+// Spazio del corpo tabella: la riga dei totali è alta 11mm (etichette su una riga), il riempitivo arriva a fondo pagina.
+const TABLE_BODY_AVAILABLE_MM = 137;
 const MIN_FILLER_ROW_MM = 0;
 
 function formatDate(iso: string) {
@@ -32,16 +37,12 @@ function formatUnitPrice(value: number) {
   });
 }
 
-function discountedPrice(item: QuotationItem) {
-  return item.prezzoListino * (1 - (item.sconto ?? 0) / 100);
-}
-
 function quotationTotal(quotation: Quotation) {
-  return quotation.items.reduce((sum, item) => sum + discountedPrice(item) * item.qty, 0);
+  return calculateOrderDiscountedTotal(quotation.items);
 }
 
 function displayDiscount(item: QuotationItem) {
-  return item.sconto ? `${item.sconto}` : "*";
+  return item.sconto ? formatSconto(item.sconto) : "*";
 }
 
 function estimateWrappedLines(value: string, charsPerLine: number) {
@@ -50,16 +51,18 @@ function estimateWrappedLines(value: string, charsPerLine: number) {
   return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
 }
 
+// Le stime seguono il CSS della tabella (padding 0.9mm sopra/sotto, interlinea ~4.1mm) per chiudere a fondo pagina.
+// Le note occupano la sola colonna Descrizione, quindi vanno a capo come le descrizioni articolo.
 function estimateItemRowHeightMm(item: QuotationItem) {
   const descriptionLines = estimateWrappedLines(item.descrizione, 46);
-  const codeLines = estimateWrappedLines(item.codice, 22);
+  const codeLines = getLineType(item) === "commento" ? 1 : estimateWrappedLines(item.codice, 22);
   const visibleLines = Math.max(descriptionLines, codeLines, 1);
-  return 3 + visibleLines * 4.1;
+  return 1.8 + visibleLines * 4.1;
 }
 
 function estimateNotesRowHeightMm(note: string) {
   if (!note.trim()) return 0;
-  return 4 + (1 + estimateWrappedLines(note, 115)) * 4.1;
+  return 4.7 + (1 + estimateWrappedLines(note, 46)) * 4.1;
 }
 
 function quotationFillerHeightMm(quotation: Quotation) {
@@ -68,6 +71,70 @@ function quotationFillerHeightMm(quotation: Quotation) {
     0
   );
   return Math.max(MIN_FILLER_ROW_MM, TABLE_BODY_AVAILABLE_MM - rowsHeight - estimateNotesRowHeightMm(quotation.note));
+}
+
+/**
+ * Anteprima del foglio A4: sugli schermi stretti viene rimpicciolito per stare tutto in larghezza,
+ * con la possibilità di tornare al 100% scorrendo di lato. In stampa resta sempre 1:1.
+ */
+function SheetPreview({ children }: { children: ReactNode }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
+  const [size, setSize] = useState({ available: 0, width: 0, height: 0 });
+  const [zoom, setZoom] = useState<"fit" | "actual">("fit");
+
+  // Misura prima del paint, così il foglio non compare per un attimo a grandezza naturale.
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const sheet = sheetRef.current;
+    if (!frame || !sheet) return;
+    const update = () =>
+      setSize({ available: frame.clientWidth, width: sheet.offsetWidth, height: sheet.offsetHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(frame);
+    observer.observe(sheet);
+    return () => observer.disconnect();
+  }, []);
+
+  const fitScale = size.available && size.width ? Math.min(1, size.available / size.width) : 1;
+  // Si adatta appena il foglio non entra; la scelta Adatta/100% compare solo se la riduzione è percepibile.
+  const needsScale = fitScale < 1;
+  const showToggle = fitScale < 0.95;
+  const scale = needsScale && (zoom === "fit" || !showToggle) ? fitScale : 1;
+
+  return (
+    <>
+      {showToggle && (
+        <div className="no-print mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">Anteprima ridotta: il PDF resta in formato A4.</p>
+          <SegmentedTabs
+            className="w-40 shrink-0"
+            options={[
+              { value: "fit", label: "Adatta" },
+              { value: "actual", label: "100%" },
+            ]}
+            value={zoom}
+            onChange={setZoom}
+          />
+        </div>
+      )}
+      <div ref={frameRef} className={cn("sheet-frame", showToggle && zoom === "actual" && "overflow-x-auto")}>
+        <div
+          className="sheet-viewport"
+          style={size.width ? { width: size.width * scale, height: size.height * scale } : undefined}
+        >
+          <section
+            ref={sheetRef}
+            className="metodo-sheet shadow-sm"
+            style={scale < 1 ? { transform: `scale(${scale})` } : undefined}
+          >
+            {children}
+          </section>
+        </div>
+      </div>
+    </>
+  );
 }
 
 export default function QuotationPrintPage() {
@@ -119,8 +186,8 @@ export default function QuotationPrintPage() {
   }, [params?.id, authLoading, user]);
 
   const total = useMemo(() => (quotation ? quotationTotal(quotation) : 0), [quotation]);
-  const vatTotal = useMemo(() => total * VAT_RATE, [total]);
-  const documentTotal = useMemo(() => total + vatTotal, [total, vatTotal]);
+  const vatTotal = useMemo(() => roundToCents(total * VAT_RATE), [total]);
+  const documentTotal = useMemo(() => roundToCents(total + vatTotal), [total, vatTotal]);
   const fillerHeightMm = useMemo(() => (quotation ? quotationFillerHeightMm(quotation) : 0), [quotation]);
 
   if (authLoading || loading) {
@@ -135,6 +202,27 @@ export default function QuotationPrintPage() {
     return (
       <div className="min-h-dvh flex items-center justify-center">
         <p className="text-destructive">{error ?? "Preventivo non trovato"}</p>
+      </div>
+    );
+  }
+
+  // Un preventivo con sconti liberi non approvati non è stampabile dagli agenti.
+  const isApproved = quotation.status === "attivo" || quotation.status === "convertito" || quotation.status === "perso";
+  if (!isApproved && user?.role !== "admin") {
+    return (
+      <div className="min-h-dvh flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border border-orange-200 bg-orange-50 p-5 text-center flex flex-col gap-3">
+          <h1 className="text-lg font-bold text-orange-900">Preventivo non approvato</h1>
+          <p className="text-sm text-orange-800">
+            {quotation.status === "rifiutato"
+              ? `Il preventivo è stato rifiutato${quotation.approvalNote ? `: ${quotation.approvalNote}` : ""}. Correggi gli sconti e salvalo di nuovo.`
+              : "Il preventivo contiene sconti liberi ed è in attesa di approvazione di un amministratore. Il PDF sarà disponibile dopo l'approvazione."}
+          </p>
+          <Button variant="outline" className="gap-2 self-center" onClick={() => router.push(`/quotations/${quotation.id}`)}>
+            <ArrowLeft className="h-4 w-4" />
+            Torna al preventivo
+          </Button>
+        </div>
       </div>
     );
   }
@@ -158,6 +246,15 @@ export default function QuotationPrintPage() {
           line-height: 1.12;
           padding: 9mm 6.8mm 6mm;
           overflow: hidden;
+        }
+
+        .sheet-viewport {
+          margin: 0 auto;
+        }
+
+        .sheet-viewport .metodo-sheet {
+          margin: 0;
+          transform-origin: top left;
         }
 
         .company-header {
@@ -261,9 +358,6 @@ export default function QuotationPrintPage() {
           font-size: 8.7pt;
         }
 
-        .destination-box {
-          height: 7.5mm;
-        }
 
         .customer-box {
           padding-top: 0.5mm;
@@ -323,13 +417,23 @@ export default function QuotationPrintPage() {
         }
 
         .items-table td {
-          padding: 1.5mm 1mm;
+          padding: 0.9mm 1mm;
           overflow-wrap: break-word;
         }
 
+        /* Corpo tabella "a colonne": nessun separatore orizzontale fra le righe, solo le linee verticali. */
+        .items-table tbody td {
+          border-top: 0;
+          border-bottom: 0;
+        }
+
+        .items-table tbody tr:first-child td {
+          padding-top: 1.6mm;
+        }
+
         .code-col { width: 43mm; }
-        .description-col { width: 71mm; }
-        .um-col { width: 8mm; }
+        .description-col { width: 68mm; }
+        .um-col { width: 11mm; }
         .qty-col { width: 16mm; }
         .price-col { width: 18mm; }
         .discount-col { width: 14mm; }
@@ -362,10 +466,15 @@ export default function QuotationPrintPage() {
           border-top: 0;
         }
 
-        .notes-row td {
-          padding: 1.3mm 1.2mm;
-          font-size: 9.2pt;
+        /* Note del preventivo: restano nella sola colonna Descrizione, staccate dall'ultimo articolo. */
+        .items-table tbody .notes-row td {
+          padding-top: 3mm;
           line-height: 1.22;
+        }
+
+        /* Nota di riga: testo in corsivo nella sola colonna Descrizione, le altre colonne restano vuote. */
+        .comment-row td {
+          font-style: italic;
         }
 
         .notes-label {
@@ -379,6 +488,11 @@ export default function QuotationPrintPage() {
           white-space: pre-wrap;
         }
 
+        .items-table tbody .totals-row td {
+          border-top: 0.25mm solid #000;
+          border-bottom: 0.25mm solid #000;
+        }
+
         .totals-row td {
           height: 11mm;
           padding: 0.9mm 1.1mm;
@@ -387,13 +501,17 @@ export default function QuotationPrintPage() {
           vertical-align: middle;
         }
 
+        /* Etichette su una riga, come quelle dell'intestazione: nelle celle da 26-32mm il corpo 8.8pt andava a capo. */
         .totals-label {
           display: block;
           margin-bottom: 2mm;
+          font-size: 7.2pt;
+          white-space: nowrap;
         }
 
-        .totals-currency {
-          margin-right: 5mm;
+        /* Importo mai spezzato (prima "39.271," / "95"); con totali enormi va a capo solo tra "EUR" e la cifra. */
+        .totals-amount {
+          white-space: nowrap;
         }
 
         @media print {
@@ -413,6 +531,19 @@ export default function QuotationPrintPage() {
 
           .quotation-print-main {
             padding: 0 !important;
+          }
+
+          .sheet-frame {
+            overflow: visible !important;
+          }
+
+          .sheet-viewport {
+            width: auto !important;
+            height: auto !important;
+          }
+
+          .metodo-sheet {
+            transform: none !important;
           }
 
           .metodo-sheet {
@@ -445,7 +576,7 @@ export default function QuotationPrintPage() {
           </div>
         </div>
 
-        <section className="metodo-sheet shadow-sm">
+        <SheetPreview>
           <header className="company-header">
             <div>
               <Image
@@ -523,8 +654,9 @@ export default function QuotationPrintPage() {
                   <span className="meta-label">Fax</span>
                   <span className="meta-value">&nbsp;</span>
                 </div>
-                <div className="meta-cell meta-wide destination-box">
+                <div className="meta-cell meta-wide">
                   <span className="meta-label">Destinazione diversa</span>
+                  <span className="meta-value meta-value-small">{quotation.luogoConsegna?.trim() || "STESSA"}</span>
                 </div>
               </div>
             </div>
@@ -572,26 +704,47 @@ export default function QuotationPrintPage() {
             </thead>
             <tbody>
               {quotation.items.map((item, index) => {
-                const rowPrice = discountedPrice(item);
+                const rowKey = item.id ?? `${item.codice}-${index}`;
+                if (getLineType(item) === "commento") {
+                  return (
+                    <tr key={rowKey} className="comment-row">
+                      <td className="code-cell" />
+                      <td className="description-lines">{item.descrizione}</td>
+                      <td />
+                      <td />
+                      <td />
+                      <td />
+                      <td />
+                      <td />
+                    </tr>
+                  );
+                }
                 return (
-                  <tr key={`${item.codice}-${index}`}>
+                  <tr key={rowKey}>
                     <td className="code-cell">{item.codice}</td>
                     <td className="description-lines">{item.descrizione}</td>
                     <td>{item.um}</td>
                     <td className="text-right">{item.qty % 1 === 0 ? item.qty : item.qty.toLocaleString("it-IT")}</td>
                     <td className="text-right">{formatUnitPrice(item.prezzoListino)}</td>
                     <td className="text-right">{displayDiscount(item)}</td>
-                    <td className="text-right">{formatCurrency(rowPrice * item.qty)}</td>
+                    <td className="text-right">{formatCurrency(getLineTotal(item))}</td>
                     <td className="text-right">22</td>
                   </tr>
                 );
               })}
               {quotation.note.trim() && (
                 <tr className="notes-row">
-                  <td colSpan={8}>
+                  <td className="code-cell" />
+                  <td className="description-lines">
                     <span className="notes-label">Note</span>
                     <p className="notes-content">{quotation.note.trim()}</p>
                   </td>
+                  <td />
+                  <td />
+                  <td />
+                  <td />
+                  <td />
+                  <td />
                 </tr>
               )}
               <tr className="filler-row" aria-hidden="true" style={{ "--quotation-filler-height": `${fillerHeightMm}mm` } as CSSProperties}>
@@ -608,21 +761,20 @@ export default function QuotationPrintPage() {
                 <td colSpan={2} style={{ borderLeft: 0, borderBottom: 0 }} />
                 <td colSpan={2}>
                   <span className="totals-label">Totale imponibile</span>
-                  <span>{formatCurrency(total)}</span>
+                  <span className="totals-amount">{formatCurrency(total)}</span>
                 </td>
                 <td colSpan={2}>
                   <span className="totals-label">Totale iva</span>
-                  <span>{formatCurrency(vatTotal)}</span>
+                  <span className="totals-amount">{formatCurrency(vatTotal)}</span>
                 </td>
                 <td colSpan={2}>
                   <span className="totals-label">Totale Documento</span>
-                  <span className="totals-currency">EUR</span>
-                  <span>{formatCurrency(documentTotal)}</span>
+                  EUR <span className="totals-amount">{formatCurrency(documentTotal)}</span>
                 </td>
               </tr>
             </tbody>
           </table>
-        </section>
+        </SheetPreview>
       </main>
     </div>
   );

@@ -22,25 +22,50 @@ export interface EnrichedData {
   updatedAt: string;
 }
 
+/**
+ * Tipo di riga del corpo ordine/preventivo.
+ * - articolo: riga da listino (codice presente in `materials`)
+ * - manuale: riga inserita a mano (descrizione, U.M. e prezzo liberi)
+ * - commento: nota testuale a tutta larghezza, senza quantità né prezzo
+ * - trasporto: spese di trasporto, sempre ultima riga
+ */
+export type OrderLineType = "articolo" | "manuale" | "commento" | "trasporto";
+
 export interface OrderHistoryItem {
+  /** Identificativo stabile della riga (assente negli ordini salvati prima dell'introduzione). */
+  id?: string;
+  /** Assente = "articolo" (retro-compatibilità con gli ordini già salvati). */
+  tipo?: OrderLineType;
   codice: string;
   descrizione: string;
   qty: number;
   um: string;
   prezzoListino: number;
-  sconto?: number; // 0 | 8 | 15
+  /** Percentuale 0-100; 0/8/15 sono i preset, qualsiasi altro valore è uno "sconto libero". */
+  sconto?: number;
 }
 
-export interface QuotationItem {
-  codice: string;
-  descrizione: string;
-  qty: number;
-  um: string;
-  prezzoListino: number;
-  sconto?: number; // 0 | 8 | 15
+export type QuotationItem = OrderHistoryItem;
+
+/** Riga come vive nello store del wizard: id e tipo sempre valorizzati. */
+export type OrderLine = OrderHistoryItem & { id: string; tipo: OrderLineType };
+
+/**
+ * Esito dell'approvazione admin richiesta dagli sconti liberi.
+ * Sugli ordini e preventivi lo stato "in attesa" è espresso dallo status del documento
+ * (`in_approvazione`); questi campi tracciano richiesta, decisione e motivazione.
+ */
+export interface ApprovalInfo {
+  approvalRequestedAt: string | null;
+  approvalDecidedAt: string | null;
+  approvalDecidedBy: string | null;
+  approvalNote: string | null;
 }
 
-export interface Quotation {
+/** Stato di approvazione di una bozza di modifica (ordine già confermato). */
+export type DraftApprovalStatus = 'in_approvazione' | 'rifiutato';
+
+export interface Quotation extends ApprovalInfo {
   id: number;
   numero: string;
   clienteId: number | null;
@@ -49,6 +74,8 @@ export interface Quotation {
   convertedOrderId: number | null;
   dataPreventivo: string;
   dataConsegnaPrevista: string;
+  /** Destinazione del cantiere (opzionale): vuota = stessa sede del cliente ("STESSA" nel PDF). */
+  luogoConsegna: string;
   validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
   agente: string;
@@ -56,11 +83,38 @@ export interface Quotation {
   items: QuotationItem[];
   createdAt: string;
   updatedAt: string;
+  /** Data del prossimo promemoria di ricontatto (solo preventivi attivi; null se non previsto). */
+  followUpDueAt: string | null;
+  /** Quando è stato inviato l'ultimo promemoria ancora senza esito registrato. */
+  followUpRemindedAt: string | null;
+  /** True se il preventivo attende un esito dal rappresentante (promemoria scaduto). */
+  followUpDue: boolean;
 }
 
-export type QuotationStatus = 'attivo' | 'convertito';
+/** `perso`: chiuso senza ordine dopo il ricontatto del cliente (riapribile). */
+export type QuotationStatus = 'attivo' | 'in_approvazione' | 'rifiutato' | 'convertito' | 'perso';
 
-export type OrderStatus = 'bozza' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
+/**
+ * Voce dello storico di ricontatto di un preventivo.
+ * - `promemoria`: email/push di promemoria inviata al rappresentante
+ * - `trattativa`: cliente ricontattato, trattativa ancora aperta (promemoria posticipato)
+ * - `perso`: preventivo chiuso senza ordine
+ * - `riaperto`: preventivo perso tornato attivo
+ */
+export type QuotationFollowUpKind = 'promemoria' | 'trattativa' | 'perso' | 'riaperto';
+
+export interface QuotationFollowUp {
+  id: number;
+  quotationId: number;
+  kind: QuotationFollowUpKind;
+  note: string;
+  nextReminderAt: string | null;
+  createdBy: string;
+  createdByFullName: string;
+  createdAt: string;
+}
+
+export type OrderStatus = 'bozza' | 'in_approvazione' | 'confermato' | 'in_lavorazione' | 'spedito' | 'consegnato' | 'annullato';
 
 export interface OrderDraft {
   orderId: number;
@@ -68,14 +122,21 @@ export interface OrderDraft {
   cliente: string;
   magazzino: string;
   luogoConsegna: string;
+  /** Codice Identificativo Gara (10 caratteri), vuoto se assente. */
+  cig: string;
+  /** Codice Unico di Progetto (15 caratteri), vuoto se assente. */
+  cup: string;
   dataConsegna: string;
   note: string;
   items: OrderHistoryItem[];
   createdAt: string;
   updatedAt: string;
+  approvalStatus: DraftApprovalStatus | null;
+  approvalRequestedAt: string | null;
+  approvalNote: string | null;
 }
 
-export interface Order {
+export interface Order extends ApprovalInfo {
   id: number;
   parentOrderId: number | null;
   quotationId: number | null;
@@ -83,6 +144,10 @@ export interface Order {
   cliente: string;
   magazzino: string;
   luogoConsegna: string;
+  /** Codice Identificativo Gara (10 caratteri), vuoto se assente. */
+  cig: string;
+  /** Codice Unico di Progetto (15 caratteri), vuoto se assente. */
+  cup: string;
   dataConsegna: string;
   note: string;
   agente: string;
@@ -96,30 +161,19 @@ export interface Order {
   cancelledFromStatus?: OrderStatus | null;
   hasDraft?: boolean;
   draftUpdatedAt?: string | null;
+  /** Stato di approvazione della bozza di modifica collegata (se presente). */
+  draftApprovalStatus?: DraftApprovalStatus | null;
+  /** Motivazione dell'admin sulla bozza di modifica (se rifiutata). */
+  draftApprovalNote?: string | null;
   draft?: OrderDraft | null;
 }
-
-export interface OrderItem {
-  flagged: boolean;
-  qty: number;
-  sconto: 0 | 8 | 15;
-}
-
-export type OrderMap = Record<string, OrderItem>;
-
-export interface QuotationStoreItem {
-  flagged: boolean;
-  qty: number;
-  sconto: 0 | 8 | 15;
-}
-
-export type QuotationMap = Record<string, QuotationStoreItem>;
 
 export interface QuotationInfo {
   clienteId: number | null;
   cliente: string;
   dataPreventivo: string;
   dataConsegnaPrevista: string;
+  luogoConsegna: string;
   validitaGiorni: ValiditaPreventivoGiorni;
   note: string;
 }
@@ -135,6 +189,8 @@ export interface OrderInfo {
   clienteId: number | null;
   cliente: string;
   luogoConsegna: string;
+  cig: string;
+  cup: string;
   dataConsegna: string;
   note: string;
   magazzino: Magazzino | "";

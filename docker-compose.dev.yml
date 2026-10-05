@@ -1,0 +1,21 @@
+# Ambiente di sviluppo: usa l'immagine :dev pubblicata ad ogni merge sul branch dev.
+# Avvio: docker compose -f docker-compose.dev.yml pull && docker compose -f docker-compose.dev.yml up -d
+services:
+  app:
+    image: ghcr.io/matte1240/app-listino:dev
+    container_name: app-listino-dev
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env.dev
+    environment:
+      - TZ=${TZ:-Europe/Rome}
+    volumes:
+      - ./data-dev:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

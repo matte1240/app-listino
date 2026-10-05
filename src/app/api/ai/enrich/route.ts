@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
   if (!token) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   const payload = await verifyToken(token);
   if (!payload) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+  // Stato del job e descrizioni AI servono solo alla pagina admin (come POST e /single).
+  if (payload.role !== "admin") return NextResponse.json({ error: "Accesso riservato agli admin" }, { status: 403 });
 
   const db = getDb();
   const rows = db.prepare(`

@@ -1,10 +1,16 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Material, OrderMap, OrderInfo } from "@/types";
+import type { Material, OrderHistoryItem, OrderInfo, OrderLine } from "@/types";
+import { hydrateLinesFromMaterials, migrateLegacyCartMap } from "@/lib/order-lines";
+import { createLineActions, type LineActions } from "@/lib/order-lines-store";
 
-interface OrderStore {
+interface OrderStore extends LineActions {
   materials: Material[];
-  orderItems: OrderMap;
+  /** Righe del corpo ordine, nell'ordine di inserimento scelto dall'utente. */
+  lines: OrderLine[];
+  /** Righe del preventivo approvato da cui nasce l'ordine (per non richiedere una seconda approvazione). */
+  sourceQuotationItems: OrderHistoryItem[] | null;
+  setSourceQuotationItems: (items: OrderHistoryItem[] | null) => void;
   orderInfo: OrderInfo;
   searchQuery: string;
   showObsolete: boolean;
@@ -16,13 +22,17 @@ interface OrderStore {
   setStep: (step: 1 | 2 | 3 | 4) => void;
   setMaterials: (materials: Material[]) => void;
   setMaterialDescrizioneAI: (codice: string, descrizioneAI: string) => void;
-  toggleFlag: (codice: string) => void;
-  setQty: (codice: string, qty: number) => void;
-  setSconto: (codice: string, sconto: 0 | 8 | 15) => void;
   resetOrder: () => void;
   setSearchQuery: (q: string) => void;
   setShowObsolete: (value: boolean) => void;
   setOrderInfo: (info: Partial<OrderInfo>) => void;
+}
+
+interface PersistedOrderState {
+  lines: OrderLine[];
+  sourceQuotationItems: OrderHistoryItem[] | null;
+  orderInfo: OrderInfo;
+  currentStep: 1 | 2 | 3 | 4;
 }
 
 const defaultOrderInfo: OrderInfo = {
@@ -30,6 +40,8 @@ const defaultOrderInfo: OrderInfo = {
   clienteId: null,
   cliente: "",
   luogoConsegna: "",
+  cig: "",
+  cup: "",
   dataConsegna: "",
   note: "",
   magazzino: "",
@@ -37,9 +49,11 @@ const defaultOrderInfo: OrderInfo = {
 
 export const useOrderStore = create<OrderStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       materials: [],
-      orderItems: {},
+      lines: [],
+      sourceQuotationItems: null,
+      setSourceQuotationItems: (sourceQuotationItems) => set({ sourceQuotationItems }),
       orderInfo: defaultOrderInfo,
       searchQuery: "",
       showObsolete: true,
@@ -50,7 +64,8 @@ export const useOrderStore = create<OrderStore>()(
       setExitDialogOpen: (exitDialogOpen) => set({ exitDialogOpen }),
       setStep: (currentStep) => set({ currentStep }),
 
-      setMaterials: (materials) => set({ materials }),
+      setMaterials: (materials) =>
+        set((state) => ({ materials, lines: hydrateLinesFromMaterials(state.lines, materials) })),
 
       setMaterialDescrizioneAI: (codice, descrizioneAI) =>
         set((state) => ({
@@ -59,48 +74,19 @@ export const useOrderStore = create<OrderStore>()(
           ),
         })),
 
-      toggleFlag: (codice) => {
-        const current = get().orderItems[codice];
-        const wasFlagged = current?.flagged ?? false;
-        set((state) => ({
-          orderItems: {
-            ...state.orderItems,
-            [codice]: {
-              flagged: !wasFlagged,
-              qty: current?.qty ?? 0,
-              sconto: current?.sconto ?? 0,
-            },
-          },
-        }));
-      },
+      ...createLineActions<OrderStore>(set),
 
-      setQty: (codice, qty) => {
-        const newQty = Math.max(0, qty);
-        set((state) => ({
-          orderItems: {
-            ...state.orderItems,
-            [codice]: {
-              flagged: newQty > 0,
-              qty: newQty,
-              sconto: state.orderItems[codice]?.sconto ?? 0,
-            },
-          },
-        }));
-      },
-
-      setSconto: (codice, sconto) => {
-        set((state) => ({
-          orderItems: {
-            ...state.orderItems,
-            [codice]: {
-              ...state.orderItems[codice],
-              sconto,
-            },
-          },
-        }));
-      },
-
-      resetOrder: () => set({ orderItems: {}, orderInfo: { ...defaultOrderInfo }, currentStep: 1, mobileCartOpen: false }),
+      // Anche ricerca e filtro obsoleti (condivisi con il Listino): un ordine nuovo parte dal catalogo completo.
+      resetOrder: () =>
+        set({
+          lines: [],
+          sourceQuotationItems: null,
+          orderInfo: { ...defaultOrderInfo },
+          currentStep: 1,
+          mobileCartOpen: false,
+          searchQuery: "",
+          showObsolete: true,
+        }),
 
       setSearchQuery: (searchQuery) => set({ searchQuery }),
 
@@ -111,8 +97,23 @@ export const useOrderStore = create<OrderStore>()(
     }),
     {
       name: "listino-order-store",
-      partialize: (state) => ({
-        orderItems: state.orderItems,
+      version: 2,
+      migrate: (persistedState, version) => {
+        let state = (persistedState ?? {}) as Record<string, unknown>;
+        if (version < 1) {
+          // v0: carrello come mappa { codice: { flagged, qty, sconto } } → righe ordinate
+          const { orderItems, ...rest } = state;
+          state = { ...rest, lines: migrateLegacyCartMap(orderItems) };
+        }
+        if (version < 2) {
+          // v1: testata senza CIG/CUP → campi aggiunti vuoti
+          state = { ...state, orderInfo: { ...defaultOrderInfo, ...(state.orderInfo as Partial<OrderInfo> | undefined) } };
+        }
+        return state as unknown as PersistedOrderState;
+      },
+      partialize: (state): PersistedOrderState => ({
+        lines: state.lines,
+        sourceQuotationItems: state.sourceQuotationItems,
         orderInfo: state.orderInfo,
         currentStep: state.currentStep,
       }),

@@ -24,7 +24,12 @@ npm-debug.log*
 # Docker
 Dockerfile
 docker-compose.yml
+docker-compose.dev.yml
 .dockerignore
+
+# Dati locali (DB SQLite, backup)
+data
+data-dev
 
 # Tests
 coverage

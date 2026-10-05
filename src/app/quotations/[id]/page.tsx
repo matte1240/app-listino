@@ -2,11 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, CheckCircle2, Clock, FileText, Package, Pencil, Printer, ShoppingCart, Trash2, Truck, User } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowLeft, BellRing, Calendar, CheckCircle2, Clock, FileText, Hourglass, MapPin, Package, Pencil, Printer, ShieldAlert, ShoppingCart, Trash2, Truck, User, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import type { Quotation, QuotationItem } from "@/types";
+import OrderLineRow from "@/components/OrderLineRow";
+import QuotationFollowUpPanel from "@/components/QuotationFollowUpPanel";
+import { countArticleLines } from "@/lib/order-lines";
+import { calculateOrderDiscountedTotal, formatOrderCurrency } from "@/lib/order-totals";
+import { cn } from "@/lib/utils";
+import type { Quotation } from "@/types";
+
+/** Altezza utile della pagina: la shell aggiunge già barra superiore e tab bar (0 da lg). */
+const PAGE_MIN_H = "min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))]";
 
 function formatDate(iso: string) {
   if (!iso) return "-";
@@ -17,16 +26,10 @@ function formatDate(iso: string) {
   });
 }
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-}
-
-function discountedPrice(item: QuotationItem) {
-  return item.prezzoListino * (1 - (item.sconto ?? 0) / 100);
-}
+const formatCurrency = formatOrderCurrency;
 
 function quotationTotal(quotation: Quotation) {
-  return quotation.items.reduce((sum, item) => sum + discountedPrice(item) * item.qty, 0);
+  return calculateOrderDiscountedTotal(quotation.items);
 }
 
 export default function QuotationDetailPage() {
@@ -63,7 +66,7 @@ export default function QuotationDetailPage() {
     try {
       const res = await fetch(`/api/quotations/${quotation.id}`, { method: "DELETE" });
       if (!res.ok) {
-        alert("Errore nella cancellazione del preventivo");
+        toast.error("Errore nella cancellazione del preventivo");
         return;
       }
       router.push("/quotations");
@@ -74,7 +77,7 @@ export default function QuotationDetailPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className={cn(PAGE_MIN_H, "flex items-center justify-center")}>
         <p className="text-muted-foreground">Caricamento...</p>
       </div>
     );
@@ -82,49 +85,66 @@ export default function QuotationDetailPage() {
 
   if (error || !quotation) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
+      <div className={cn(PAGE_MIN_H, "flex items-center justify-center")}>
         <p className="text-destructive">{error ?? "Preventivo non trovato"}</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className={cn(PAGE_MIN_H, "bg-background")}>
       <main className="max-w-3xl mx-auto px-4 pt-5 pb-8 flex flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={() => router.push("/quotations")} aria-label="Torna ai preventivi">
+        {/* Le azioni stanno accanto al titolo solo se resta spazio (almeno 20rem) per numero e cliente, altrimenti vanno sotto */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-[1_1_20rem] items-start gap-3">
+            <Button variant="outline" size="icon" className="size-11 shrink-0" onClick={() => router.push("/quotations")} aria-label="Torna ai preventivi">
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-lg font-bold">Preventivo {quotation.numero}</h1>
+                <h1 className="text-2xl leading-tight font-bold">Preventivo <span className="whitespace-nowrap">{quotation.numero}</span></h1>
                 <Badge variant="outline">{formatDate(quotation.dataPreventivo)}</Badge>
                 {quotation.status === "convertito" && <Badge className="gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Ordine creato</Badge>}
+                {quotation.status === "in_approvazione" && (
+                  <Badge variant="outline" className="gap-1 text-orange-700 border-orange-300 bg-orange-50"><Hourglass className="h-3.5 w-3.5" /> In approvazione</Badge>
+                )}
+                {quotation.status === "rifiutato" && (
+                  <Badge variant="outline" className="gap-1 text-red-700 border-red-300 bg-red-50"><ShieldAlert className="h-3.5 w-3.5" /> Rifiutato</Badge>
+                )}
+                {quotation.status === "perso" && (
+                  <Badge variant="outline" className="gap-1 text-muted-foreground"><XCircle className="h-3.5 w-3.5" /> Perso</Badge>
+                )}
+                {quotation.followUpDue && (
+                  <Badge variant="outline" className="gap-1 text-amber-800 border-amber-300 bg-amber-50"><BellRing className="h-3.5 w-3.5" /> Da ricontattare</Badge>
+                )}
               </div>
-              <p className="text-sm text-muted-foreground">{quotation.cliente}</p>
+              <p className="text-sm text-muted-foreground wrap-break-word">{quotation.cliente}</p>
             </div>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
             {quotation.status === "convertito" && quotation.convertedOrderId ? (
-              <Button className="gap-2" onClick={() => router.push(`/orders/${quotation.convertedOrderId}`)}>
+              <Button className="gap-2" onClick={() => router.push(`/orders?open=${quotation.convertedOrderId}`)}>
                 <ShoppingCart className="h-4 w-4" />
                 Apri ordine
               </Button>
-            ) : quotation.status !== "convertito" ? (
+            ) : quotation.status === "attivo" ? (
               <Button className="gap-2" onClick={() => router.push(`/orders/new?fromQuotationId=${quotation.id}`)}>
                 <ShoppingCart className="h-4 w-4" />
                 Trasforma in ordine
               </Button>
             ) : null}
-            <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/print`)}>
-              <Printer className="h-4 w-4" />
-              PDF
-            </Button>
-            <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/edit`)}>
-              <Pencil className="h-4 w-4" />
-              Modifica
-            </Button>
+            {(quotation.status === "attivo" || quotation.status === "convertito" || quotation.status === "perso" || user?.role === "admin") && (
+              <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/print`)}>
+                <Printer className="h-4 w-4" />
+                PDF
+              </Button>
+            )}
+            {quotation.status !== "convertito" && quotation.status !== "perso" && (
+              <Button variant="outline" className="gap-2" onClick={() => router.push(`/quotations/${quotation.id}/edit`)}>
+                <Pencil className="h-4 w-4" />
+                Modifica
+              </Button>
+            )}
             <Button variant="destructive" className="gap-2" onClick={handleDelete} disabled={deleting}>
               <Trash2 className="h-4 w-4" />
               Elimina
@@ -132,7 +152,7 @@ export default function QuotationDetailPage() {
           </div>
         </div>
 
-        <section className="rounded-2xl border border-border bg-card p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <section className="rounded-2xl border border-border bg-card p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="flex items-center gap-2 min-w-0">
             <User className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="min-w-0">
@@ -155,6 +175,13 @@ export default function QuotationDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 min-w-0">
+            <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Destinazione cantiere</p>
+              <p className="font-semibold text-sm truncate" title={quotation.luogoConsegna || undefined}>{quotation.luogoConsegna || "Stessa del cliente"}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
             <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Validità</p>
@@ -170,6 +197,30 @@ export default function QuotationDetailPage() {
           </div>
         </section>
 
+        {quotation.status === "in_approvazione" && (
+          <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800 flex items-start gap-2">
+            <Hourglass className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              Il preventivo contiene sconti liberi ed è in attesa di approvazione di un amministratore
+              {quotation.approvalRequestedAt ? ` (richiesta il ${formatDate(quotation.approvalRequestedAt)})` : ""}. PDF e trasformazione in ordine saranno disponibili dopo l&apos;approvazione.
+            </span>
+          </section>
+        )}
+        {quotation.status === "rifiutato" && (
+          <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 flex items-start gap-2">
+            <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              <strong>Rifiutato{quotation.approvalDecidedBy ? ` da ${quotation.approvalDecidedBy}` : ""}:</strong> {quotation.approvalNote || "nessuna motivazione"}. Modifica gli sconti e salva per una nuova valutazione.
+            </span>
+          </section>
+        )}
+
+        <QuotationFollowUpPanel
+          quotation={quotation}
+          onQuotationChange={setQuotation}
+          className="rounded-2xl border border-border bg-card px-4"
+        />
+
         {quotation.note && (
           <section className="rounded-2xl border border-border bg-card p-4">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Note</p>
@@ -181,23 +232,11 @@ export default function QuotationDetailPage() {
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <Package className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">Articoli</span>
-            <Badge className="ml-auto rounded-full px-2.5 text-xs">{quotation.items.length}</Badge>
+            <Badge className="ml-auto rounded-full px-2.5 text-xs">{countArticleLines(quotation.items)}</Badge>
           </div>
           <div className="divide-y divide-border/60">
-            {quotation.items.map((item) => (
-              <div key={item.codice} className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold font-mono text-foreground">{item.codice}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{item.descrizione}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs sm:justify-end">
-                  <span className="font-bold text-foreground">{item.qty}</span>
-                  <span className="text-muted-foreground">{item.um}</span>
-                  <span>{formatCurrency(item.prezzoListino)}</span>
-                  {(item.sconto ?? 0) > 0 && <span className="bg-primary/10 text-primary rounded px-1 font-semibold">-{item.sconto}%</span>}
-                  <span className="font-semibold text-foreground">{formatCurrency(discountedPrice(item) * item.qty)}</span>
-                </div>
-              </div>
+            {quotation.items.map((item, index) => (
+              <OrderLineRow key={item.id ?? `${item.codice}-${index}`} item={item} variant="quotation" />
             ))}
           </div>
           <div className="px-4 py-3 border-t border-border bg-muted/30 flex items-center justify-between text-sm">

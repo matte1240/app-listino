@@ -68,11 +68,10 @@ export default function UploadExcel() {
         onChange={handleChange}
       />
       <Button
-        variant="outline"
-        size="sm"
+        size="lg"
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
-        className="gap-2 h-9 text-sm w-full justify-center sm:w-auto"
+        className="w-full justify-center sm:w-auto"
       >
         <Upload className="h-4 w-4 shrink-0" />
         {uploading ? "Caricamento…" : "Carica Excel"}

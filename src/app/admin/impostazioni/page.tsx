@@ -1,0 +1,246 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { BellRing, CheckCircle2, FileCode2, Loader2, Save, Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/lib/auth-context";
+import AdminBreadcrumb from "../AdminBreadcrumb";
+
+interface SettingsForm {
+  metodoCodiceTrasporto: string;
+  metodoCodiceManuale: string;
+  followUpEnabled: boolean;
+  followUpDays: number;
+}
+
+const EMPTY_FORM: SettingsForm = { metodoCodiceTrasporto: "", metodoCodiceManuale: "", followUpEnabled: true, followUpDays: 30 };
+
+interface FollowUpCycleResult {
+  skipped?: "disabled" | "outside_hours" | "running";
+  agents: number;
+  quotations: number;
+  failedAgents: number;
+}
+
+/** I codici Metodo sono maiuscoli: il valore salvato è quello mostrato nel campo (anche il server lo normalizza). */
+function normalizeCode(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+export default function AdminSettingsPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const [form, setForm] = useState<SettingsForm>(EMPTY_FORM);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sendingFollowUps, setSendingFollowUps] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && (!user || user.role !== "admin")) router.replace("/");
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (authLoading || user?.role !== "admin") return;
+    fetch("/api/admin/settings", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.settings) setForm({ ...EMPTY_FORM, ...data.settings });
+      })
+      .catch(() => setError("Impossibile caricare le impostazioni"))
+      .finally(() => setLoading(false));
+  }, [authLoading, user]);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          metodoCodiceTrasporto: normalizeCode(form.metodoCodiceTrasporto),
+          metodoCodiceManuale: normalizeCode(form.metodoCodiceManuale),
+          followUpEnabled: form.followUpEnabled,
+          followUpDays: form.followUpDays,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data?.settings) setForm({ ...EMPTY_FORM, ...data.settings });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setError("Errore nel salvataggio delle impostazioni");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSendFollowUps() {
+    setSendingFollowUps(true);
+    try {
+      const res = await fetch("/api/admin/quotation-followups", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.result) throw new Error(data?.error ?? "Errore durante l'invio dei promemoria");
+      const result = data.result as FollowUpCycleResult;
+      if (result.skipped === "disabled") {
+        toast.info("Promemoria disattivati: attivali e salva prima di inviarli");
+      } else if (result.skipped === "running") {
+        toast.info("Invio dei promemoria già in corso");
+      } else if (result.quotations === 0 && result.failedAgents === 0) {
+        toast.success("Nessun preventivo da ricordare in questo momento");
+      } else {
+        toast.success(`Promemoria inviati: ${result.quotations} preventivi a ${result.agents} rappresentanti`);
+        if (result.failedAgents > 0) toast.error(`Invio fallito per ${result.failedAgents} rappresentanti: verifica la configurazione email`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Errore durante l'invio dei promemoria");
+    } finally {
+      setSendingFollowUps(false);
+    }
+  }
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] flex items-center justify-center">
+        <p className="text-muted-foreground">Caricamento…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-[calc(100dvh-var(--app-header-h)-var(--app-tabbar-h))] bg-background">
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 lg:px-10 pt-6 lg:pt-8 pb-6 flex flex-col gap-5">
+        <AdminBreadcrumb current="Impostazioni" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-[28px] leading-tight font-bold">Impostazioni</h1>
+          <Button onClick={handleSave} disabled={saving || saved} className="w-full justify-center sm:w-auto">
+            {saved ? (
+              <><CheckCircle2 className="h-4 w-4" /> Salvato</>
+            ) : saving ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Salvataggio…</>
+            ) : (
+              <><Save className="h-4 w-4" /> Salva</>
+            )}
+          </Button>
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
+        )}
+
+        <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <BellRing className="h-4 w-4 text-primary" />
+                Promemoria preventivi da ricontattare
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                Se un preventivo attivo non viene trasformato in ordine, il rappresentante che l&apos;ha inserito riceve
+                un&apos;email (e una notifica push) che gli ricorda di ricontattare il cliente e di registrare l&apos;esito:
+                ancora in trattativa con le sue osservazioni, perso con il motivo, trasformato in ordine o eliminato.
+                Senza esito il promemoria si ripete con la stessa cadenza. Gli invii partono nei giorni feriali dalle 8 alle 18,
+                con un unico riepilogo per rappresentante.
+              </p>
+            </div>
+            <Switch
+              checked={form.followUpEnabled}
+              onCheckedChange={(checked) => setForm((prev) => ({ ...prev, followUpEnabled: checked }))}
+              aria-label="Attiva i promemoria dei preventivi"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="followup-days" className="text-xs font-medium text-muted-foreground">
+              Giorni dopo l&apos;emissione (o l&apos;approvazione) del preventivo
+            </Label>
+            <Input
+              id="followup-days"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={365}
+              value={form.followUpDays}
+              disabled={!form.followUpEnabled}
+              onChange={(e) => setForm((prev) => ({ ...prev, followUpDays: Number(e.target.value) }))}
+              className="text-sm bg-background w-32"
+            />
+          </div>
+
+          <div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSendFollowUps}
+              disabled={sendingFollowUps || !form.followUpEnabled}
+              className="w-full justify-center sm:w-auto"
+            >
+              {sendingFollowUps ? <Loader2 className="animate-spin" /> : <Send />}
+              Invia ora i promemoria scaduti
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-4">
+          <div>
+            <h2 className="font-semibold text-sm flex items-center gap-2">
+              <FileCode2 className="h-4 w-4 text-primary" />
+              Codici articolo per l&apos;export Metodo
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Le righe non presenti a listino vengono esportate nell&apos;XML Metodo con questi codici. Devono corrispondere ad
+              articoli generici esistenti nel gestionale, altrimenti l&apos;import fallisce. Le righe di nota vengono esportate
+              con la sola descrizione.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="codice-trasporto" className="text-xs font-medium text-muted-foreground">
+              Codice per &quot;Spese di trasporto&quot;
+            </Label>
+            <Input
+              id="codice-trasporto"
+              type="text"
+              placeholder="TRASPORTO"
+              value={form.metodoCodiceTrasporto}
+              onChange={(e) => setForm((prev) => ({ ...prev, metodoCodiceTrasporto: e.target.value }))}
+              onBlur={() => setForm((prev) => ({ ...prev, metodoCodiceTrasporto: normalizeCode(prev.metodoCodiceTrasporto) }))}
+              className="text-sm bg-background font-mono uppercase"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={40}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="codice-manuale" className="text-xs font-medium text-muted-foreground">
+              Codice per gli articoli inseriti manualmente
+            </Label>
+            <Input
+              id="codice-manuale"
+              type="text"
+              placeholder="MANUALE"
+              value={form.metodoCodiceManuale}
+              onChange={(e) => setForm((prev) => ({ ...prev, metodoCodiceManuale: e.target.value }))}
+              onBlur={() => setForm((prev) => ({ ...prev, metodoCodiceManuale: normalizeCode(prev.metodoCodiceManuale) }))}
+              className="text-sm bg-background font-mono uppercase"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={40}
+            />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

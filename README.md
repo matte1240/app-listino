@@ -12,12 +12,16 @@ Costruita con **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS** e *
 
 - **Listino** — ricerca veloce su materiali con flag "obsoleto", descrizioni arricchite con AI
 - **Ordini** — wizard 4 step (Cliente → Articoli → Dettagli → Riepilogo), bozze salvate sul server con il pulsante **Salva bozza** (tabella `orders` con status `bozza`), modifica di un ordine confermato via bozza-di-modifica (`order_drafts`), cancellazione
+- **Righe ordine flessibili** — righe in ordine di inserimento, riordino con drag & drop (dnd-kit) o frecce, righe **nota** posizionabili, **articoli manuali** (descrizione e prezzo liberi, U.M. da menu PZ/ML/MQ/KG), **spese di trasporto** sempre come ultima riga; stesse righe in email, XML Metodo e PDF preventivo
+- **Sconto libero con approvazione** — oltre a 8% e 15% una percentuale libera; ordini, modifiche e preventivi con sconti liberi restano `in_approvazione` finché un admin li approva (pagina **Admin → Approvazioni**, badge nel menu), con email e notifiche push agli admin e all'agente
+- **Promemoria preventivi** — dopo N giorni (default 30, Admin → Impostazioni) un preventivo attivo non trasformato in ordine genera un'email riepilogativa + push al rappresentante; dall'app registra l'esito (*in trattativa* con osservazioni e nuovo promemoria, *perso* con motivo, *riapri*), con storico in `quotation_followups`
 - **Email automatiche** — invio a email magazzino + CC agente per nuovo ordine, modifica, cancellazione
 - **Allegato XML Metodo** — generato e allegato automaticamente alle mail di nuovo ordine e modifica, importabile nel gestionale Metodo
 - **Diff visivo nelle mail di modifica** — header e righe con indicatori aggiunto/rimosso/modificato (verde/rosso/giallo)
 - **Anagrafiche clienti** — import massivo da Excel con upsert per `Codice` (riconosce header `N.Cli.`, `Codice Cliente`, ecc.)
 - **Export Metodo** — XML scaricabile a richiesta dal pannello admin per ogni ordine
 - **Luogo di consegna** — autocomplete Google Places + memoria delle ultime destinazioni per cliente
+- **CIG e CUP** — codici facoltativi in testata ordine (step Dettagli, sotto il luogo di consegna) per la fatturazione alla PA, riportati in mail e nei campi di testata `<cig>`/`<cup>` dell'XML Metodo
 - **AI Enrichment** — rigenerazione descrizioni materiali via OpenAI (modello configurabile)
 - **Amministrazione** — gestione utenti, listino Excel, anagrafiche, email per filiale, backup/restore
 - **Backup automatici** — scheduler interno + upload su Hetzner Object Storage (S3 compatibile)
@@ -50,6 +54,25 @@ docker compose up -d
 
 I dati (DB SQLite, backup, anagrafiche) vivono in `./data` (volume persistente).
 
+### Ambiente dev
+
+Ogni merge sul branch `dev` pubblica l'immagine `ghcr.io/matte1240/app-listino:dev` (più il tag `dev-<sha>` per tornare a una build precisa); `:latest` resta legato a `main`. Per farla girare accanto alla produzione:
+
+```bash
+cp .env.example .env.dev          # configurazione separata (non committata)
+docker compose -f docker-compose.dev.yml pull
+docker compose -f docker-compose.dev.yml up -d   # porta 3001, dati in ./data-dev
+```
+
+### CI: runner self-hosted
+
+Il workflow `.github/workflows/docker-publish.yml` gira su un runner **self-hosted** (`runs-on: [self-hosted, vm-ubuntu]`, utente `github-runner` nel gruppo `docker`). Note operative:
+
+- La build gira **solo su `main`, `dev` e sui tag `v*.*.*`**: push su altre branch, PR (anche da fork) e avvio manuale su altre branch non occupano il runner (che ha accesso al Docker della VM).
+- A fine build la cache locale di buildx e le immagini penzolanti vengono rimosse (spazio disco limitato sulla VM); la cache dei layer resta quella di GitHub Actions.
+- **Deploy automatico dev**: impostando la variabile di repository `DEV_COMPOSE_DIR` (Settings → Secrets and variables → Actions → Variables) con la cartella della VM che contiene `docker-compose.dev.yml` e `.env.dev`, ogni push su `dev` esegue anche `pull` + `up -d` del container dev subito dopo la pubblicazione dell'immagine. Senza la variabile il job viene saltato.
+- Se il runner è spento i workflow restano in coda: per tornare ai runner GitHub basta rimettere `runs-on: ubuntu-latest`.
+
 ---
 
 ## Comandi
@@ -71,7 +94,9 @@ Tutte le chiavi sono documentate in [`.env.example`](.env.example). Sintesi:
 | Categoria | Variabili | Obbligatoria? |
 |---|---|---|
 | Sicurezza | `JWT_SECRET`, `COOKIE_SECURE` | **Sì** in produzione |
+| URL pubblico | `APP_URL` | Consigliata (link nelle email/notifiche di approvazione; dietro Docker l'origin della richiesta non è affidabile) |
 | Email | `GMAIL_USER`, `GMAIL_FROM_ALIAS`, `GMAIL_FROM_NAME`, `GMAIL_APP_PASSWORD`, `ORDER_EMAIL_TO` | Opzionale (senza credenziali Gmail, l'invio mail è disabilitato) |
+| Push PWA | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Opzionale (genera con `npx web-push generate-vapid-keys`; senza chiavi il push è disattivato) |
 | Google Places | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Opzionale (autocomplete indirizzi) |
 | OpenAI | `OPENAI_API_KEY`, `AI_MODEL` | Opzionale (AI enrichment descrizioni) |
 | Backup S3 | `DB_BACKUP_S3_*`, `DB_BACKUP_AUTO_*` | Opzionale (backup remoti) |
@@ -92,7 +117,7 @@ Tutte le chiavi sono documentate in [`.env.example`](.env.example). Sintesi:
 
 ## Architettura
 
-**Stack runtime**: Next.js 16 (App Router) · React 19 · TypeScript · Tailwind + shadcn/ui · Zustand (stato wizard) · better-sqlite3 · nodemailer · OpenAI SDK · `xlsx` · `@aws-sdk/client-s3`.
+**Stack runtime**: Next.js 16 (App Router) · React 19 · TypeScript · Tailwind + shadcn/ui · Zustand (stato wizard) · dnd-kit (riordino righe) · better-sqlite3 · nodemailer · web-push · OpenAI SDK · `xlsx` · `@aws-sdk/client-s3`.
 
 **Database** — SQLite locale in `data/listino.db`. Tabelle principali:
 
@@ -101,10 +126,14 @@ Tutte le chiavi sono documentate in [`.env.example`](.env.example). Sintesi:
 | `users` | Utenti, ruoli (`admin` / `agente`), credenziali bcrypt |
 | `materials` | Catalogo articoli importato da Excel |
 | `enriched_materials` | Descrizioni AI generate (chiave: `codice`) |
-| `orders` | Ordini (status `bozza`/`confermato`/...) e bozze di modifica linkate via `parent_order_id` |
-| `order_drafts` | Bozze di modifica di ordini esistenti (uno per ordine) |
+| `orders` | Ordini (status `bozza`/`in_approvazione`/`confermato`/...) con colonne `approval_*` e righe JSON tipizzate (`articolo`/`manuale`/`commento`/`trasporto`) |
+| `order_drafts` | Bozze di modifica di ordini esistenti (uno per ordine), con `approval_status` per le modifiche in attesa |
+| `quotations` | Preventivi (status `attivo`/`in_approvazione`/`rifiutato`/`convertito`/`perso`) con colonne `approval_*` e `followup_due_at`/`followup_reminded_at` |
+| `quotation_followups` | Storico ricontatti dei preventivi (promemoria inviati, esiti `trattativa`/`perso`/`riaperto` con note) |
 | `anagrafiche` | Anagrafica clienti da Excel (chiave applicativa: `codice`) |
 | `branch_emails` | Configurazione `email_to` / `email_cc` per magazzino |
+| `app_settings` | Impostazioni chiave/valore (codici Metodo per trasporto e righe manuali, promemoria preventivi) |
+| `push_subscriptions` | Sottoscrizioni Web Push per utente/dispositivo |
 
 **Struttura cartelle**
 
@@ -121,18 +150,29 @@ src/
 ├── lib/             # Domain logic
 │   ├── auth.ts          # JWT (jose) + bcrypt
 │   ├── db.ts            # better-sqlite3, schema, migrazioni
-│   ├── mail.ts          # nodemailer + render HTML/text + diff ordine
+│   ├── mail.ts          # nodemailer + render HTML/text + email di approvazione
+│   ├── order-lines.ts   # Tipi di riga, normalizzazione, regole sconto libero, riordino
+│   ├── order-diff.ts    # Diff fra versioni di un ordine (client-safe)
+│   ├── approvals.ts     # Stato di invio deciso dal server, elenco approvazioni
+│   ├── notifications.ts # Notifiche email + push (approvazioni, promemoria preventivi)
+│   ├── quotation-followups.ts          # Esiti e storico del ricontatto preventivi
+│   ├── quotation-followup-scheduler.ts # Invio periodico dei promemoria
+│   ├── push.ts          # Web Push (VAPID) e sottoscrizioni
+│   ├── settings.ts      # app_settings (codici Metodo)
 │   ├── metodo-xml.ts    # Build XML Metodo (con lookup descrizioni originali)
 │   ├── excel.ts         # Parser Excel materiali e anagrafiche
 │   ├── ai-enrich.ts     # OpenAI enrichment descrizioni
-│   └── useOrderStore.ts # Zustand persist per il wizard
+│   └── useOrderStore.ts # Zustand persist per il wizard (righe ordinate)
 └── types/           # TypeScript types condivisi
 ```
 
 **Flussi chiave**
 
-- **Creazione ordine** — POST `/api/orders` → salva su `orders` → invia mail con XML Metodo allegato (best-effort).
-- **Modifica ordine confermato** — PUT/POST `/api/orders/[id]/draft` → bozza in `order_drafts` → applicazione → diff calcolato in `mail.ts` → mail "Ordine Modificato" con XML aggiornato.
+- **Creazione ordine** — POST `/api/orders` → righe normalizzate (`order-lines.ts`) → se ci sono sconti liberi e l'utente non è admin, status `in_approvazione` + notifica agli admin; altrimenti salva `confermato` e invia mail con XML Metodo allegato (best-effort).
+- **Approvazione** — POST `/api/orders/[id]/approval`, `/api/orders/[id]/draft/approval`, `/api/quotations/[id]/approval` (solo admin, body `{ action: "approve" | "reject", note }`); GET `/api/admin/approvals` per elenco e conteggio. Un ordine da preventivo già approvato con righe scontate identiche non richiede una seconda approvazione.
+- **Modifica ordine confermato** — PUT/POST `/api/orders/[id]/draft` → bozza in `order_drafts` → applicazione (o attesa di approvazione se ci sono sconti liberi) → diff calcolato in `order-diff.ts` → mail "Ordine Modificato" con XML aggiornato.
+- **Promemoria preventivi** — scheduler interno (`quotation-followup-scheduler.ts`, avviato con il DB) controlla ogni ora e invia lun–ven 8–18 (fuso `TZ` del container) un riepilogo per agente dei preventivi `attivo` con promemoria scaduto (attivazione + N giorni, o data fissata dall'agente), al massimo uno ogni N giorni per preventivo. Esiti: POST `/api/quotations/[id]/followup` (`{ action: "trattativa" | "perso" | "riapri", note, days }`), storico con GET sulla stessa route; invio manuale admin: POST `/api/admin/quotation-followups`.
+- **Notifiche push** — GET `/api/push/public-key`, POST/DELETE `/api/push/subscriptions`; il service worker (`public/sw.js`) mostra la notifica e apre l'URL al click.
 - **Cancellazione** — DELETE `/api/orders/[id]` → mail "Ordine Cancellato" senza allegato.
 - **Import anagrafiche** — POST `/api/anagrafiche/import` → upsert per `codice` normalizzato (case/punteggiatura insensitive).
 - **Export Metodo** — GET `/api/admin/orders/[id]/metodo-xml` → XML on-demand per import nel gestionale.
@@ -148,6 +188,11 @@ src/
 - **XML Metodo non allegato** — l'ordine non ha cliente collegato a un'anagrafica con `codice`. Log: `[mail] XML Metodo non allegato per ordine #N: no_cliente | no_codice_anagrafica`.
 - **Import anagrafiche fallisce con UNIQUE constraint** — risolto: la chiave applicativa è `codice` (normalizzato). Se vedi ancora l'errore, verifica che il file non abbia codici duplicati.
 - **Backup S3 fallisce** — verifica `DB_BACKUP_S3_ENDPOINT`, credenziali, `DB_BACKUP_S3_FORCE_PATH_STYLE=true` per Hetzner.
+- **Il pulsante "Attiva notifiche" non compare** — mancano `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`. Il push richiede HTTPS (o localhost) e, su iOS, l'app installata in Home.
+- **Gli agenti non ricevono i promemoria dei preventivi** — servono l'email dell'agente in Admin → Utenti e le credenziali Gmail; gli invii partono solo lun–ven 8–18 (controlla `TZ`). Log: `[preventivi] Promemoria ricontatto: ...`. Admin → Impostazioni → **Invia ora i promemoria scaduti** forza l'invio.
+- **Nessun admin riceve le email di approvazione** — gli utenti admin devono avere l'email compilata in Admin → Utenti (log: `[approvazioni] Nessun admin con email configurata`).
+- **Import Metodo rifiuta le righe manuali/trasporto** — imposta in Admin → Impostazioni i codici articolo generici esistenti nel gestionale.
+- **Dopo il deploy un'immagine precedente legge `in_approvazione` come `confermato`** — le versioni precedenti dell'app non conoscono il nuovo stato: non fare rollback a un'immagine vecchia con ordini in attesa.
 
 ---
 

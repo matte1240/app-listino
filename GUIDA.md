@@ -38,6 +38,12 @@ Ordini Ivicolors è lo strumento che usi per:
 2. Inserisci il tuo **username** e la **password** che ti ha fornito l'amministratore.
 3. Clicca **Accedi**. Resti loggato per qualche ora; se chiudi e riapri, di norma non devi rifare login.
 
+### Muoversi nell'app
+
+- **Su telefono** le sezioni (**Ordini**, **Preventivi**, **Listino** e, per gli admin, **Admin**) sono nella barra in basso. Le tue iniziali in alto a destra aprono il menu utente (notifiche ed **Esci**). Nelle pagine Ordini e Preventivi il pulsante blu **Nuovo ordine** / **Nuovo preventivo** resta in basso a destra.
+- **Su computer e tablet in orizzontale** le stesse voci sono nella barra laterale a sinistra, con in cima i pulsanti **Nuovo ordine** e **Nuovo preventivo** e in fondo il tuo nome, le notifiche ed **Esci**.
+- La navigazione resta sempre visibile, anche mentre compili un ordine o un preventivo. Se tocchi un'altra sezione (o **Esci** in cima al wizard) con dati non ancora salvati, l'app ti chiede cosa fare: per gli ordini **Salva bozza e esci**, **Esci senza salvare** o **Continua a modificare**; per i preventivi **Esci senza salvare** o **Continua a modificare**.
+
 ### Cambiare password
 
 Solo l'amministratore può cambiare la tua password (vedi sezione 11.7). Se l'hai dimenticata, chiedigli un reset.
@@ -65,6 +71,20 @@ Ordini Ivicolors è una **PWA**: la puoi installare sulla home del telefono e us
 
 - Avvio più veloce, niente barra del browser.
 - **Funziona anche offline** per consultare il listino già caricato e iniziare a compilare un ordine. L'invio dell'ordine richiede ovviamente connessione.
+- **Notifiche sul telefono** per le approvazioni degli sconti liberi (vedi sotto).
+
+### Attivare le notifiche
+
+Dal menu utente (su telefono le tue iniziali in alto a destra, su computer la voce sopra il tuo nome nella barra laterale) premi **Attiva notifiche** e accetta la richiesta del browser. Da quel momento su questo dispositivo ricevi:
+
+- se sei **admin**: una notifica per ogni ordine, modifica o preventivo con sconti liberi da approvare (tocca la notifica per aprire la pagina Approvazioni);
+- se sei **agente**: l'esito delle tue richieste di approvazione e i promemoria dei preventivi da ricontattare (sezione 4.3).
+
+Note pratiche:
+
+- Su **iPhone/iPad** le notifiche funzionano solo con l'app **installata nella schermata Home** (iOS 16.4 o successivo) e aperta da lì.
+- Le notifiche sono legate al dispositivo e all'utente collegato: al **logout** vengono scollegate, così su un tablet condiviso le riceve chi è loggato in quel momento.
+- Se il pulsante non compare, l'amministratore non ha ancora configurato le chiavi di notifica sul server: arrivano comunque le email.
 
 ---
 
@@ -78,7 +98,7 @@ In alto trovi una **barra di ricerca**. Scrivi una parte del codice o della desc
 
 ### Filtri
 
-- **Mostra obsoleti** — di default gli articoli marcati come obsoleti sono nascosti. Attiva l'opzione per vederli.
+- **Obsoleti** — di default gli articoli marcati come obsoleti sono nascosti. Attiva l'interruttore accanto alla barra di ricerca per vederli.
 - Gli articoli sono raggruppati per **categoria**: scorri per esplorarli tutti.
 
 ### Descrizione "AI" e descrizione originale
@@ -95,7 +115,7 @@ In ogni riga c'è un pulsante per aggiungere l'articolo all'ordine in corso. Qua
 
 ## 4. Creare un ordine
 
-Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
+Premi **Nuovo ordine** (su telefono il pulsante blu in basso a destra nella pagina Ordini, su computer in cima alla barra laterale). Si apre il **wizard a 4 step**; la barra in cima mostra a che passo sei e puoi toccare un passo già completato per tornarci.
 
 ### Step 1 — Cliente
 
@@ -106,29 +126,89 @@ Vai su **Nuovo Ordine** dal menu. Si apre il **wizard a 4 step**.
 
 ### Step 2 — Articoli
 
-- Usa la barra di ricerca per trovare gli articoli e premi sul pulsante per aggiungerli.
+- Usa la barra di ricerca per trovare gli articoli e premi **+** sulla scheda dell'articolo: si aprono quantità e sconto, e sotto vedi subito l'importo della riga. Premi **Conferma** per metterlo nel carrello.
 - Per ogni articolo nel carrello imposti:
   - **Quantità** (con i tasti `+` / `−` o digitando il numero),
-  - **Sconto a riga**: `0%`, `8%` o `15%`. Lo sconto si applica al prezzo di listino dell'articolo specifico.
-- Su mobile in basso compare un'icona **Carrello**: tocca per vedere e modificare gli articoli selezionati.
-- Puoi rimuovere un articolo con l'icona del cestino.
+  - **Sconto a riga**: `0%`, `8%`, `15%` oppure **Libero** (digiti tu la percentuale). Lo sconto si applica al prezzo di listino dell'articolo specifico.
+- Sotto la barra di ricerca, sempre visibile anche scorrendo la lista, c'è la casella **Articolo manuale / Nota** (vedi sotto): serve per aggiungere righe non presenti a listino senza aprire il carrello.
+- Su mobile la barra in basso mostra **articoli e totale**: toccala per aprire il carrello dal basso e vedere, riordinare o modificare le righe. Su computer il carrello è sempre visibile nel pannello a destra.
+- Puoi rimuovere un articolo con l'icona **X**.
+
+> **Sconto libero = approvazione dell'amministratore.** Qualsiasi percentuale diversa da 0, 8 e 15 fa passare l'ordine (o il preventivo) da un amministratore prima dell'invio: vedi la sezione 4.1.
+
+#### Righe ordine: ordine di inserimento, note, articoli manuali
+
+Il corpo dell'ordine (pannello **Righe ordine** nel carrello e nel riepilogo) mostra le righe **nell'ordine in cui le hai inserite**, non per codice.
+
+- **Riordinare**: trascina una riga con la maniglia `⋮⋮` (su tablet tieni premuto un attimo, poi trascina) oppure usa le frecce **▲ ▼**.
+- **Nota**: nella casella sotto la barra di ricerca tocca **Nota**, scrivi il testo e premi **Aggiungi nota**: la riga va in fondo all'ordine. L'icona "nota sopra" su ogni riga del carrello apre la stessa casella e inserisce la nota sopra quella riga. Serve per intitolare un gruppo di articoli (es. *Materiale per il piano terra*) o dare istruzioni al magazzino. Le note compaiono nella mail, nell'XML Metodo (come sola descrizione) e nel PDF del preventivo.
+- **Articolo manuale**: nella stessa casella tocca **Articolo manuale**, compila **descrizione, U.M. (menu a tendina: PZ, ML, MQ, KG — di default PZ), quantità e prezzo** (con lo stesso selettore sconto degli articoli) e premi **Aggiungi**. La quantità non è precompilata: se la lasci vuota (o manca la descrizione) compare un avviso in rosso e la riga non viene inserita. Se cerchi un articolo che non esiste a listino, sotto "Nessun risultato" trovi **Inseriscilo come articolo manuale** con la descrizione già compilata. Nell'XML Metodo la riga usa il codice generico configurato dall'admin (sezione 11.9).
+- **Modificare** una riga manuale o una nota: nel carrello e nel riepilogo le righe sono di sola lettura, come gli articoli; il pulsante **Modifica** riapre la casella sotto la barra di ricerca già compilata (premi **Salva modifica** per confermare).
+- Le righe vuote (nota senza testo, articolo manuale senza descrizione o quantità) non vengono salvate.
 
 ### Step 3 — Dettagli
 
 - **Magazzino**: scegli da quale filiale spedire (Pordenone, Udine, Fossalta di Portogruaro, Trieste). La mail dell'ordine andrà alla casella della filiale scelta.
 - Conferma o modifica i dati di consegna inseriti nello step 1.
+- **CIG** e **CUP** (sotto il luogo di consegna, facoltativi): per gli ordini legati a lavori pubblici o a clienti della Pubblica Amministrazione. Il **CIG** (Codice Identificativo Gara) ha **10 caratteri**, il **CUP** (Codice Unico di Progetto) **15 caratteri**: lettere e numeri vengono messi in maiuscolo e spazi o trattini tolti in automatico. Se il codice è incompleto compare un avviso in rosso e non si passa al riepilogo. I codici compaiono nel riepilogo, nella mail e nell'XML Metodo (campi di testata `<cig>` e `<cup>`).
 
 ### Step 4 — Riepilogo
 
-Vedi un'anteprima completa dell'ordine: cliente, magazzino, cantiere, data, note, lista articoli con quantità, sconti, prezzo unitario e prezzo effettivo.
+Vedi un'anteprima completa dell'ordine: cliente, magazzino, cantiere, data, note, lista articoli con quantità, sconti, prezzo unitario e prezzo effettivo. Anche qui puoi riordinare le righe, aggiungere note e articoli manuali.
+
+- **Spese di trasporto**: spunta la casella e inserisci l'importo. Il trasporto compare come **ultima riga** dell'ordine (in mail, XML e PDF) e rientra nel totale imponibile.
 
 Tre azioni possibili:
 
 - **Salva bozza** — l'ordine resta in stato "Bozza" e non parte alcuna mail. Puoi riprenderlo in qualsiasi momento.
-- **Invia ordine** — l'ordine viene confermato, salvato e inviato per email al magazzino + a te in CC. Vedi sezione 9.
+- **Invia a magazzino** — l'ordine viene confermato, salvato e inviato per email al magazzino + a te in CC. Vedi sezione 9.
+- **Invia per approvazione** — compare al posto di "Invia a magazzino" quando ci sono sconti liberi (vedi 4.1).
 - **Annulla** — chiude il wizard senza salvare nulla.
 
+### 4.1 Sconti liberi e approvazione dell'amministratore
+
+Se almeno una riga ha uno **sconto libero** (diverso da 0, 8% e 15%):
+
+1. Nel riepilogo compare un avviso giallo e il pulsante diventa **Invia per approvazione**.
+2. L'ordine viene salvato nello stato **In approvazione**: il magazzino **non** riceve nulla.
+3. Gli amministratori ricevono una **email** e, se attivate, una **notifica sul telefono** (sezione 2).
+4. Quando un admin decide, ricevi email/notifica con l'esito:
+   - **Approvato** → l'ordine diventa *Confermato* e parte la mail al magazzino come per un ordine normale.
+   - **Rifiutato** → l'ordine torna in **Bozza** con la motivazione dell'admin visibile in cronologia. Correggi gli sconti e reinvialo.
+5. Finché è in approvazione puoi ancora modificarlo (torna in valutazione) o eliminarlo.
+
+Regole utili:
+
+- Un **preventivo** con sconti liberi segue lo stesso percorso: resta *In approvazione* e finché non è approvato non puoi stamparlo né trasformarlo in ordine. Se viene rifiutato, correggi gli sconti e salvalo di nuovo.
+- Un ordine creato da un **preventivo già approvato** parte subito, purché le righe scontate siano identiche a quelle approvate. Se cambi prezzo o sconto, torna in approvazione.
+- Anche la **modifica** di un ordine già confermato con sconti liberi passa dall'approvazione: l'ordine originale resta quello inviato al magazzino finché l'admin non approva la modifica.
+- Gli amministratori non hanno bisogno di approvazione: i loro sconti liberi partono subito.
+
 > **Suggerimento**: se non vuoi perdere quello che hai compilato, premi **Salva bozza** prima di chiudere. Il wizard non salva da solo: chiudendo la scheda senza salvare, i dati vanno persi.
+
+### 4.2 Preventivi
+
+La pagina **Preventivi** funziona come la cronologia ordini: su computer l'elenco è a sinistra e il dettaglio del preventivo selezionato a destra (con PDF, Modifica, Trasforma in ordine ed Elimina); su telefono il dettaglio si apre sotto la riga. Titolo, ricerca e schede restano sempre in vista mentre scorri.
+
+Il wizard dei preventivi ha gli stessi step dell'ordine (cliente, articoli, dati, riepilogo). Nello step **Dati** trovi:
+
+- **Data consegna prevista** e **validità** (7, 15 o 30 giorni).
+- **Destinazione cantiere** (opzionale): scegli una destinazione recente del cliente o digita l'indirizzo, come nell'ordine. Se la lasci vuota, nel PDF la casella *Destinazione diversa* riporta **STESSA** (la sede del cliente). Trasformando il preventivo in ordine la destinazione viene ricopiata nel luogo di consegna.
+- **Note** che compaiono nel PDF.
+
+Il PDF (pulsante **PDF** nel dettaglio del preventivo) è un foglio A4 in stile Metodo: le righe articolo sono separate solo dalle colonne, le note di riga in corsivo nella colonna Descrizione, le spese di trasporto per ultime.
+
+### 4.3 Promemoria: ricontattare il cliente
+
+Se un preventivo attivo non diventa un ordine, dopo **30 giorni** (numero modificabile dall'admin, sezione 11.9) dall'emissione (o dall'approvazione, se conteneva sconti liberi) ricevi un'**email di promemoria** e, se le hai attivate, una **notifica** sul telefono. Se hai più preventivi in scadenza ricevi un'unica email riepilogativa, nei giorni feriali dalle 8 alle 18. L'email elenca cliente, data, fine validità, imponibile e l'ultima osservazione che avevi scritto, con il link diretto a ogni preventivo.
+
+Nell'app quei preventivi sono segnati **Da ricontattare**, stanno in cima alla scheda *Attivi* e un avviso giallo ne indica il numero. Senti il cliente e, nella sezione **Ricontatto cliente** del preventivo, registra l'esito:
+
+- **Ancora in trattativa**: scrivi le tue osservazioni (esito della telefonata, richieste del cliente, prossimi passi) e scegli fra quanti giorni (7, 15, 30 o 60) ricevere il prossimo promemoria.
+- **Perso**: indica il motivo (prezzo, scelto un concorrente, lavoro annullato…). Il preventivo passa nella scheda **Persi**: resta consultabile e stampabile, ma non si può modificare né trasformare in ordine finché non premi **Riapri**.
+- **Trasforma in ordine** oppure **Elimina**: come sempre, dai pulsanti del preventivo.
+
+Se non registri nessun esito, il promemoria si ripete con la stessa cadenza. Lo **Storico** in fondo alla sezione mostra i promemoria inviati e tutti gli esiti, con data e autore: è visibile anche all'amministratore.
 
 ---
 
@@ -160,7 +240,7 @@ Anche dopo l'invio puoi modificare un ordine. Funziona in modo "sicuro": l'ordin
 
 1. Apri l'ordine confermato dalla **Cronologia ordini** e premi **Modifica**.
 2. Si apre il wizard pre-compilato. Cambia quello che serve (articoli, quantità, sconto, cantiere, data, note...).
-3. Premi **Salva bozza** per parcheggiare le modifiche senza applicarle (l'ordine originale è ancora intatto), oppure **Invia ordine** per applicarle subito.
+3. Premi **Salva bozza** per parcheggiare le modifiche senza applicarle (l'ordine originale è ancora intatto), oppure **Invia modifica** per applicarle subito. Se la modifica contiene **sconti liberi**, resta in attesa dell'amministratore (badge *Modifica in approvazione*): l'ordine inviato al magazzino resta quello originale finché non viene approvata.
 4. Quando applichi, parte una mail **"Ordine Modificato"** al magazzino + CC a te. La mail mostra **chiaramente cosa è cambiato**:
    - **Verde / `+ AGGIUNTO`** — articoli aggiunti.
    - **Rosso / `− RIMOSSO`** — articoli rimossi (testo barrato).
@@ -193,13 +273,15 @@ Il menu **Ordini** mostra l'elenco di tutti i tuoi ordini.
 
 - **Ricerca** in alto — cerca per numero ordine, cliente, cantiere o nome agente.
 - Ogni riga mostra: numero, cliente, cantiere, data, magazzino, totale articoli, **stato** (badge colorato).
-- Tocca una riga per espandere il dettaglio: cliente completo, articoli con quantità/sconto/prezzo, note.
+- Tocca una riga per vedere il dettaglio: cliente completo, articoli con quantità/sconto/prezzo, note. Su telefono il dettaglio si apre sotto la riga; su computer compare nel pannello a destra dell'elenco.
+- Titolo, ricerca e schede **Attivi / Annullati** restano sempre in vista mentre scorri l'elenco.
 
 ### Stati possibili
 
 | Stato | Significato |
 |---|---|
-| **Bozza** | Non ancora inviato. Puoi riprenderlo o eliminarlo. |
+| **Bozza** | Non ancora inviato. Puoi riprenderlo o eliminarlo. Se è stato rifiutato dall'admin, vedi la motivazione nel dettaglio. |
+| **In approvazione** | Contiene sconti liberi: in attesa di un amministratore. Il magazzino non l'ha ancora ricevuto. |
 | **Confermato** | Inviato al magazzino. Mail spedita. |
 | **In lavorazione** | Il magazzino sta preparando l'ordine. |
 | **Spedito** | In viaggio. |
@@ -225,13 +307,20 @@ Ogni volta che invii o modifichi un ordine, parte una mail. Vediamo a chi arriva
 
 | Quando | Oggetto | Contenuto | Allegato |
 |---|---|---|---|
-| Nuovo ordine inviato | `Nuovo Ordine #N // Cliente // Cantiere` | Riepilogo completo (cliente, cantiere, data, articoli, totale) | XML Metodo |
-| Modifica ordine | `Ordine Modificato #N // ...` | Diff con sezioni intestazione + righe (verde/rosso/giallo) | XML Metodo aggiornato |
+| Nuovo ordine inviato | `Nuovo Ordine #N // Cliente // Cantiere` | Riepilogo completo (cliente, cantiere, data, articoli, note, trasporto, totale) | XML Metodo |
+| Modifica ordine | `Ordine Modificato #N // ...` | Diff con sezioni intestazione + righe (verde/rosso/giallo), avviso se le righe sono state riordinate | XML Metodo aggiornato |
 | Cancellazione | `Ordine Cancellato #N // ...` | Notifica di cancellazione | — |
+| Sconto libero (agli admin) | `Richiesta di approvazione: Ordine #N // Cliente` | Righe con le scontistiche libere evidenziate e link alla pagina Approvazioni | — |
+| Esito approvazione (all'agente) | `Ordine #N approvato // Cliente` oppure `... rifiutato` | Esito, motivazione dell'admin e link all'app | — |
+| Preventivi da ricontattare (all'agente) | `Promemoria preventivo PREV-… // Cliente` oppure `Promemoria: N preventivi da ricontattare` | Preventivi non ancora trasformati in ordine, con link e istruzioni per registrare l'esito (sezione 4.3) | — |
+
+Le righe **nota** compaiono nella mail come riga a tutta larghezza; le **spese di trasporto** come ultima riga.
 
 ### Cos'è l'allegato XML Metodo
 
 È un file `ordine-metodo-N.xml` pronto per essere importato nel gestionale Metodo. Il magazzino lo apre e importa direttamente: niente trascrizione manuale.
+
+Se nell'ordine sono indicati **CIG** e/o **CUP**, il file li riporta nei campi di testata `<cig>` e `<cup>` previsti dal tracciato Metodo per l'acquisizione ordini da XML. Perché vengano importati, i campi CIG e CUP devono esistere nel tracciato delle testate ordini di Metodo (configurazione a cura dell'assistenza Metodo).
 
 > **Quando l'allegato non c'è**: se il cliente dell'ordine non è collegato a un'anagrafica con codice (cioè è un cliente "libero" digitato a mano), l'XML non si può generare. La mail parte comunque, ma senza allegato. Se ti serve l'XML, accerta che il cliente sia stato selezionato dalle anagrafiche.
 
@@ -332,6 +421,24 @@ Il mittente visibile non si configura qui: usa `GMAIL_FROM_NAME` per il nome (es
 - **Elimina**: rimuove l'account.
 
 Solo gli admin possono creare/eliminare utenti. La password viene salvata cifrata (bcrypt).
+
+### 11.8 Approvazioni (sconti liberi)
+
+**Admin → Approvazioni** (la voce **Admin** nel menu mostra un contatore giallo quando c'è qualcosa in attesa).
+
+La pagina elenca ordini, modifiche di ordini confermati e preventivi che contengono sconti liberi, dal più vecchio al più recente. Per ognuno vedi cliente, agente, data della richiesta, totale e tutte le righe, con quelle a sconto libero **evidenziate in giallo**; per le modifiche anche un riassunto delle differenze rispetto all'ordine già inviato.
+
+- **Approva**: l'ordine viene confermato e parte la mail al magazzino (con l'agente in CC); la modifica viene applicata e parte la mail "Ordine Modificato"; il preventivo diventa attivo (stampabile e trasformabile in ordine).
+- **Rifiuta**: scrivi una motivazione (consigliata). L'ordine torna in bozza all'agente, la modifica resta in bozza come "rifiutata" e il preventivo diventa "rifiutato". L'agente riceve email/notifica con la motivazione.
+
+Gli admin ricevono una email (all'indirizzo impostato sul loro utente) e una notifica push per ogni nuova richiesta: assicurati che ogni admin abbia l'**email** compilata in **Admin → Utenti**.
+
+### 11.9 Impostazioni
+
+**Admin → Impostazioni**.
+
+- **Promemoria preventivi da ricontattare**: attiva o disattiva i promemoria (sezione 4.3) e imposta dopo quanti giorni partono (predefinito 30; è anche la cadenza con cui si ripetono se l'agente non registra un esito). **Invia ora i promemoria scaduti** li spedisce subito, anche fuori dall'orario d'ufficio. L'agente riceve l'email solo se ha l'email compilata in **Admin → Utenti**.
+- **Codice per "Spese di trasporto"** e **Codice per gli articoli inseriti manualmente**: sono i codici articolo usati nell'XML Metodo per le righe non presenti a listino. Devono corrispondere ad articoli generici esistenti nel gestionale, altrimenti l'import del file fallisce. Le righe **nota** vengono esportate con la sola descrizione.
 
 ---
 

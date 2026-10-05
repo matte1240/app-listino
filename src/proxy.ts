@@ -24,9 +24,12 @@ export async function proxy(request: NextRequest) {
   }
 
   const token = request.cookies.get(COOKIE_NAME)?.value;
+  // Le API rispondono 401 in JSON: un redirect verso /login farebbe arrivare HTML a chi si aspetta JSON.
+  const isApi = pathname.startsWith("/api/");
 
   if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    if (isApi) return unauthorizedApiResponse();
+    return loginRedirect(request);
   }
 
   try {
@@ -38,10 +41,26 @@ export async function proxy(request: NextRequest) {
     return response;
   } catch {
     // Invalid token — clear cookie and redirect to login
-    const response = NextResponse.redirect(new URL("/login", request.url));
+    const response = isApi ? unauthorizedApiResponse() : loginRedirect(request);
     response.cookies.set(COOKIE_NAME, "", { maxAge: 0, path: "/" });
     return response;
   }
+}
+
+/** Redirect al login con la pagina richiesta in `next`, per tornarci dopo l'accesso. */
+function loginRedirect(request: NextRequest) {
+  const url = new URL("/login", request.url);
+  const { pathname, searchParams } = request.nextUrl;
+  const params = new URLSearchParams(searchParams);
+  params.delete("_rsc");
+  const search = params.toString();
+  // "/" è la start_url della PWA: senza `next` dopo il login si apre la pagina di sempre (/orders).
+  if (pathname !== "/" || search) url.searchParams.set("next", search ? `${pathname}?${search}` : pathname);
+  return NextResponse.redirect(url);
+}
+
+function unauthorizedApiResponse() {
+  return NextResponse.json({ error: "Non autenticato" }, { status: 401 });
 }
 
 export const config = {
